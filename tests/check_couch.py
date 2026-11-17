@@ -9,7 +9,7 @@ import sys
 import tempfile
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from partydeck_couch import App, KEYS, Pads, get, put
+from partydeck_couch import App, KEYS, Pads, get, put, fields, configure
 from partydeck_profiles import defaults, save_profile, read_profile
 
 with tempfile.TemporaryDirectory() as directory:
@@ -44,13 +44,22 @@ with tempfile.TemporaryDirectory() as directory:
         app.tab = i
         app.draw()
     app.tab, app.row = 3, 5
-    app.action('ok')  # Master volume
-    app.keyboard['value'] = '101'
-    app.action('save')
-    assert app.keyboard is not None and get(app.model.data, 'anchor.graphics.volumes.Master') == ''
-    app.keyboard['value'] = '55'
-    app.action('save')
+    # Sliders start from the common mix, clamp at both ends, and reset to JSON.
+    assert app.volume('anchor.graphics.volumes.Master') == 40
+    for _ in range(3):
+        app.action('right')
+    assert app.keyboard is None
     assert get(app.model.data, 'anchor.graphics.volumes.Master') == 55
+    for _ in range(30):
+        app.action('right')
+    assert get(app.model.data, 'anchor.graphics.volumes.Master') == 100
+    for _ in range(30):
+        app.action('left')
+    assert get(app.model.data, 'anchor.graphics.volumes.Master') == 0
+    app.action('ok')
+    assert get(app.model.data, 'anchor.graphics.volumes.Master') == ''
+    for _ in range(3):
+        app.action('right')
     app.action('back')  # Library
     app.action('down')  # Dirty switch confirmation
     assert app.modal
@@ -75,12 +84,15 @@ with tempfile.TemporaryDirectory() as directory:
     assert app.model.rom.name.startswith('Super Mario') and app.browser is None
     # Fake standardized SDL controller: held buttons trigger once; hat navigation repeats.
     fake = Mock()
+    fake.name = 'DualSense Wireless Controller'
+    fake.get_name.return_value = '8BitDo Ultimate'
     buttons = {0}
     fake.get_button.side_effect = lambda n: n in buttons
     fake.get_axis.return_value = 0
     app.pads.devices = [('sdl', fake, {})]
     app.pads.previous.clear()
     assert app.pads.poll() == ['ok']
+    assert app.pads.family == 'ps'
     assert app.pads.poll() == []
     buttons.clear()
     app.pads.poll()
@@ -93,8 +105,25 @@ with tempfile.TemporaryDirectory() as directory:
     app.pads.devices = [('es', fake, {'right':dict(type='hat',id='0',value='2')})]
     app.pads.previous.clear()
     assert app.pads.poll() == ['right']
+    assert app.pads.family == 'xbox'
     app.edit('Room ID', 'windows-party', lambda value: None)
     app.draw()
     app.action('back')
-    app.pg.quit()
+    # Invalid profiles cannot trigger a launch. A valid launch exits SDL first.
+    app.running = True
+    app.model.data['players'] = 'invalid'
+    app.launch()
+    assert app.running and not app.launch_requested
+    app.model.data['players'] = '2'
+    app.pads.devices = []
+    app.pane = 'settings'
+    app.row = len(fields(app.tab))
+    app.pg.event.post(app.pg.event.Event(app.pg.KEYDOWN, key=app.pg.K_RETURN))
+    with patch('partydeck_couch.subprocess.run', return_value=Mock(returncode=0)):
+        assert app.run()
+    assert app.launch_requested and not app.pg.display.get_init()
+    with patch('partydeck_couch.App', return_value=app), patch.object(app, 'run', return_value=True), patch('partydeck_couch.os.execv') as execute:
+        configure(base)
+        assert execute.call_args.args[1][1:3] == ['party', str(app.model.rom)]
+        assert 'profil' not in execute.call_args.args[1]
 print('Interface : navigation, clavier virtuel, volumes, annulation, sauvegarde, navigateur et mappings vérifiés.')

@@ -55,6 +55,21 @@ un jeu, parcourir les dossiers, modifier les paramètres ou saisir du texte.
 - **Carré/X** : enregistrer (ou valider la saisie au clavier virtuel).
 - **Triangle/Y** : rechercher ; **Start** : ajouter un jeu via le navigateur intégré.
 
+L'habillage associe panneaux métalliques, fond géométrique discret et accents
+cyan/violet. Les indications de boutons sont dessinées dans l'interface et passent
+au style PlayStation ou Xbox selon la manette qui commande le configurateur.
+Les manettes dont le nom n'identifie pas un modèle PlayStation gardent les pictogrammes Xbox.
+
+Les cinq volumes SoH utilisent des curseurs : **gauche/droite** ajuste par pas
+de 5 %, entre 0 et 100. **Croix/A** reprend la valeur du JSON commun (repère
+« JSON » et poignée creuse). Aucun clavier virtuel n'est nécessaire pour le son.
+
+Deux boutons fixes sont présents sous les réglages : **Lancer la partie** et
+**Enregistrer**. Descendez après la dernière option pour les sélectionner. Lancer
+enregistre le profil, ferme SDL et passe au lanceur natif Windows Party. Si
+l'enregistrement échoue, le jeu n'est pas lancé. Le choix de configurer avant
+chaque lancement reste mémorisé sans rouvrir une seconde fois le configurateur.
+
 Le clavier virtuel propose minuscules/majuscules, chiffres, accents, ponctuation,
 espace, effacement et validation. Un clavier physique reste utilisable : flèches,
 Entrée, Échap, F2 pour enregistrer, F3 pour rechercher, Insert pour ajouter et

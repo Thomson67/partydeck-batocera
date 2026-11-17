@@ -1,6 +1,7 @@
 """Windows Party's controller-first configurator. Original Pygame implementation."""
 import copy
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -136,6 +137,7 @@ class Pads:
     def __init__(self, pg):
         self.pg, self.devices = pg, []
         self.previous = set()
+        self.family = 'xbox'
         self.timers = {}
         try:
             from pygame._sdl2 import controller
@@ -167,6 +169,9 @@ class Pads:
         held = set()
         for kind, pad, mapping in self.devices:
             try:
+                device_name = str(getattr(pad, 'name', '')) if kind == 'sdl' else pad.get_name()
+                family = 'ps' if any(n in device_name.lower() for n in ('dualsense', 'dualshock', 'playstation', 'sony', 'ps4', 'ps5')) else 'xbox'
+                was_held = held.copy()
                 if kind == 'sdl':
                     for action, button in [('ok', 0), ('back', 1), ('save', 2), ('search', 3), ('add', 6),
                                            ('prev', 9), ('next', 10), ('up', 11), ('down', 12), ('left', 13), ('right', 14)]:
@@ -195,6 +200,8 @@ class Pads:
                             active = False
                         if active:
                             held.add(action)
+                if held != was_held:
+                    self.family = family
             except (self.pg.error, IndexError):
                 continue
         now = time.monotonic()
@@ -221,13 +228,31 @@ class App:
         pg.display.set_caption('Windows Party · Configurateur')
         pg.mouse.set_visible(False)
         self.canvas = pg.Surface((1440, 900))
+        self.panels = {}
+        self.background = pg.Surface((1440, 900))
+        for y in range(900):
+            pg.draw.line(self.background, (10+y//130, 14+y//140, 25+y//70), (0, y), (1440, y))
+        for x in range(-900, 1600, 80):
+            pg.draw.line(self.background, (20, 27, 43), (x, 900), (x+650, 0))
+        pg.draw.polygon(self.background, (22, 45, 61), [(0,0),(450,0),(290,7),(0,7)])
+        pg.draw.polygon(self.background, (60, 30, 82), [(1440,900),(1000,900),(1160,892),(1440,892)])
         self.fonts = {s: pg.font.SysFont('DejaVu Sans', s) for s in (16, 20, 24, 28, 36)}
         self.clock = pg.time.Clock()
         self.model = Model(base, rom)
+        self.template_volumes = dict(Master=40, MainMusic=100, SubMusic=100, Fanfare=100, SFX=100)
+        template = Path(base) / 'templates/soh-common.json'
+        if template.is_file():
+            try:
+                volumes = json.loads(template.read_text()).get('CVars', {}).get('gSettings', {}).get('Volume', {})
+                self.template_volumes.update({key: value for key, value in volumes.items()
+                                              if key in self.template_volumes and type(value) is int and 0 <= value <= 100})
+            except (OSError, ValueError, AttributeError):
+                pass
         self.pads = Pads(pg)
         self.library = 0
         self.tab, self.row, self.pane = 0, 0, 'settings' if rom else 'library'
         self.running, self.accepted = True, False
+        self.launch_requested = False
         self.single = False
         self.keyboard = None
         self.modal = None
@@ -241,6 +266,8 @@ class App:
             self.logo = pg.image.load(str(logo)).convert_alpha()
         if rom is None and self.model.rows:
             self.model.select(self.model.rows[0])
+        if self.model.rom in self.model.rows:
+            self.library = self.model.rows.index(self.model.rom)
 
     def toast(self, text):
         self.notice, self.notice_until = text, time.monotonic() + 5
@@ -253,9 +280,68 @@ class App:
         self.canvas.blit(font.render(value, True, color), (x, y))
 
     def box(self, rect, color, border=None):
-        self.pg.draw.rect(self.canvas, color, rect, border_radius=12)
+        x, y, w, h = rect
+        key = (w, h, color)
+        if key not in self.panels:
+            panel = self.pg.Surface((w,h), self.pg.SRCALPHA)
+            for row in range(h):
+                t = row / max(1, h-1)
+                shine = 1.22 - .4*t + .16*math.exp(-((t-.16)/.07)**2)
+                shade = tuple(min(255, int(v*shine)) for v in color)
+                self.pg.draw.line(panel, shade, (0,row), (w,row))
+            mask = self.pg.Surface((w,h), self.pg.SRCALPHA)
+            self.pg.draw.rect(mask, (255,255,255), (0,0,w,h), border_radius=12)
+            panel.blit(mask, (0,0), special_flags=self.pg.BLEND_RGBA_MULT)
+            self.pg.draw.rect(panel, (83,98,124,90), (0,0,w,h), 1, border_radius=12)
+            self.pg.draw.line(panel, (123,142,172,90), (14,1), (w-15,1))
+            self.panels[key] = panel
+        self.canvas.blit(self.panels[key], (x,y))
         if border:
             self.pg.draw.rect(self.canvas, border, rect, 2, border_radius=12)
+
+    def hint(self, action, label, x, y):
+        draw = self.pg.draw
+        ps = self.pads.family == 'ps'
+        colors = {'ok':(95,216,164), 'back':(255,121,126), 'save':(111,177,255), 'search':(242,208,109)}
+        color = colors.get(action, (167,187,219))
+        center = (x+16, y+16)
+        if action in colors:
+            draw.circle(self.canvas, (15,22,35), center, 17)
+            draw.circle(self.canvas, color, center, 16, 2)
+            if ps:
+                if action == 'ok':
+                    draw.line(self.canvas, color, (x+10,y+10), (x+22,y+22), 3)
+                    draw.line(self.canvas, color, (x+22,y+10), (x+10,y+22), 3)
+                elif action == 'back':
+                    draw.circle(self.canvas, color, center, 8, 2)
+                elif action == 'save':
+                    draw.rect(self.canvas, color, (x+8,y+8,16,16), 2)
+                else:
+                    draw.polygon(self.canvas, color, [(x+16,y+6),(x+25,y+23),(x+7,y+23)], 2)
+            else:
+                self.text({'ok':'A','back':'B','save':'X','search':'Y'}[action], x+9, y+3, 20, color, 25)
+        else:
+            self.box((x-3,y,64 if action == 'tabs' else 42,32), (38,47,65), (107,128,157))
+            self.text('L1/R1' if ps and action == 'tabs' else 'LB/RB' if action == 'tabs' else '≡', x+2, y+5, 16, color, 60)
+        self.text(label, x+(72 if action == 'tabs' else 45), y+3, 20, width=220)
+
+    def volume(self, key):
+        value = get(self.model.data, key)
+        return self.template_volumes[key.rsplit('.', 1)[-1]] if value == '' else value
+
+    def slider(self, key, x, y, selected):
+        value = self.volume(key)
+        inherited = get(self.model.data, key) == ''
+        draw = self.pg.draw
+        draw.rect(self.canvas, (9,15,26), (x,y+15,260,10), border_radius=5)
+        if value:
+            draw.rect(self.canvas, (72,200,225) if selected else (78,124,153), (x,y+15,max(5,int(260*value/100)),10), border_radius=5)
+        knob = x + int(260*value/100)
+        draw.circle(self.canvas, (15,25,39), (knob,y+20), 12)
+        draw.circle(self.canvas, (190,236,247) if selected else (136,164,192), (knob,y+20), 9, 2 if inherited else 0)
+        self.text(f'{value} %', x+280, y+4, 20, (174,224,236), 95)
+        if inherited:
+            self.text('JSON', x+365, y+8, 16, (129,153,182), 50)
 
     def edit(self, title, value, callback):
         self.keyboard = dict(title=title, value=str(value), row=0, col=0, shift=False, done=callback)
@@ -309,11 +395,18 @@ class App:
         try:
             if self.model.data:
                 self.model.save()
+                self.library = self.model.rows.index(self.model.rom) if self.model.rom in self.model.rows else 0
                 self.toast('Profil enregistré · prêt pour le prochain lancement')
                 return True
         except (ValueError, OSError, subprocess.CalledProcessError) as error:
             self.toast('Enregistrement impossible : ' + str(error))
         return False
+
+    def launch(self):
+        if self.save():
+            self.accepted = True
+            self.launch_requested = not self.single
+            self.running = False
 
     def browse(self, directory=Path('/userdata/roms/windows')):
         try:
@@ -385,11 +478,23 @@ class App:
         elif self.model.data:
             rows = fields(self.tab)
             if action in ('up', 'down'):
-                self.row = (self.row + (1 if action == 'down' else -1)) % len(rows)
+                self.row = (self.row + (1 if action == 'down' else -1)) % (len(rows)+2)
             elif action in ('left', 'right', 'ok'):
+                if self.row >= len(rows):
+                    if action == 'ok':
+                        self.launch() if self.row == len(rows) else self.save()
+                    elif action in ('left','right'):
+                        self.row = len(rows) + (0 if action == 'left' else 1)
+                    return
                 key, title, choices = rows[self.row]
                 value = get(self.model.data, key)
-                if choices:
+                if '.volumes.' in key:
+                    if action == 'ok':
+                        put(self.model.data, key, '')
+                        self.toast('Volume repris depuis le JSON commun')
+                    else:
+                        put(self.model.data, key, max(0, min(100, self.volume(key) + (-5 if action == 'left' else 5))))
+                elif choices:
                     index = choices.index(value) if value in choices else 0
                     put(self.model.data, key, choices[(index + (-1 if action == 'left' else 1)) % len(choices)])
                 elif action == 'ok':
@@ -408,7 +513,7 @@ class App:
         self.library, self.pane = 0, 'library'
 
     def draw(self):
-        self.canvas.fill((12, 16, 27))
+        self.canvas.blit(self.background, (0,0))
         self.box((24, 22, 1392, 100), (23, 29, 46))
         self.text('WINDOWS PARTY', 52, 37, 36)
         self.text('Votre bibliothèque · vos règles · votre partie', 54, 84, 16, (152, 167, 191))
@@ -435,23 +540,43 @@ class App:
                       418, 208, 16, (144, 160, 186))
             for i, title in enumerate(TABS):
                 self.box((416+i*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
+                if i == self.tab:
+                    self.pg.draw.line(self.canvas, (100,222,237), (430+i*241,291), (630+i*241,291), 3)
                 self.text(title, 434+i*241, 258, 20)
             if self.tab:
-                self.text('SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages', 418, 310, 16, (150, 169, 193), 950)
+                subtitle = ('SoH / Anchor · réglages communs aux joueurs de cette session' if self.model.data['adapter'] == 'soh-anchor'
+                            else 'SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages')
+                self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
             rows = fields(self.tab)
-            offset = max(0, self.row - 6)
+            offset = max(0, min(self.row, len(rows)-1) - 6)
             for i, (key, title, choices) in enumerate(rows[offset:offset+7], offset):
                 y = 348+(i-offset)*57
                 if i == self.row and self.pane == 'settings':
                     self.box((410, y-6, 986, 51), (41, 65, 91), (90, 210, 229))
+                    self.pg.draw.rect(self.canvas, (118,224,241), (412,y+3,4,33), border_radius=2)
                 self.text(title, 430, y+5, 20, width=500)
-                value = label_value(key, get(self.model.data, key))
-                self.text(('‹ ' + value + ' ›') if choices else value + '  ✎', 958, y+5, 20, (144, 223, 234), 416)
+                if '.volumes.' in key:
+                    self.slider(key, 958, y, i == self.row and self.pane == 'settings')
+                else:
+                    value = label_value(key, get(self.model.data, key))
+                    self.text(('‹ ' + value + ' ›') if choices else value + '  ✎', 958, y+5, 20, (144, 223, 234), 416)
+            for i, label in enumerate(('▶  LANCER LA PARTIE', 'ENREGISTRER')):
+                active = self.pane == 'settings' and self.row == len(rows)+i
+                self.box((416+i*490, 750, 475, 36), (35,93,108) if i == 0 else (39,46,66),
+                         (134,236,238) if active else None)
+                self.text(label, 435+i*490, 757, 16, width=440)
         else:
             self.text('Préparez votre première partie', 430, 365, 36, width=900)
             self.text('Start : choisir un jeu .wine, .pc ou .wsquashfs', 430, 430, 24, width=900)
-        self.text('Croix/A : choisir   Cercle/B : retour   Carré/X : enregistrer   Triangle/Y : rechercher', 40, 817, 20, width=1370)
-        self.text('LB/RB : onglet   Start : ajouter   Croix directionnelle / stick : naviguer', 40, 855, 20, (137, 158, 185), 1370)
+        self.box((24,805,1392,80), (20,27,43))
+        for action, label, x in [('ok','Choisir',45), ('back','Retour',230), ('save','Enregistrer',410),
+                                  ('search','Rechercher',650), ('tabs','Onglets',900), ('add','Ajouter',1150)]:
+            self.hint(action,label,x,815)
+        volume_selected = (self.model.data and self.browser is None and self.pane == 'settings'
+                           and self.row < len(fields(self.tab)) and '.volumes.' in fields(self.tab)[self.row][0])
+        self.text('← / → : régler par pas de 5 % · A / Croix : reprendre le JSON commun' if volume_selected else
+                  'Croix directionnelle / stick : naviguer · Toutes les modifications sont enregistrées avec Carré / X',
+                  45,858,16,(151,171,195),1320)
         if self.browser is not None:
             self.box((160, 150, 1120, 640), (25, 34, 52), (91, 207, 228))
             self.text('CHOISIR UN JEU', 195, 175, 28)
@@ -475,7 +600,9 @@ class App:
                     rect = (235+c*cell, 334+r*row_height, cell-7, row_height-6)
                     self.box(rect, (47, 118, 144) if (r,c) == (k['row'],k['col']) else (38, 47, 66))
                     self.text(key.upper() if k['shift'] and len(key)==1 else key, rect[0]+9, rect[1]+14, 20, width=cell-17)
-            self.text('A/Croix : saisir · X/Carré : valider · B/Cercle : annuler', 240, 719, 20, width=950)
+            self.hint('ok','Saisir',245,725)
+            self.hint('save','Valider',520,725)
+            self.hint('back','Annuler',800,725)
         if self.modal:
             self.box((230, 340, 980, 210), (36, 45, 65), (100, 213, 230))
             self.text(self.modal, 255, 368, 24, width=920)
@@ -523,7 +650,13 @@ class App:
 
 def configure(base, rom=None, single=False):
     try:
-        return App(base, rom).run(single)
+        app = App(base, rom)
+        accepted = app.run(single)
+        if app.launch_requested:
+            data = app.model.data
+            launcher = str(Path(base) / 'partydeck-test')
+            os.execv(launcher, [launcher, 'party', str(app.model.rom), data['players'], data['split'], data['input']])
+        return accepted
     except ImportError as error:
         raise RuntimeError('Pygame 2 est requis pour le configurateur à la manette. '
                            'Ancienne interface : PARTYDECK_UI=legacy partydeck-test configurer') from error
