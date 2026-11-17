@@ -11,7 +11,7 @@ scripts = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(scripts))
 import partydeck_anchor as anchor
 import partydeck_profiles as profiles
-from partydeck_theme import install_logo
+from partydeck_theme import install_logo, logo_elements
 
 common = json.loads((scripts.parent / "templates/soh-common.json").read_text())
 assert "RoomId" not in common["CVars"]["gRemote"]["Anchor"]
@@ -83,6 +83,22 @@ with tempfile.TemporaryDirectory() as folder:
     assert install_logo(root, roms, cfg, (themes,))
     assert (roms / "theme.xml").read_bytes() == before
     assert native.read_text() == "<theme><formatVersion>7</formatVersion></theme>"
+    included = native.parent / "headers.xml"
+    included.write_text('<theme><include>theme.xml</include><feature supported="grid">'
+                        '<view name="basic,detailed,grid,video,gamecarousel">'
+                        '<image name="systemLogo" extra="true"><path>../windows/logo.svg</path></image>'
+                        '<image name="publisher"><path>publisher.png</path></image>'
+                        '</view></feature></theme>')
+    native.write_text('<theme><variables><headers>headers.xml</headers></variables>'
+                      '<include>${headers}</include></theme>')
+    assert install_logo(root, roms, cfg, (themes,))
+    theme = ET.parse(roms / "theme.xml")
+    for view in ("basic", "detailed", "grid", "video", "gamecarousel"):
+        element = theme.find(f"view[@name='{view}']/image[@name='systemLogo']")
+        assert element is not None and element.get("extra") == "true"
+        assert element.findtext("path") == str(assets / "windows-party.png")
+        assert theme.find(f"view[@name='{view}']/image[@name='publisher']") is None
+    assert "logo" in logo_elements(native)["system"]
     (roms / "theme.xml").write_text("<theme><!-- personal --></theme>")
     assert not install_logo(root, roms, cfg, (themes,))
     assert "personal" in (roms / "theme.xml").read_text()

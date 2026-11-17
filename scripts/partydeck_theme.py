@@ -1,9 +1,57 @@
 """Per-system logo override, keeping the user's current Windows theme layout."""
 from pathlib import Path
+import re
 import sys
 import xml.etree.ElementTree as ET
 
 MARKER = "Logo géré par Windows Party"
+VIEWS = ("system", "basic", "detailed", "grid", "video", "gamecarousel")
+
+
+def logo_elements(source):
+    """Find named header logos in included layouts, including theme extras."""
+    found = {view: {"logo": {}} for view in VIEWS}
+    visited = set()
+    variables = {"system.theme": "windows", "system.name": "windows-party"}
+
+    def expand(value):
+        for key, replacement in variables.items():
+            value = value.replace("${" + key + "}", replacement)
+        return value.replace("$system", "windows")
+
+    def inspect(path):
+        path = path.resolve()
+        if path in visited or len(visited) >= 500 or not path.is_file():
+            return
+        visited.add(path)
+        try:
+            root = ET.parse(path).getroot()
+        except (ET.ParseError, OSError):
+            return
+        for group in root.iter("variables"):
+            for node in group:
+                if node.text:
+                    variables[node.tag] = expand(node.text.strip())
+        for node in root.iter("include"):
+            value = expand((node.text or "").strip())
+            if value and "$" not in value:
+                inspect(path.parent / value)
+        for view in root.iter("view"):
+            scopes = [v for v in re.split(r"[\s,]+", view.get("name", "")) if v in VIEWS]
+            for image in view.findall("image"):
+                names = re.split(r"[\s,]+", image.get("name", ""))
+                asset = expand(image.findtext("path", "")).lower()
+                windows_asset = (Path(asset).stem in {"windows", "windows-logo", "windows_logo"}
+                                 or ("windows/" in asset and "logo" in Path(asset).name))
+                for name in names:
+                    normalized = re.sub(r"[^a-z0-9]", "", name.lower())
+                    if name and (normalized in {"logo", "systemlogo", "logosystem", "headerlogo", "logoheader", "mdsystemlogo", "logosmall", "logo2"}
+                                 or windows_asset):
+                        for scope in scopes:
+                            attributes = {key: image.attrib[key] for key in ("extra",) if key in image.attrib}
+                            found[scope][name] = attributes
+    inspect(source)
+    return found
 
 
 def install_logo(base, roms=Path("/userdata/roms/windows-party"),
@@ -37,10 +85,12 @@ def install_logo(base, roms=Path("/userdata/roms/windows-party"),
     root.append(ET.Comment(" " + MARKER + " "))
     ET.SubElement(root, "formatVersion").text = "7"
     ET.SubElement(root, "include").text = str(source.absolute())
-    view = ET.SubElement(root, "view", name="system,basic,detailed,grid,video")
-    image = ET.SubElement(view, "image", name="logo")
-    ET.SubElement(image, "path").text = str(logo.absolute())
-    ET.SubElement(image, "color").text = "FFFFFFFF"
+    for scope, elements in logo_elements(source).items():
+        view = ET.SubElement(root, "view", name=scope)
+        for name, attributes in elements.items():
+            image = ET.SubElement(view, "image", name=name, **attributes)
+            ET.SubElement(image, "path").text = str(logo.absolute())
+            ET.SubElement(image, "color").text = "FFFFFFFF"
     ET.indent(root, space="  ")
     atomic_write(destination, ET.tostring(root, encoding="unicode") + "\n", 0o644)
     print("Logo Windows Party activé pour le thème " + theme_name)

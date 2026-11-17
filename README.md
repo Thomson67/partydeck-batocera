@@ -125,6 +125,9 @@ Le logo validé est installé dans `assets/windows-party.png`. Un fichier
 sélectionné et remplace uniquement l'image du logo. L'entrée Windows solo et
 les fichiers du thème d'origine restent inchangés. Un thème local personnalisé
 déjà présent est conservé. Après installation, redémarrez EmulationStation.
+La substitution couvre le carrousel, les en-têtes des listes de jeux et la vue
+`gamecarousel`. Les images de logo supplémentaires nommées par le thème dans
+ses fichiers inclus sont aussi remplacées, en conservant leur placement.
 Après un changement de thème, relancez l'installation, ou uniquement :
 
 ```bash
