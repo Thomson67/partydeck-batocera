@@ -252,7 +252,7 @@ def install_system(config_dir=Path("/userdata/system/configs/emulationstation"),
     print(f"Système Windows Party installé : {path}")
 
 
-def write_port(port_dir, launcher, original, count, split, input_mode, mode="coop"):
+def write_port(port_dir, launcher, original, count, split, input_mode, mode="coop", profile=False):
     digest = hashlib.sha256(os.fsencode(original)).hexdigest()[:10]
     prefix = "" if mode == "party" else "PartyDeck - "
     port = port_dir / f"{prefix}{original.stem[:90]} [{digest}].sh"
@@ -265,7 +265,9 @@ def write_port(port_dir, launcher, original, count, split, input_mode, mode="coo
         staged = Path(script.name)
         try:
             script.write(f"#!/bin/bash\n{marker}\nexec ")
-            script.write(shlex.join([str(launcher), mode, str(original), count, split, input_mode]))
+            command = ([str(launcher), "profil", str(original)] if profile else
+                       [str(launcher), mode, str(original), count, split, input_mode])
+            script.write(shlex.join(command))
             script.write("\n")
             script.flush()
             staged.chmod(0o755)
@@ -546,10 +548,13 @@ def main():
     original, target = rom_path(args.rom, parser)
     if args.mode in {"prepare", "prepare-party"}:
         party = args.mode == "prepare-party"
+        if party:
+            from partydeck_profiles import prepare_profile
+            prepare_profile(args.base, original, args.count, args.split, args.input_mode)
         port = write_port(PARTY_ROMS if party else args.ports,
                           args.base / "partydeck-test", original,
                           args.count, args.split, args.input_mode,
-                          mode="party" if party else "coop")
+                          mode="party" if party else "coop", profile=party)
         print(f"Entrée enregistrée : {port}")
         print("Actualise les listes de jeux dans EmulationStation, puis ouvre "
               + ("Windows Party." if party else "Ports."))

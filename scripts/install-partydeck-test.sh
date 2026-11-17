@@ -11,10 +11,27 @@ data="$base/data/partydeck"
 games="$base/jeux"
 launcher="$base/partydeck-test"
 coop_helper="$base/partydeck-batocera-coop.py"
+profiles_helper="$base/partydeck_profiles.py"
 xwayland_dir="$base/releases/xwayland-24.1.15-1"
 ports_dir='/userdata/roms/ports'
 
 die() { printf 'Erreur : %s\n' "$*" >&2; exit 1; }
+
+load_graphical_environment() {
+    for pid in $(pidof emulationstation 2>/dev/null || true); do
+        [[ -r /proc/$pid/environ ]] || continue
+        unset DISPLAY WAYLAND_DISPLAY XAUTHORITY
+        while IFS= read -r -d '' item; do
+            case "$item" in
+                DISPLAY=*|WAYLAND_DISPLAY=*|XDG_RUNTIME_DIR=*|XAUTHORITY=*|DBUS_SESSION_BUS_ADDRESS=*)
+                    export "$item" ;;
+            esac
+        done < "/proc/$pid/environ"
+        break
+    done
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run}"
+    [[ ${DISPLAY:-} =~ ^:[0-9]+(\.[0-9]+)?$ ]] || export DISPLAY=:0
+}
 
 usage() {
     cat <<'HELP'
@@ -24,6 +41,7 @@ Usage :
   /userdata/system/partydeck-test/partydeck-test preparer-port "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
   /userdata/system/partydeck-test/partydeck-test jouer "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
   /userdata/system/partydeck-test/partydeck-test preparer-coop "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
+  /userdata/system/partydeck-test/partydeck configurer ["/chemin/Jeu.wsquashfs"]
   /userdata/system/partydeck-test/partydeck ajouter "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
 
 « installer » installe PartyDeck et la commande locale, même sans session graphique.
@@ -163,6 +181,8 @@ WRAPPER
 
 case "${1:-verifier}" in
     -h|--help) usage; exit 0 ;;
+    configurer) [[ $# -le 2 ]] || { usage; exit 2; } ;;
+    profil) [[ $# -eq 2 ]] || { usage; exit 2; } ;;
     installer|verifier) [[ $# -le 1 ]] || die 'Argument inattendu.' ;;
     jouer|preparer-port) [[ $# -ge 2 && $# -le 3 ]] || { usage; exit 2; } ;;
     coop|preparer-coop|party|ajouter) [[ $# -ge 2 && $# -le 5 ]] || { usage; exit 2; } ;;
@@ -176,6 +196,14 @@ for cmd in curl sha256sum python3 flock realpath; do
 done
 
 mkdir -p "$base/releases" "$base/logs" "$base/cache" "$data" "$games"
+if [[ ${1:-verifier} == configurer || ${1:-verifier} == profil ]]; then
+    [[ -f $profiles_helper ]] || die 'Réinstallez Windows Party pour restaurer le gestionnaire de profils.'
+    mode=$1
+    shift
+    load_graphical_environment
+    exec python3 "$profiles_helper" "$mode" "$base" "$@"
+fi
+
 exec 9>"$base/test.lock"
 flock -n 9 || die 'Un test PartyDeck est déjà en cours.'
 
@@ -191,7 +219,7 @@ fi
 if [[ ${1:-verifier} == installer ]]; then
     source_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
     source_helper="$source_dir/partydeck-batocera-coop.py"
-    [[ -f $source_helper ]] ||
+    [[ -f $source_helper && -f $source_dir/partydeck_profiles.py ]] ||
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
 fi
 
@@ -266,6 +294,8 @@ if [[ ${1:-verifier} == installer ]]; then
     staging=$(mktemp -d "$base/.coop-XXXXXX")
     trap 'rm -rf -- "$staging"' EXIT
     cp -- "$source_helper" "$staging/partydeck-batocera-coop.py"
+    cp -- "$source_dir/partydeck_profiles.py" "$staging/partydeck_profiles.py"
+    mv -fT -- "$staging/partydeck_profiles.py" "$profiles_helper"
     mv -fT -- "$staging/partydeck-batocera-coop.py" "$coop_helper"
     rmdir -- "$staging"
     trap - EXIT
@@ -283,6 +313,7 @@ if [[ ${1:-verifier} == installer ]]; then
         ln -s partydeck-test "$base/partydeck"
     fi
     python3 "$coop_helper" install-system
+    python3 "$profiles_helper" installer "$base"
     printf 'Ajoutez un jeu avec : %s ajouter "/userdata/roms/windows/Jeu.wsquashfs" 2 horizontal auto\n' "$base/partydeck"
     printf 'Redémarrez EmulationStation pour charger le nouveau système Windows Party.\n'
     printf '\nPartyDeck installé. Quand EmulationStation est affiché, lancez :\n%s verifier\n' "$launcher"
@@ -297,17 +328,7 @@ fi
 
 # Récupère l'environnement graphique local d'EmulationStation, même en SSH.
 # Lit uniquement les variables attendues, sans évaluer le contenu du processus.
-for pid in $(pidof emulationstation 2>/dev/null || true); do
-    [[ -r /proc/$pid/environ ]] || continue
-    unset DISPLAY WAYLAND_DISPLAY XAUTHORITY
-    while IFS= read -r -d '' item; do
-        case "$item" in
-            DISPLAY=*|WAYLAND_DISPLAY=*|XDG_RUNTIME_DIR=*|XAUTHORITY=*|DBUS_SESSION_BUS_ADDRESS=*)
-                export "$item" ;;
-        esac
-    done < "/proc/$pid/environ"
-    break
-done
+load_graphical_environment
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/var/run}"
 wayland_socket="${WAYLAND_DISPLAY:-wayland-0}"

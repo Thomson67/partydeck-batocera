@@ -37,7 +37,11 @@ entrées et les fenêtres. La vérification en jeu se fait depuis **Windows Part
 
 ## Ajouter un jeu
 
-Après installation, créez son lanceur avec cette commande.
+Ouvrez **Configurer Windows Party** dans le système Windows Party pour ajouter
+un jeu ou modifier ses paramètres. Le gestionnaire utilise Yad, fourni par
+Batocera sur PC.
+
+Vous pouvez aussi créer son lanceur depuis SSH avec cette commande.
 
 ```bash
 /userdata/system/partydeck-test/partydeck ajouter \
@@ -56,3 +60,29 @@ Relancez `ajouter` avec `vertical`, un autre nombre de joueurs ou un autre
 mode d'entrées pour actualiser son lanceur.
 Les données des anciens essais dans Ports restent accessibles via leurs
 lanceurs. Une entrée Windows Party commence avec ses propres profils.
+
+## Profils et lancement direct
+
+Les paramètres sont conservés dans
+`/userdata/system/partydeck-test/profiles/<identifiant>.json`.
+Chaque profil enregistre le nombre de joueurs, la disposition et le mode
+manettes ou clavier/souris. Par défaut, sélectionner le jeu lance directement
+la session. L'option **Afficher ces réglages avant chaque lancement** ouvre
+l'éditeur avant de démarrer. Annuler quitte ce lancement.
+
+Le gestionnaire est également accessible depuis SSH.
+
+```bash
+/userdata/system/partydeck-test/partydeck configurer
+```
+
+L'installation convertit les anciens lanceurs Windows Party générés par le
+projet en reprenant leurs paramètres. Les profils personnels existants sont
+réutilisés lors des mises à jour. La disposition des fenêtres et l'attribution
+des entrées se configurent ici. La connexion réseau automatique demande une
+adaptation au mode multijoueur de chaque jeu.
+
+Le fonctionnement avec profils et éditeur facultatif s'inspire de
+[Quiver Batocera](https://github.com/DreamerCG/Quiver-Batocera), dont les
+profils `.quiver` et l'option `LAUNCHER_QUIVER` permettent d'ouvrir le launcher
+à la demande.

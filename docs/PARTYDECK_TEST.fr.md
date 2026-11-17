@@ -39,10 +39,24 @@ PartyDeck.
 
 L'installation crée un fichier dédié
 `/userdata/system/configs/emulationstation/es_systems_windows-party.cfg`.
-Le système apparaît dans EmulationStation après l'ajout d'au moins un jeu
-et un redémarrage d'EmulationStation. Son thème est celui de Windows.
+Le système apparaît après un redémarrage d'EmulationStation. Son entrée
+**Configurer Windows Party** permet d'ajouter un jeu et de modifier les profils. Son thème est celui de Windows.
 
-Ajoutez un jeu Batocera existant. Les formats acceptés sont
+Le gestionnaire utilise Yad. Le bouton **Ajouter un jeu** propose une archive
+`.wsquashfs` ou un dossier `.wine` ou `.pc`. Les réglages sont enregistrés par
+jeu. Ouvrir ensuite son entrée démarre directement la session.
+
+La case **Afficher ces réglages avant chaque lancement** permet de rouvrir
+l'éditeur avant la session. Annuler conserve le profil et quitte le lancement.
+Si un profil est absent, l'éditeur est proposé au lancement pour le recréer.
+
+Depuis SSH, la commande suivante ouvre aussi le gestionnaire.
+
+```bash
+/userdata/system/partydeck-test/partydeck configurer
+```
+
+Pour ajouter directement un jeu depuis SSH, utilisez `ajouter`. Les formats acceptés sont
 `.wine`, `.pc` et `.wsquashfs`.
 
 ```bash
@@ -103,7 +117,9 @@ Si le journal UMU contient `runtime_reused_after_interruption` suivi de
 montage vide. Le [correctif de reprise est disponible sur une branche de
 test UMU Runner Toolbox](https://github.com/Thomson67/umu-runner-toolbox/tree/fix/resume-empty-c-game-mountpoint).
 
-La commande `ajouter` avec le même chemin actualise le lanceur existant.
+Les profils JSON sont dans `/userdata/system/partydeck-test/profiles`.
+La commande `ajouter` avec le même chemin actualise le lanceur existant et
+les paramètres fournis. L'option d'affichage de l'éditeur est conservée.
 Les variantes `horizontal` et `vertical` partagent les profils des joueurs.
 Les lanceurs de test créés précédemment dans Ports utilisent encore les
 données de `coop/<identifiant>`.
