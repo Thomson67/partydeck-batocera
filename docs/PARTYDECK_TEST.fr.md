@@ -35,21 +35,35 @@ sont vérifiés par SHA-256. Elle est rangée dans
 `/userdata/system/partydeck-test/releases` et utilisée uniquement par le test
 PartyDeck.
 
-## Jeux Wine et écran partagé automatique
+## Windows Party
 
-Préparez une entrée pour un jeu Batocera existant. Les formats acceptés sont
+L'installation crée un fichier dédié
+`/userdata/system/configs/emulationstation/es_systems_windows-party.cfg`.
+Le système apparaît dans EmulationStation après l'ajout d'au moins un jeu
+et un redémarrage d'EmulationStation. Son thème est celui de Windows.
+
+Ajoutez un jeu Batocera existant. Les formats acceptés sont
 `.wine`, `.pc` et `.wsquashfs`.
 
 ```bash
-/userdata/system/partydeck-test/partydeck-test preparer-coop \
+/userdata/system/partydeck-test/partydeck ajouter \
   "/userdata/roms/windows/Mon Jeu.wsquashfs" 2 horizontal clavier-j2
 ```
 
-Actualisez les listes dans EmulationStation, puis ouvrez le jeu dans **Ports**.
+Au premier ajout, redémarrez EmulationStation. Pour les ajouts suivants,
+actualisez les listes, puis ouvrez le jeu dans **Windows Party**.
 Le jeu démarre directement avec le runner et l'`autorun.cmd` lus par
-`batocera-wine`. Les sauvegardes et écritures du test sont isolées pour chaque
-joueur dans `/userdata/system/partydeck-test/coop`. Le test démarre avec ses
-propres sauvegardes. OverlayFS est nécessaire pour les écritures du jeu.
+`batocera-wine`. Les lanceurs `.sh` dans `/userdata/roms/windows-party` référencent le jeu
+Windows d'origine et enregistrent les réglages multijoueurs.
+Les sauvegardes sont isolées sous
+`/userdata/saves/windows-party/<jeu> [identifiant]/jN`. Le sous-dossier
+`windows` reçoit les sauvegardes externalisées. `prefixes` conserve les
+préfixes Wine des jeux compressés et `content` les écritures des jeux
+`.wine` et `.pc`, y compris les sauvegardes internes au préfixe.
+Une nouvelle entrée démarre avec ses propres sauvegardes.
+OverlayFS est nécessaire pour les écritures du jeu.
+Les données techniques sont conservées dans
+`/userdata/system/partydeck-test/party/<identifiant>/jN`.
 Les journaux Batocera sont écrits dans `jN/logs` et le cache du chargeur
 de bibliothèques dans `jN/ldconfig-cache`. Chaque joueur a ses propres copies
 pour permettre la préparation du runtime sous v44.
@@ -79,8 +93,8 @@ fenêtre. Fermez ensuite la session et vérifiez qu'un second lancement
 fonctionne. Testez ensuite `vertical`. Le jeu doit avoir son propre mode
 multijoueur pour rejoindre la même partie.
 
-Pour un jeu UMU, chaque joueur a ses journaux dans `coop/<jeu>/jN/umu-logs`
-et, avec Proton, dans `coop/<jeu>/jN/proton-logs` sous le dossier PartyDeck.
+Pour un jeu UMU, chaque joueur a ses journaux dans `party/<jeu>/jN/umu-logs`
+et, avec Proton, dans `party/<jeu>/jN/proton-logs` sous le dossier PartyDeck.
 Le journal principal indique l'affichage Xwayland attribué à chaque instance
 et le code de sortie de `batocera-wine`.
 
@@ -88,6 +102,11 @@ Si le journal UMU contient `runtime_reused_after_interruption` suivi de
 `C game target already exists`, la reprise peut retrouver un point de
 montage vide. Le [correctif de reprise est disponible sur une branche de
 test UMU Runner Toolbox](https://github.com/Thomson67/umu-runner-toolbox/tree/fix/resume-empty-c-game-mountpoint).
+
+La commande `ajouter` avec le même chemin actualise le lanceur existant.
+Les variantes `horizontal` et `vertical` partagent les profils des joueurs.
+Les lanceurs de test créés précédemment dans Ports utilisent encore les
+données de `coop/<identifiant>`.
 
 ## Essai manuel avec un exécutable autonome
 

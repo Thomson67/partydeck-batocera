@@ -24,11 +24,13 @@ Usage :
   /userdata/system/partydeck-test/partydeck-test preparer-port "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
   /userdata/system/partydeck-test/partydeck-test jouer "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
   /userdata/system/partydeck-test/partydeck-test preparer-coop "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
+  /userdata/system/partydeck-test/partydeck ajouter "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
 
 « installer » installe PartyDeck et la commande locale, même sans session graphique.
 « verifier » vérifie la session Xorg ou Wayland, Gamescope, Xwayland et Bubblewrap.
 « preparer-port » crée l'entrée de test dans Ports pour lancer depuis EmulationStation.
 « preparer-coop » crée une entrée Ports à lancement direct pour un .wine, .pc ou .wsquashfs.
+« ajouter » crée ou actualise le lanceur du jeu dans Windows Party.
 « jouer » sélectionne les manettes dans PartyDeck. Placez au préalable
 une copie de test autonome du jeu dans /userdata/system/partydeck-test/jeux/.
 L'EXE doit pouvoir se lancer avec un préfixe Wine neuf.
@@ -163,7 +165,7 @@ case "${1:-verifier}" in
     -h|--help) usage; exit 0 ;;
     installer|verifier) [[ $# -le 1 ]] || die 'Argument inattendu.' ;;
     jouer|preparer-port) [[ $# -ge 2 && $# -le 3 ]] || { usage; exit 2; } ;;
-    coop|preparer-coop) [[ $# -ge 2 && $# -le 5 ]] || { usage; exit 2; } ;;
+    coop|preparer-coop|party|ajouter) [[ $# -ge 2 && $# -le 5 ]] || { usage; exit 2; } ;;
     *) usage; exit 2 ;;
 esac
 
@@ -177,10 +179,12 @@ mkdir -p "$base/releases" "$base/logs" "$base/cache" "$data" "$games"
 exec 9>"$base/test.lock"
 flock -n 9 || die 'Un test PartyDeck est déjà en cours.'
 
-if [[ ${1:-verifier} == preparer-coop ]]; then
+if [[ ${1:-verifier} == preparer-coop || ${1:-verifier} == ajouter ]]; then
     [[ -x $launcher && -f $coop_helper ]] || die 'Installez cette version de PartyDeck avant de préparer un port coop.'
+    mode=prepare
+    [[ $1 != ajouter ]] || mode=prepare-party
     shift
-    python3 "$coop_helper" prepare "$appdir" "$base" "$ports_dir" "$@"
+    python3 "$coop_helper" "$mode" "$appdir" "$base" "$ports_dir" "$@"
     exit 0
 fi
 
@@ -272,6 +276,15 @@ if [[ ${1:-verifier} == installer ]]; then
     chmod 0755 "$temporary_launcher"
     mv -fT -- "$temporary_launcher" "$launcher"
     trap - EXIT
+    if [[ -e $base/partydeck || -L $base/partydeck ]]; then
+        [[ -L $base/partydeck && $(readlink -- "$base/partydeck") == partydeck-test ]] ||
+            die "Un fichier utilisateur existe déjà dans $base/partydeck."
+    else
+        ln -s partydeck-test "$base/partydeck"
+    fi
+    python3 "$coop_helper" install-system
+    printf 'Ajoutez un jeu avec : %s ajouter "/userdata/roms/windows/Jeu.wsquashfs" 2 horizontal auto\n' "$base/partydeck"
+    printf 'Redémarrez EmulationStation pour charger le nouveau système Windows Party.\n'
     printf '\nPartyDeck installé. Quand EmulationStation est affiché, lancez :\n%s verifier\n' "$launcher"
     exit 0
 fi
@@ -354,10 +367,12 @@ if [[ ${1:-verifier} == verifier ]]; then
     exit 0
 fi
 
-if [[ ${1:-verifier} == coop ]]; then
+if [[ ${1:-verifier} == coop || ${1:-verifier} == party ]]; then
     [[ -f $coop_helper ]] || die 'Réinstallez le lanceur pour restaurer le module coop.'
+    mode=play
+    [[ $1 != party ]] || mode=play-party
     shift
-    python3 "$coop_helper" play "$appdir" "$base" "$ports_dir" "$@"
+    python3 "$coop_helper" "$mode" "$appdir" "$base" "$ports_dir" "$@"
     exit 0
 fi
 

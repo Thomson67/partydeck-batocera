@@ -14,10 +14,13 @@ import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from urllib.parse import unquote_to_bytes
 
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
+PARTY_ROMS = Path("/userdata/roms/windows-party")
+PARTY_SAVES = Path("/userdata/saves/windows-party")
 GAMEPADS = "ID_INPUT_JOYSTICK"
 KEYBOARDS = "ID_INPUT_KEYBOARD"
 MICE = "ID_INPUT_MOUSE"
@@ -210,9 +213,49 @@ def rom_path(value, argument_parser):
         argument_parser.error(str(error))
 
 
-def write_port(port_dir, launcher, original, count, split, input_mode):
+def install_system(config_dir=Path("/userdata/system/configs/emulationstation"),
+                   stock_config=Path("/usr/share/emulationstation/es_systems.cfg")):
+    stock = ET.parse(stock_config).getroot()
+    ports = next((s for s in stock.findall("system") if s.findtext("name") == "ports"), None)
+    if ports is None or not ports.findtext("command"):
+        raise ValueError("Commande Ports absente de la configuration Batocera.")
+    command = ports.findtext("command").replace("%SYSTEM%", "ports")
+    root = ET.Element("systemList")
+    root.append(ET.Comment(" Système géré par PartyDeck Batocera "))
+    system = ET.SubElement(root, "system")
+    for key, value in (
+        ("name", "windows-party"), ("fullname", "Windows Party"),
+        ("manufacturer", "PartyDeck"), ("hardware", "computer"),
+        ("path", str(PARTY_ROMS)), ("extension", ".sh"),
+        ("command", command), ("platform", "windows"), ("theme", "windows"),
+    ):
+        ET.SubElement(system, key).text = value
+    emulators = ports.find("emulators")
+    if emulators is not None:
+        system.append(ET.fromstring(ET.tostring(emulators)))
+    config_dir.mkdir(parents=True, exist_ok=True)
+    path = config_dir / "es_systems_windows-party.cfg"
+    if path.is_symlink() or (path.exists() and "Système géré par PartyDeck Batocera" not in path.read_text()):
+        raise ValueError(f"Une configuration utilisateur existe déjà : {path}")
+    ET.indent(root, space="  ")
+    with tempfile.NamedTemporaryFile(dir=config_dir, prefix=".partydeck-system-", delete=False) as staged:
+        temporary = Path(staged.name)
+        try:
+            ET.ElementTree(root).write(staged, encoding="utf-8", xml_declaration=True)
+            staged.flush()
+            temporary.chmod(0o644)
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    PARTY_ROMS.mkdir(parents=True, exist_ok=True)
+    PARTY_SAVES.mkdir(parents=True, exist_ok=True)
+    print(f"Système Windows Party installé : {path}")
+
+
+def write_port(port_dir, launcher, original, count, split, input_mode, mode="coop"):
     digest = hashlib.sha256(os.fsencode(original)).hexdigest()[:10]
-    port = port_dir / f"PartyDeck - {original.stem[:90]} [{digest}].sh"
+    prefix = "" if mode == "party" else "PartyDeck - "
+    port = port_dir / f"{prefix}{original.stem[:90]} [{digest}].sh"
     marker = "# Entrée gérée par PartyDeck Wine"
     port_dir.mkdir(parents=True, exist_ok=True)
     if port.is_symlink() or (port.exists() and marker not in port.read_text().splitlines()[:2]):
@@ -222,7 +265,7 @@ def write_port(port_dir, launcher, original, count, split, input_mode):
         staged = Path(script.name)
         try:
             script.write(f"#!/bin/bash\n{marker}\nexec ")
-            script.write(shlex.join([str(launcher), "coop", str(original), count, split, input_mode]))
+            script.write(shlex.join([str(launcher), mode, str(original), count, split, input_mode]))
             script.write("\n")
             script.flush()
             staged.chmod(0o755)
@@ -232,13 +275,16 @@ def write_port(port_dir, launcher, original, count, split, input_mode):
     return port
 
 
-def player_paths(player):
+def player_paths(player, saves=None):
     paths = dict(WRITABLE)
     if UMU_HOME.is_dir():
         paths[str(UMU_LOGS)] = "umu-logs"
     for destination, relative in paths.items():
         Path(destination).mkdir(parents=True, exist_ok=True)
-        source = player / relative
+        if saves is not None and relative in {"saves", "bottles"}:
+            source = saves / ("windows" if relative == "saves" else "prefixes")
+        else:
+            source = player / relative
         source.mkdir(parents=True, exist_ok=True)
         yield "--bind", str(source), destination
 
@@ -260,7 +306,7 @@ def dbus_socket_mounts(address):
             yield "--ro-bind", str(path), str(path)
 
 
-def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw")):
+def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=None):
     args = ["--die-with-parent", "--unshare-pid", "--ro-bind", "/", "/",
             "--proc", "/proc", "--dev-bind", "/dev", "/dev",
             *MOUNT_CAPS,
@@ -269,6 +315,9 @@ def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw")):
             "--unsetenv", "XDG_DATA_HOME",
             "--setenv", "ENABLE_GAMESCOPE_WSI", "0",
             "--bind", str(player), str(player)]
+    if saves is not None:
+        saves.mkdir(parents=True, exist_ok=True)
+        args.extend(["--bind", str(saves), str(saves)])
     for key in NATIVE_GRAPHICS_ENV:
         if key in os.environ:
             args.extend(["--setenv", key, os.environ[key]])
@@ -288,7 +337,7 @@ def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw")):
         args.extend(["--setenv", "PRESSURE_VESSEL_FILESYSTEMS_RW", shared,
                      "--setenv", "PROTON_LOG", os.environ.get("PROTON_LOG", "1"),
                      "--setenv", "PROTON_LOG_DIR", str(proton_logs)])
-    for item in player_paths(player):
+    for item in player_paths(player, saves):
         args.extend(item)
     for device in devices:
         for node in [device.node, *device.joystick_nodes]:
@@ -334,9 +383,9 @@ def mount_overlay(target, area):
     subprocess.run(["mount", "--bind", str(view), str(target)], check=True)
 
 
-def run_wine(original, target, player):
+def run_wine(original, target, player, saves=None):
     if original.suffix.lower() != ".wsquashfs":
-        mount_overlay(target, player / "content")
+        mount_overlay(target, (saves if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
         mount_overlay(UMU_HOME, player / "umu")
         for name in UMU_PRIVATE:
@@ -352,7 +401,7 @@ def run_wine(original, target, player):
 
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
-                 shared_keyboard_mouse=True):
+                 shared_keyboard_mouse=True, saves=None):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -364,9 +413,11 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     helper = str(Path(__file__).resolve())
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"', "sh",
                  sys.executable, helper, "_sandbox", os.environ.get("DISPLAY", ""),
-                 *bubblewrap_command(app), *sandbox_arguments(player, devices),
+                 *bubblewrap_command(app), *sandbox_arguments(player, devices, saves=saves),
                  "--", sys.executable, helper, "_wine",
                  str(original), str(target), str(player)])
+    if saves is not None:
+        args.append(str(saves))
     # SDL writes this identifier to the outer X11 window's WM_CLASS. The
     # AppImage's launcher PID and the game's title can both differ.
     return subprocess.Popen(args, env={**os.environ, "SDL_VIDEODRIVER": "x11",
@@ -396,7 +447,7 @@ def handle_exit(signum, _frame):
     raise SystemExit(128 + signum)
 
 
-def run_session(app, base, original, target, count, split, input_mode):
+def run_session(app, base, original, target, count, split, input_mode, party=False):
     for tool in ("batocera-wine", "xdotool", "mount"):
         if not shutil.which(tool):
             raise RuntimeError(f"Commande indisponible : {tool}")
@@ -417,18 +468,20 @@ def run_session(app, base, original, target, count, split, input_mode):
         raise RuntimeError("Bubblewrap ne peut pas initialiser l’espace de noms Wine.")
     print("Vérification Bubblewrap Wine OK.", flush=True)
     game_id = hashlib.sha256(os.fsencode(original)).hexdigest()[:16]
+    save_name = f"{original.stem[:90]} [{game_id[:10]}]"
     processes = []
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     for signum in SIGNALS:
         signal.signal(signum, handle_exit)
     try:
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
-            player = base / "coop" / game_id / f"j{index}"
+            player = base / ("party" if party else "coop") / game_id / f"j{index}"
+            saves = PARTY_SAVES / save_name / f"j{index}" if party else None
             player.mkdir(parents=True, exist_ok=True)
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
-                                          shared_keyboard_mouse=shared_keyboard_mouse))
+                                          shared_keyboard_mouse=shared_keyboard_mouse, saves=saves))
         pending = dict(enumerate(processes))
         seen_windows = {}
         next_attempt = dict.fromkeys(pending, 0)
@@ -471,13 +524,16 @@ def run_session(app, base, original, target, count, split, input_mode):
 
 
 def main():
+    if sys.argv[1:] == ["install-system"]:
+        install_system()
+        return 0
     if len(sys.argv) > 3 and sys.argv[1] == "_sandbox":
         enter_sandbox(sys.argv[2], sys.argv[3:])
-    if len(sys.argv) == 5 and sys.argv[1] == "_wine":
+    if len(sys.argv) in {5, 6} and sys.argv[1] == "_wine":
         return run_wine(*(Path(path) for path in sys.argv[2:]))
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("prepare", "play"))
+    parser.add_argument("mode", choices=("prepare", "play", "prepare-party", "play-party"))
     parser.add_argument("app", type=Path)
     parser.add_argument("base", type=Path)
     parser.add_argument("ports", type=Path)
@@ -488,14 +544,18 @@ def main():
                         choices=("auto", "clavier-j1", "clavier-j2"))
     args = parser.parse_args()
     original, target = rom_path(args.rom, parser)
-    if args.mode == "prepare":
-        port = write_port(args.ports, args.base / "partydeck-test", original,
-                          args.count, args.split, args.input_mode)
+    if args.mode in {"prepare", "prepare-party"}:
+        party = args.mode == "prepare-party"
+        port = write_port(PARTY_ROMS if party else args.ports,
+                          args.base / "partydeck-test", original,
+                          args.count, args.split, args.input_mode,
+                          mode="party" if party else "coop")
         print(f"Entrée enregistrée : {port}")
-        print("Actualise les listes de jeux dans EmulationStation, puis ouvre Ports.")
+        print("Actualise les listes de jeux dans EmulationStation, puis ouvre "
+              + ("Windows Party." if party else "Ports."))
         return 0
     return run_session(args.app, args.base, original, target, args.count,
-                       args.split, args.input_mode)
+                       args.split, args.input_mode, party=args.mode == "play-party")
 
 
 if __name__ == "__main__":
