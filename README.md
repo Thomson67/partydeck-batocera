@@ -48,6 +48,28 @@ les onglets **Session**, **Réseau**, **Joueurs** et **Image & son**. Les profil
 existants sont réutilisés. Aucun dialogue de bureau n'est nécessaire pour ajouter
 un jeu, parcourir les dossiers, modifier les paramètres ou saisir du texte.
 
+**Les onglets dépendent du profil du jeu** : un jeu standard affiche uniquement
+Session. Réseau, Joueurs et Image & son sont propres à SoH / Anchor et apparaissent
+seulement lorsque ce profil est choisi ou reconnu par le catalogue commun.
+Les nouveaux profils standard ne stockent pas de réglages Anchor.
+
+La bibliothèque propose le **profil commun Ship of Harkinian**, même sur une
+nouvelle installation. Le configurateur recherche les noms contenant « SoH » ou
+« Ship of Harkinian » dans `/userdata/roms/windows` et ses sous-dossiers (jusqu'à
+quatre niveaux, sans entrer dans les préfixes Wine). Il ne monte ni n'extrait les jeux.
+Une correspondance unique est proposée avec le profil SoH déjà sélectionné ;
+les profils personnels déjà enregistrés restent prioritaires. En cas d'absence
+ou de plusieurs versions, une boîte propose **Choisir le jeu** ou **Annuler**.
+Le navigateur accepte les dossiers `.wine`/`.pc` et les fichiers `.wsquashfs`.
+Annuler rappelle qu'il faut d'abord disposer du jeu et ne crée aucun lanceur.
+Aucun jeu n'est fourni ou téléchargé par le catalogue, uniquement sa configuration.
+
+Dans **Choisir un jeu**, **LB/RB** parcourt la liste par pages de neuf entrées.
+**HK + Start** quitte le configurateur : le Hotkey de `es_input.cfg` est utilisé
+(`hotkey` ou `hotkeyenable`) ; sans mapping, le bouton Guide + Start SDL sert de
+secours. Cette combinaison n'ouvre pas simultanément le navigateur d'ajout.
+En présence de modifications, le choix enregistrer/abandonner/annuler reste proposé.
+
 - **Croix/A** : choisir ; droite depuis la bibliothèque ouvre les réglages.
 - **Cercle/B** : retour aux jeux, annulation du clavier ou fermeture.
 - **LB/RB** : onglet précédent/suivant.

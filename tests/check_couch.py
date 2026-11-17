@@ -31,6 +31,10 @@ with tempfile.TemporaryDirectory() as directory:
     app.row = 2
     app.action('right')
     assert app.model.data['input'] == 'auto'
+    assert app.available_tabs() == (0,)
+    app.row = 5  # Explicitly choose the SoH recipe before accessing its tabs.
+    app.action('ok')
+    assert app.available_tabs() == (0,1,2,3)
     app.action('next')
     app.action('down')  # Room ID
     app.action('ok')

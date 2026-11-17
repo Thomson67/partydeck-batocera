@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from partydeck_profiles import (defaults, read_profile, save_profile, profile_path,
                                validate, ROM_TYPES)
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOLUME_FIELDS
+from partydeck_catalog import CommonGame, COMMON, discover, matches_soh, is_rom
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEYS = [list('azertyuiop'), list('qsdfghjklm'), list('wxcvbn0123'),
@@ -81,8 +82,12 @@ def label_value(key, value):
 
 
 class Model:
-    def __init__(self, base, rom=None):
+    def __init__(self, base, rom=None, windows=Path('/userdata/roms/windows')):
         self.base, self.rom = Path(base), rom
+        self.windows = windows
+        self.selected = rom
+        self.detected = discover(windows)
+        self.common_for_rom = {}
         self.data = None
         self.saved = None
         self.rows = []
@@ -93,21 +98,40 @@ class Model:
 
     def reload(self):
         self.rows = []
+        self.common_for_rom = {}
+        registered_soh = False
         for path in sorted((self.base / 'profiles').glob('*.json')):
             data = json.loads(path.read_text())
             rom = Path(data['rom'])
             validate(data, rom)
+            registered_soh |= data.get('adapter') == 'soh-anchor' or matches_soh(rom)
             if self.filter.casefold() in rom.stem.casefold():
                 self.rows.append(rom)
+        if not registered_soh:
+            recipe = COMMON[0]
+            if len(self.detected) == 1:
+                rom = self.detected[0]
+                self.common_for_rom[rom] = recipe
+                if self.filter.casefold() in (rom.stem + recipe.name).casefold():
+                    self.rows.append(rom)
+            elif self.filter.casefold() in recipe.name.casefold():
+                self.rows.append(CommonGame(recipe.id, recipe.name, recipe.adapter, self.detected))
         self.rows.sort(key=lambda p: p.stem.casefold())
 
-    def select(self, rom):
+    def select(self, rom, common=None):
+        self.selected = rom
+        if isinstance(rom, CommonGame):
+            self.rom, self.data, self.saved = None, None, None
+            return
         self.rom = rom
         self.data = read_profile(self.base, rom) if profile_path(self.base, rom).exists() else defaults(rom)
         self.data.setdefault('adapter', 'standard')
         self.data.setdefault('keyboard_player', True)
         self.data.setdefault('anchor', anchor_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
+        recipe = common or self.common_for_rom.get(rom)
+        if recipe:
+            self.data['adapter'] = recipe.adapter
         self.saved = copy.deepcopy(self.data)
 
     def dirty(self):
@@ -118,7 +142,10 @@ class Model:
         validate(self.data, self.rom)
         old = profile_path(self.base, self.rom)
         previous = old.read_bytes() if old.exists() else None
-        save_profile(self.base, self.rom, self.data)
+        stored = copy.deepcopy(self.data)
+        if stored.get('adapter') != 'soh-anchor':
+            stored.pop('anchor', None)
+        save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'partydeck-test'), 'ajouter', str(self.rom),
                             self.data['players'], self.data['split'], self.data['input']], check=True,
@@ -139,6 +166,7 @@ class Pads:
     def __init__(self, pg):
         self.pg, self.devices = pg, []
         self.previous = set()
+        self.raw = []
         self.family = 'xbox'
         self.timers = {}
         try:
@@ -151,14 +179,20 @@ class Pads:
 
     def refresh(self):
         self.devices = []
+        self.raw = []
         cfg = Path('/userdata/system/configs/emulationstation/es_input.cfg')
         try:
             configs = ET.parse(cfg).findall('inputConfig') if cfg.exists() else []
         except ET.ParseError:
             configs = []
         for i in range(self.pg.joystick.get_count()):
+            stick = self.pg.joystick.Joystick(i)
+            stick.init()
+            profile = next((c for c in configs if c.get('deviceGUID', '').lower() == stick.get_guid().lower()), None)
+            mapping = {n.get('name'): n.attrib for n in profile} if profile is not None else {}
+            self.raw.append((stick, mapping))
             if self.controllers and self.controllers.is_controller(i):
-                self.devices.append(('sdl', self.controllers.Controller(i), {}))
+                self.devices.append(('sdl', self.controllers.Controller(i), mapping))
             else:
                 stick = self.pg.joystick.Joystick(i)
                 stick.init()
@@ -166,6 +200,20 @@ class Pads:
                 mapping = {n.get('name'): n.attrib for n in profile} if profile is not None else {}
                 self.devices.append(('es', stick, mapping))
         self.previous.clear()
+
+    @staticmethod
+    def binding(pad, mapping):
+        if not mapping:
+            return False
+        idx, value = int(mapping['id']), int(mapping['value'])
+        if mapping['type'] == 'button':
+            return bool(pad.get_button(idx))
+        if mapping['type'] == 'axis':
+            return pad.get_axis(idx)*value > .5
+        if mapping['type'] == 'hat':
+            x, y = pad.get_hat(idx)
+            return {1:y>0, 2:x>0, 4:y<0, 8:x<0}.get(value, False)
+        return False
 
     def poll(self):
         held = set()
@@ -175,6 +223,8 @@ class Pads:
                 family = 'ps' if any(n in device_name.lower() for n in ('dualsense', 'dualshock', 'playstation', 'sony', 'ps4', 'ps5')) else 'xbox'
                 was_held = held.copy()
                 if kind == 'sdl':
+                    if not (mapping.get('hotkey') or mapping.get('hotkeyenable')) and pad.get_button(5) and pad.get_button(6):
+                        held.add('quit')
                     for action, button in [('ok', 0), ('back', 1), ('save', 2), ('search', 3), ('add', 6),
                                            ('prev', 9), ('next', 10), ('up', 11), ('down', 12), ('left', 13), ('right', 14)]:
                         if pad.get_button(button):
@@ -206,6 +256,14 @@ class Pads:
                     self.family = family
             except (self.pg.error, IndexError):
                 continue
+        for pad, mapping in self.raw:
+            try:
+                if self.binding(pad, mapping.get('hotkey') or mapping.get('hotkeyenable')) and self.binding(pad, mapping.get('start')):
+                    held.add('quit')
+            except (self.pg.error, IndexError, ValueError):
+                continue
+        if 'quit' in held:
+            held = {'quit'}  # Never open the file browser for the Start in HK+Start.
         now = time.monotonic()
         actions = []
         for action in held:
@@ -262,6 +320,8 @@ class App:
         self.browser = None
         self.browser_rows = []
         self.pending = None
+        self.missing = None
+        self.pending_common = None
         self.logo = None
         logo = Path(base) / 'assets/windows-party.png'
         if logo.exists():
@@ -273,6 +333,9 @@ class App:
 
     def toast(self, text):
         self.notice, self.notice_until = text, time.monotonic() + 5
+
+    def available_tabs(self):
+        return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
 
     def text(self, value, x, y, size=24, color=(228, 234, 247), width=1000):
         font = self.fonts[size]
@@ -424,10 +487,30 @@ class App:
         self.row = 0
 
     def select_game(self, rom):
-        self.model.select(rom)
+        if not is_rom(rom):
+            self.toast('Choisissez un dossier .wine/.pc ou un fichier .wsquashfs existant.')
+            return
+        self.model.select(rom, self.pending_common)
+        self.pending_common = None
         self.pane, self.tab, self.row = 'settings', 0, 0
 
     def action(self, action):
+        if action == 'quit':
+            self.keyboard = None
+            self.pg.key.stop_text_input()
+            self.browser, self.missing = None, None
+            self.launch_requested = False
+            self.switch(lambda: setattr(self, 'running', False))
+            return
+        if self.missing is not None:
+            if action == 'ok':
+                self.pending_common = self.missing
+                self.missing = None
+                self.browse(self.model.windows)
+            elif action == 'back':
+                self.missing = None
+                self.toast('Vous devez disposer du jeu avant d’utiliser ce profil commun.')
+            return
         if self.keyboard:
             self.keyboard_action(action)
             return
@@ -446,11 +529,16 @@ class App:
             if action == 'back':
                 self.browser = None
                 self.row = 0
+                if self.pending_common is not None:
+                    self.pending_common = None
+                    self.toast('Ajout annulé : vous devez d’abord disposer du jeu.')
+            elif action in ('prev', 'next'):
+                self.row = max(0, min(len(self.browser_rows)-1, self.row + (-9 if action == 'prev' else 9)))
             elif action in ('up', 'down'):
                 self.row = (self.row + (1 if action == 'down' else -1)) % len(self.browser_rows)
             elif action == 'ok':
                 path = self.browser_rows[self.row]
-                if path.suffix.lower() in ROM_TYPES and ((path.is_dir() and path.suffix.lower() != '.wsquashfs') or path.is_file()):
+                if is_rom(path):
                     self.browser = None
                     self.select_game(path)
                 else:
@@ -469,7 +557,9 @@ class App:
             else:
                 self.switch(lambda: setattr(self, 'running', False))
         elif action in ('prev', 'next') and self.model.data:
-            self.tab = (self.tab + (1 if action == 'next' else -1)) % len(TABS)
+            available = self.available_tabs()
+            current = available.index(self.tab) if self.tab in available else 0
+            self.tab = available[(current + (1 if action == 'next' else -1)) % len(available)]
             self.row, self.pane = 0, 'settings'
         elif self.pane == 'library':
             if action in ('up', 'down') and self.model.rows:
@@ -478,8 +568,17 @@ class App:
                     self.library = index
                     self.model.select(self.model.rows[index])
                 self.switch(select)
-            elif action in ('ok', 'right') and self.model.data:
-                self.pane, self.row = 'settings', 0
+            elif action in ('ok', 'right'):
+                if isinstance(self.model.selected, CommonGame):
+                    self.missing = self.model.selected
+                elif self.model.data:
+                    if not is_rom(self.model.rom):
+                        if self.model.data.get('adapter') == 'soh-anchor' or matches_soh(self.model.rom):
+                            self.missing = COMMON[0]
+                        else:
+                            self.toast('Jeu introuvable : vous devez d’abord disposer du jeu. Start permet de choisir un autre jeu.')
+                    else:
+                        self.pane, self.row = 'settings', 0
         elif self.model.data:
             rows = fields(self.tab)
             if action in ('up', 'down'):
@@ -524,6 +623,8 @@ class App:
         self.library, self.pane = 0, 'library'
 
     def draw(self):
+        if self.tab not in self.available_tabs():
+            self.tab, self.row = 0, 0
         self.canvas.blit(self.background, (0,0))
         self.box((24, 22, 1392, 100), (23, 29, 46))
         self.text('WINDOWS PARTY', 52, 37, 36)
@@ -541,7 +642,7 @@ class App:
         offset = max(0, self.library - 8)
         for i, rom in enumerate(self.model.rows[offset:offset+10], offset):
             y = 246 + (i-offset)*50
-            selected = self.model.rom == rom
+            selected = self.model.selected == rom
             if selected:
                 self.box((38, y-7, 312, 45), (35, 75, 94), (72, 202, 222))
             self.text(rom.stem, 50, y, 20, width=284)
@@ -550,11 +651,12 @@ class App:
             self.text(self.model.rom.stem, 416, 161, 28, width=950)
             self.text(('MODIFIÉ · non enregistré' if self.model.dirty() else 'Profil prêt') + '  ·  ' + self.model.rom.suffix,
                       418, 208, 16, (144, 160, 186))
-            for i, title in enumerate(TABS):
-                self.box((416+i*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
+            for position, i in enumerate(self.available_tabs()):
+                title = TABS[i]
+                self.box((416+position*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
                 if i == self.tab:
-                    self.pg.draw.line(self.canvas, (100,222,237), (430+i*241,291), (630+i*241,291), 3)
-                self.text(title, 434+i*241, 258, 20)
+                    self.pg.draw.line(self.canvas, (100,222,237), (430+position*241,291), (630+position*241,291), 3)
+                self.text(title, 434+position*241, 258, 20)
             if self.tab:
                 subtitle = ('SoH / Anchor · réglages communs aux joueurs de cette session' if self.model.data['adapter'] == 'soh-anchor'
                             else 'SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages')
@@ -586,8 +688,13 @@ class App:
                          (134,236,238) if active else None)
                 self.text(label, 435+i*490, 757, 16, width=440)
         else:
-            self.text('Préparez votre première partie', 430, 365, 36, width=900)
-            self.text('Start : choisir un jeu .wine, .pc ou .wsquashfs', 430, 430, 24, width=900)
+            if isinstance(self.model.selected, CommonGame):
+                self.text(self.model.selected.name, 430, 365, 28, width=900)
+                self.text('Profil prêt · le jeu doit être présent sur votre Batocera.', 430, 420, 20, width=900)
+                self.text('Valider : choisir le jeu manuellement · B : retour', 430, 470, 20, width=900)
+            else:
+                self.text('Préparez votre première partie', 430, 365, 36, width=900)
+                self.text('Start : choisir un jeu .wine, .pc ou .wsquashfs', 430, 430, 24, width=900)
         self.box((24,805,1392,80), (20,27,43))
         for action, label, x in [('ok','Choisir',45), ('back','Retour',230), ('save','Enregistrer',410),
                                   ('search','Rechercher',650), ('tabs','Onglets',900), ('add','Ajouter',1150)]:
@@ -601,6 +708,7 @@ class App:
             self.box((160, 150, 1120, 640), (25, 34, 52), (91, 207, 228))
             self.text('CHOISIR UN JEU', 195, 175, 28)
             self.text(self.browser, 195, 225, 16, width=1040)
+            self.text('LB/RB : page précédente / suivante · B : annuler', 195, 250, 16, width=1040)
             offset = max(0, self.row-8)
             for i, path in enumerate(self.browser_rows[offset:offset+9], offset):
                 y = 278+(i-offset)*50
@@ -627,6 +735,12 @@ class App:
             self.box((230, 340, 980, 210), (36, 45, 65), (100, 213, 230))
             self.text(self.modal, 255, 368, 24, width=920)
             self.text('A : enregistrer   Y : abandonner les modifications   B : annuler', 255, 455, 20, width=920)
+        if self.missing is not None:
+            self.box((210,310,1020,250), (36,45,65), (100,213,230))
+            self.text('Plusieurs versions détectées' if self.missing.matches else 'Jeu non détecté dans Windows', 240,340,28,width=950)
+            self.text('Vous devez disposer du jeu pour utiliser ce profil commun.',240,395,20,width=950)
+            self.hint('ok','Choisir le jeu',245,475)
+            self.hint('back','Annuler',700,475)
         if time.monotonic() < self.notice_until:
             self.box((100, 743, 1240, 57), (48, 73, 91))
             self.text(self.notice, 120, 759, 20, width=1200)
