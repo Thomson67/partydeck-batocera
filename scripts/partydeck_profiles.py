@@ -167,20 +167,24 @@ def edit_anchor(data):
 
 
 def edit_soh_graphics(settings):
-    from partydeck_anchor import graphics_defaults, validate_graphics
+    from partydeck_anchor import graphics_defaults, validate_graphics, VOLUME_FIELDS
     current = settings.get("graphics", graphics_defaults())
     filters = ["Trois points (N64)", "Linéaire", "Aucun"]
     selected = filters[current["texture_filter"]]
-    result = yad(["--form", "--width=660", "--separator=\x1f",
+    arguments = ["--form", "--width=700", "--separator=\x1f",
                   "--text=Réglages communs à tous les joueurs SoH.\n"
                   "Résolution interne : multiplicateur de la fenêtre de chaque joueur.\n"
-                  "La musique peut être réservée à J1 ; les bruitages restent actifs pour tous.",
+                  "La musique peut être réservée à J1 ; les bruitages restent actifs pour tous.\n"
+                  "Volumes : de 0 à 100 %, ou vide pour conserver la valeur du JSON commun.\n"
+                  "SoH regroupe les voix et les bruitages dans le même volume.",
                   "--field=Internal resolution (0.5 à 2.0)", str(current["internal_resolution"]),
                   "--field=Anti-aliasing MSAA (1 = désactivé, 2 à 8)", str(current["msaa"]),
                   "--field=VSync:CHK", str(current["vsync"]).upper(),
                   "--field=Texture filter:CB", "!".join([selected, *(v for v in filters if v != selected)]),
-                  "--field=Musique uniquement pour J1:CHK", str(current["music_j1_only"]).upper(),
-                  "--button=Annuler:1", "--button=Enregistrer:0"])
+                  "--field=Musique uniquement pour J1:CHK", str(current["music_j1_only"]).upper()]
+    for key, label in VOLUME_FIELDS:
+        arguments.extend([f"--field={label} (%)", str(current.get("volumes", {}).get(key, ""))])
+    result = yad([*arguments, "--button=Annuler:1", "--button=Enregistrer:0"])
     if result.returncode in {1, 252}:
         return False
     if result.returncode:
@@ -188,12 +192,16 @@ def edit_soh_graphics(settings):
     values = result.stdout.rstrip("\n").split("\x1f")
     if values and not values[-1]:
         values.pop()
-    if len(values) != 5 or any(values[i].upper() not in {"TRUE", "FALSE"} for i in (2, 4)):
+    if len(values) != 10 or any(values[i].upper() not in {"TRUE", "FALSE"} for i in (2, 4)):
         raise ValueError("Réponse des réglages graphiques SoH invalide.")
-    settings["graphics"] = validate_graphics(dict(internal_resolution=float(values[0].replace(",", ".")),
+    options = dict(internal_resolution=float(values[0].replace(",", ".")),
                                                 msaa=int(values[1]), vsync=values[2].upper() == "TRUE",
                                                 texture_filter=filters.index(values[3]),
-                                                music_j1_only=values[4].upper() == "TRUE"))
+                   music_j1_only=values[4].upper() == "TRUE")
+    volumes = {key: int(value.strip()) for (key, _), value in zip(VOLUME_FIELDS, values[5:]) if value.strip()}
+    if volumes:
+        options["volumes"] = volumes
+    settings["graphics"] = validate_graphics(options)
     return True
 
 

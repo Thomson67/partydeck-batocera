@@ -9,6 +9,10 @@ import subprocess
 import sys
 import uuid
 
+VOLUME_FIELDS = (("Master", "Volume général"), ("MainMusic", "Musique principale"),
+                 ("SubMusic", "Musique secondaire"), ("Fanfare", "Fanfares"),
+                 ("SFX", "Bruitages et voix"))
+
 
 def defaults():
     return dict(enabled=True, host="anchor.hm64.org", port=43383,
@@ -32,6 +36,10 @@ def validate_graphics(options):
             or type(options.get("texture_filter")) is not int
             or options["texture_filter"] not in (0, 1, 2)):
         raise ValueError("Options graphiques ou audio SoH invalides.")
+    volumes = options.get("volumes", {})
+    if (not isinstance(volumes, dict) or any(key not in dict(VOLUME_FIELDS) for key in volumes)
+            or any(type(value) is not int or not 0 <= value <= 100 for value in volumes.values())):
+        raise ValueError("Les volumes SoH doivent être des entiers de 0 à 100 %.")
     return options
 
 
@@ -115,6 +123,9 @@ def apply_config(directory, payload):
         # slider in SoH. Disable it so the selected multiplier actually applies.
         advanced = graphics.setdefault("AdvancedResolution", {})
         advanced.update(Enabled=0, VerticalResolutionToggle=0, PixelPerfectMode=0)
+        # Apply the selected common mix first. J1-only music takes precedence
+        # over those levels on the other players, without muting their SFX.
+        graphics.setdefault("Volume", {}).update(options.get("volumes", {}))
         if options["music_j1_only"] and index > 0:
             graphics.setdefault("Volume", {}).update(MainMusic=0, SubMusic=0, Fanfare=0)
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")

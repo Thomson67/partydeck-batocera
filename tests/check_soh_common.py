@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory() as folder:
     settings["graphics"]["music_j1_only"] = False
     anchor.apply_config(game, payload)
     assert json.loads(target.read_text())["CVars"]["gSettings"]["Volume"]["MainMusic"] == 70
-    with patch.object(profiles, "yad", return_value=Mock(returncode=0, stdout="1,25\x1f4\x1fTRUE\x1fLinéaire\x1fTRUE\x1f\n")):
+    with patch.object(profiles, "yad", return_value=Mock(returncode=0, stdout="1,25\x1f4\x1fTRUE\x1fLinéaire\x1fTRUE" + "\x1f" * 6 + "\n")):
         assert profiles.edit_soh_graphics(settings)
     assert settings["graphics"] == dict(internal_resolution=1.25, msaa=4, vsync=True, texture_filter=1, music_j1_only=True)
     before = copy.deepcopy(settings)

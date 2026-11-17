@@ -85,8 +85,16 @@ multiplicateur choisi soit effectivement utilisé par SoH.
 
 La musique est réservée à **J1** par défaut. Les volumes de musique principale,
 secondaire et des fanfares sont mis à zéro pour J2 à J4 ; bruitages, voix et
-volume général sont conservés. Décochez cette option pour restaurer les volumes
-du modèle commun chez tous les joueurs.
+volume général sont conservés. Décochez cette option pour utiliser le mix choisi
+(ou les volumes du modèle commun) chez tous les joueurs.
+
+Dans **Graphismes / Audio**, cinq niveaux de volume sont aussi réglables de
+0 à 100 % : général, musique principale, musique secondaire, fanfares, et
+bruitages/voix (SoH regroupe les voix avec les bruitages). Un champ vide conserve
+la valeur du JSON commun pour ce canal. Le mix est mémorisé par jeu et appliqué
+à tous les joueurs. Avec « Musique uniquement pour J1 », les deux musiques et
+les fanfares restent à zéro chez J2 à J4, quels que soient leurs niveaux communs.
+Le volume général et les bruitages/voix suivent les valeurs choisies chez tous.
 
 Toutes les instances repartent à chaque lancement du même JSON commun :
 `/userdata/system/partydeck-test/templates/soh-common.json`. Le modèle fourni
