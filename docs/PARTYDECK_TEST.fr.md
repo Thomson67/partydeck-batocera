@@ -8,14 +8,16 @@ Batocera tourne en root. Le pont est installé dans le dossier de test.
 
 ## Installer
 
+Décompressez le paquet du projet ou clonez son dépôt, puis lancez cette
+commande depuis la racine du projet.
+
 ```bash
-(
-  fichier=$(mktemp /tmp/partydeck-install.XXXXXX) || exit 1
-  trap 'rm -f -- "$fichier"' EXIT
-  curl -fsSL https://raw.githubusercontent.com/Thomson67/ultimate-wine-toolbox/feature/partydeck-batocera/scripts/install-partydeck-test.sh -o "$fichier" &&
-    bash "$fichier" installer
-)
+bash scripts/install-partydeck-test.sh installer
 ```
+
+Sur une machine qui a déjà le prototype Ultimate Wine Toolbox, la même
+commande met à jour le lanceur. Les entrées Ports existantes et les données
+des joueurs restent dans leurs emplacements actuels.
 
 ## Vérifier et jouer
 
@@ -60,15 +62,23 @@ propres sauvegardes. OverlayFS est nécessaire pour les écritures du jeu.
   `clavier-j2` permettent de réserver ce duo à un joueur. Les manettes
   utilisent un ordre stable par périphérique lorsqu'udev fournit un chemin.
 
-Lancez d'abord depuis **Ports** sur Xorg pour valider sur la machine le
-placement automatique, le runner sélectionné et les entrées. Sous
-Wayland/labwc, le placement des fenêtres Xwayland reste à valider.
-Le jeu doit permettre à chaque instance de rejoindre une même partie.
+Sur Batocera v44 sous Wayland/labwc, commencez avec deux joueurs en
+`horizontal clavier-j2` pour comparer au test v43 sous Xorg. Vérifiez que le
+jeu apparaît dans les deux moitiés et que la manette pilote J1 pendant que le
+clavier et la souris pilotent J2. Placez le focus successivement sur chaque
+fenêtre. Fermez ensuite la session et vérifiez qu'un second lancement
+fonctionne. Testez ensuite `vertical`. Le jeu doit avoir son propre mode
+multijoueur pour rejoindre la même partie.
 
 Pour un jeu UMU, chaque joueur a ses journaux dans `coop/<jeu>/jN/umu-logs`
 et, avec Proton, dans `coop/<jeu>/jN/proton-logs` sous le dossier PartyDeck.
 Le journal principal indique l'affichage Xwayland attribué à chaque instance
 et le code de sortie de `batocera-wine`.
+
+Si le journal UMU contient `runtime_reused_after_interruption` suivi de
+`C game target already exists`, la reprise peut retrouver un point de
+montage vide. Le [correctif de reprise est disponible sur une branche de
+test UMU Runner Toolbox](https://github.com/Thomson67/umu-runner-toolbox/tree/fix/resume-empty-c-game-mountpoint).
 
 ## Essai manuel avec un exécutable autonome
 

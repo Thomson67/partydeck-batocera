@@ -185,8 +185,10 @@ if [[ ${1:-verifier} == preparer-coop ]]; then
 fi
 
 if [[ ${1:-verifier} == installer ]]; then
-    [[ -f ${BASH_SOURCE[0]} ]] ||
-        die 'Téléchargez le script dans un fichier avant de lancer son installation.'
+    source_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+    source_helper="$source_dir/partydeck-batocera-coop.py"
+    [[ -f $source_helper ]] ||
+        die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
 fi
 
 if [[ ${1:-verifier} == jouer || ${1:-verifier} == preparer-port ]]; then
@@ -259,10 +261,7 @@ unset ARGV0
 if [[ ${1:-verifier} == installer ]]; then
     staging=$(mktemp -d "$base/.coop-XXXXXX")
     trap 'rm -rf -- "$staging"' EXIT
-    curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 --proto '=https' \
-        'https://raw.githubusercontent.com/Thomson67/ultimate-wine-toolbox/42273e238570f5c30240a47cf83b723caa51c211/scripts/partydeck-batocera-coop.py' \
-        --output "$staging/partydeck-batocera-coop.py"
-    (cd "$staging" && printf '%s  %s\n' 'bff9e5b885da6e286f102c112adb7d78163e793c652154fb309e9fa4a2cebafb' partydeck-batocera-coop.py | sha256sum -c -)
+    cp -- "$source_helper" "$staging/partydeck-batocera-coop.py"
     mv -fT -- "$staging/partydeck-batocera-coop.py" "$coop_helper"
     rmdir -- "$staging"
     trap - EXIT
@@ -339,6 +338,18 @@ printf 'Xwayland utilisé par Gamescope : %s\n' "$WLR_XWAYLAND"
 "$WLR_XWAYLAND" -version || die 'Le Xwayland sélectionné ne démarre pas.'
 
 if [[ ${1:-verifier} == verifier ]]; then
+    if [[ $session == Wayland ]] && command -v labwc >/dev/null; then
+        labwc --version || true
+    fi
+    if command -v xrandr >/dev/null; then
+        xrandr --listactivemonitors || true
+    fi
+    if command -v xdotool >/dev/null; then
+        printf 'Dimensions X11 vues par le lanceur : '
+        xdotool getdisplaygeometry || true
+    else
+        printf 'xdotool absent. Le placement automatique des fenêtres coop en a besoin.\n'
+    fi
     printf '\nVérifications de base OK. Dossier des jeux de test : %s\n' "$games"
     exit 0
 fi
