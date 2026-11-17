@@ -23,6 +23,7 @@ def fields(tab):
         return [('players', 'Joueurs', ['auto', '1', '2', '3', '4']),
                 ('split', 'Partage de l’écran', ['horizontal', 'vertical']),
                 ('input', 'Attribution des contrôles', ['auto', 'clavier-j1', 'clavier-j2']),
+                ('keyboard_player', 'Clavier/souris utilisable comme joueur', [True, False]),
                 ('configure_before_launch', 'Configurer avant chaque lancement', [False, True]),
                 ('adapter', 'Profil du jeu', ['standard', 'soh-anchor'])]
     if tab == 1:
@@ -104,6 +105,7 @@ class Model:
         self.rom = rom
         self.data = read_profile(self.base, rom) if profile_path(self.base, rom).exists() else defaults(rom)
         self.data.setdefault('adapter', 'standard')
+        self.data.setdefault('keyboard_player', True)
         self.data.setdefault('anchor', anchor_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         self.saved = copy.deepcopy(self.data)
@@ -488,6 +490,9 @@ class App:
                     return
                 key, title, choices = rows[self.row]
                 value = get(self.model.data, key)
+                if key == 'input' and not self.model.data.get('keyboard_player', True):
+                    self.toast('Clavier/souris réservé aux menus ; joueurs attribués aux manettes.')
+                    return
                 if '.volumes.' in key:
                     if action == 'ok':
                         put(self.model.data, key, '')
@@ -497,6 +502,9 @@ class App:
                 elif choices:
                     index = choices.index(value) if value in choices else 0
                     put(self.model.data, key, choices[(index + (-1 if action == 'left' else 1)) % len(choices)])
+                    if key == 'keyboard_player' and not self.model.data[key]:
+                        self.model.data['input'] = 'auto'
+                        self.toast('Joueurs sur manettes ; clavier/souris disponible dans la fenêtre active pour les menus.')
                 elif action == 'ok':
                     def update(text):
                         result = int(text) if (key == 'anchor.port' or ('.volumes.' in key and text.strip())) else text
@@ -559,6 +567,8 @@ class App:
                     self.slider(key, 958, y, i == self.row and self.pane == 'settings')
                 else:
                     value = label_value(key, get(self.model.data, key))
+                    if key == 'input' and not self.model.data.get('keyboard_player', True):
+                        value = 'Manettes uniquement'
                     if choices:
                         self.text('‹ ' + value + ' ›', 958, y+5, 20, (144, 223, 234), 416)
                     else:

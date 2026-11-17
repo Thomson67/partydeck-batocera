@@ -70,6 +70,16 @@ enregistre le profil, ferme SDL et passe au lanceur natif Windows Party. Si
 l'enregistrement échoue, le jeu n'est pas lancé. Le choix de configurer avant
 chaque lancement reste mémorisé sans rouvrir une seconde fois le configurateur.
 
+Dans **Session**, désactivez **Clavier/souris utilisable comme joueur** pour
+attribuer uniquement des manettes aux joueurs. En mode automatique, une seule
+manette donne alors un joueur ; le clavier ne crée plus de joueur supplémentaire.
+Un nombre de joueurs fixé nécessite autant de manettes. L'attribution clavier
+J1/J2 est désactivée tant que cette option est coupée.
+Le clavier/souris reste transmis à la fenêtre active pour les menus et la saisie.
+Il ne s'agit pas d'un filtrage des touches en fonction de l'état interne du jeu :
+les actions éventuellement associées à ces touches par le jeu restent possibles.
+L'option est mémorisée par jeu et reste activée par défaut pour les anciens profils.
+
 Le clavier virtuel propose minuscules/majuscules, chiffres, accents, ponctuation,
 espace, effacement et validation. Un clavier physique reste utilisable : flèches,
 Entrée, Échap, F2 pour enregistrer, F3 pour rechercher, Insert pour ajouter et

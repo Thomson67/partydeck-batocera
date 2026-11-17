@@ -24,6 +24,13 @@ with tempfile.TemporaryDirectory() as directory:
     app.action('right')
     app.action('ok')
     assert app.model.data['players'] == '1' and app.model.dirty()
+    app.model.data['input'] = 'clavier-j2'
+    app.row = 3
+    app.action('ok')
+    assert not app.model.data['keyboard_player'] and app.model.data['input'] == 'auto'
+    app.row = 2
+    app.action('right')
+    assert app.model.data['input'] == 'auto'
     app.action('next')
     app.action('down')  # Room ID
     app.action('ok')

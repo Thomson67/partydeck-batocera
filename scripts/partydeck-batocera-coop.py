@@ -86,8 +86,13 @@ def read_input_devices(dev=Path("/dev/input"), sys_input=Path("/sys/class/input"
                                             int(dev.node.name[5:])))
 
 
-def assign_players(devices, count, input_mode):
+def assign_players(devices, count, input_mode, allow_keyboard_player=True):
     pads = [d for d in devices if d.category == GAMEPADS]
+    if not allow_keyboard_player:
+        wanted = min(4, len(pads)) if count == "auto" else int(count)
+        if wanted < 1 or len(pads) < wanted:
+            raise ValueError("Manettes insuffisantes : le clavier/souris est réservé aux menus pour ce jeu.")
+        return [[pad] for pad in pads[:wanted]]
     keyboard_mouse = [next((d for d in devices if d.category == kind), None)
                       for kind in (KEYBOARDS, MICE)]
     available = all(keyboard_mouse)
@@ -456,7 +461,17 @@ def run_session(app, base, original, target, count, split, input_mode, party=Fal
     for tool in ("batocera-wine", "xdotool", "mount"):
         if not shutil.which(tool):
             raise RuntimeError(f"Commande indisponible : {tool}")
-    players = assign_players(read_input_devices(), count, input_mode)
+    keyboard_player = True
+    if party:
+        from partydeck_profiles import profile_path, read_profile
+        if profile_path(base, original).exists():
+            keyboard_player = read_profile(base, original).get("keyboard_player", True)
+    if keyboard_player:
+        players = assign_players(read_input_devices(), count, input_mode)
+    else:
+        input_mode = "auto"
+        players = assign_players(read_input_devices(), count, input_mode, allow_keyboard_player=False)
+        print("Clavier/souris exclu de l’attribution des joueurs ; accès aux menus conservé.", flush=True)
     # If a player owns the physical keyboard/mouse, its libinput grab routes
     # input exclusively. All-pad sessions use ordinary SDL window focus.
     shared_keyboard_mouse = not any(d.category in {KEYBOARDS, MICE}

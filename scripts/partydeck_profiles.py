@@ -23,7 +23,7 @@ def profile_path(base, rom):
 
 def defaults(rom):
     return dict(version=1, rom=str(rom), players="auto", split="horizontal",
-                input="auto", configure_before_launch=False)
+                input="auto", configure_before_launch=False, keyboard_player=True)
 
 
 def validate(data, rom):
@@ -34,6 +34,8 @@ def validate(data, rom):
             or data.get("input") not in ("auto", "clavier-j1", "clavier-j2")
             or type(data.get("configure_before_launch")) is not bool):
         raise ValueError(f"Profil Windows Party invalide pour {rom}")
+    if type(data.get("keyboard_player", True)) is not bool:
+        raise ValueError("Option clavier comme joueur invalide.")
     if data.get("adapter", "standard") not in ("standard", "soh-anchor"):
         raise ValueError("Adaptateur Windows Party inconnu.")
     if data.get("adapter") == "soh-anchor":
