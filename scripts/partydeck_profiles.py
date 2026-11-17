@@ -87,6 +87,13 @@ def yad(arguments):
 
 
 def edit_profile(base, rom):
+    if os.environ.get("PARTYDECK_UI") == "legacy":
+        return edit_profile_legacy(base, rom)
+    from partydeck_couch import configure as couch_configure
+    return couch_configure(base, rom, single=True)
+
+
+def edit_profile_legacy(base, rom):
     if shutil.which("batocera-mouse"):
         subprocess.run(["batocera-mouse", "show"], check=False)
     path = profile_path(base, rom)
@@ -272,6 +279,14 @@ def choose_rom():
 
 
 def configure(base, rom=None):
+    if os.environ.get("PARTYDECK_UI") != "legacy":
+        from partydeck_couch import configure as couch_configure
+        couch_configure(base, rom)
+        return 0
+    return configure_legacy(base, rom)
+
+
+def configure_legacy(base, rom=None):
     if shutil.which("batocera-mouse"):
         subprocess.run(["batocera-mouse", "show"], check=False)
     while True:

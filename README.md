@@ -38,8 +38,42 @@ entrées et les fenêtres. La vérification en jeu se fait depuis **Windows Part
 ## Ajouter un jeu
 
 Ouvrez **Configurer Windows Party** dans le système Windows Party pour ajouter
-un jeu ou modifier ses paramètres. Le gestionnaire utilise Yad, fourni par
-Batocera sur PC.
+un jeu ou modifier ses paramètres. Le nouveau configurateur utilise Pygame 2,
+avec navigation entièrement à la manette et clavier virtuel intégré.
+
+## Configurateur à la manette (version de test)
+
+La bibliothèque occupe la colonne de gauche. Le panneau de droite présente
+les onglets **Session**, **Réseau**, **Joueurs** et **Image & son**. Les profils
+existants sont réutilisés. Aucun dialogue de bureau n'est nécessaire pour ajouter
+un jeu, parcourir les dossiers, modifier les paramètres ou saisir du texte.
+
+- **Croix/A** : choisir ; droite depuis la bibliothèque ouvre les réglages.
+- **Cercle/B** : retour aux jeux, annulation du clavier ou fermeture.
+- **LB/RB** : onglet précédent/suivant.
+- **Gauche/droite** : changer une option ; Croix/A ouvre les champs texte/nombres.
+- **Carré/X** : enregistrer (ou valider la saisie au clavier virtuel).
+- **Triangle/Y** : rechercher ; **Start** : ajouter un jeu via le navigateur intégré.
+
+Le clavier virtuel propose minuscules/majuscules, chiffres, accents, ponctuation,
+espace, effacement et validation. Un clavier physique reste utilisable : flèches,
+Entrée, Échap, F2 pour enregistrer, F3 pour rechercher, Insert pour ajouter et
+Page précédente/suivante pour les onglets. L'interface s'ajuste à l'écran avec un
+rapport constant et des marges si nécessaire. Les modifications non enregistrées
+déclenchent un choix enregistrer/abandonner/annuler avant de changer de jeu ou sortir.
+
+Les manettes reconnues utilisent les mappings SDL ; les autres utilisent les
+mappings `es_input.cfg` de Batocera. Branchement/débranchement et répétition du
+stick/croix directionnelle sont pris en charge. La navigation reprend les principes
+manette/clavier virtuel de [RGSX](https://github.com/RetroGameSets/RGSX), avec une
+implémentation originale dédiée à Windows Party. Les tests locaux utilisent SDL
+en mode simulé ; DualSense/8BitDo et affichage Xorg/Wayland restent à valider en réel.
+
+L'ancienne interface Yad reste accessible explicitement pour dépannage :
+
+```bash
+PARTYDECK_UI=legacy /userdata/system/partydeck-test/partydeck-test configurer
+```
 
 Vous pouvez aussi créer son lanceur depuis SSH avec cette commande.
 
