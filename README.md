@@ -5,10 +5,15 @@ Batocera x86-64 avec PartyDeck, Gamescope et le runner configuré dans
 Batocera. Les entrées **Ports** gèrent de un à quatre joueurs, l'attribution
 des périphériques et le placement des fenêtres.
 
-Depuis une copie complète du projet sur Batocera :
+Installation depuis SSH sur Batocera, avec EmulationStation affiché.
 
 ```bash
-bash scripts/install-partydeck-test.sh installer
+(
+  fichier=$(mktemp /tmp/partydeck-install.XXXXXX) || exit 1
+  trap 'rm -f -- "$fichier"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/Thomson67/partydeck-batocera/main/install.sh -o "$fichier" &&
+    bash "$fichier"
+)
 /userdata/system/partydeck-test/partydeck-test verifier
 ```
 
