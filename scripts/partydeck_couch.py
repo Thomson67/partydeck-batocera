@@ -323,9 +323,12 @@ class App:
             else:
                 self.text({'ok':'A','back':'B','save':'X','search':'Y'}[action], x+9, y+3, 20, color, 25)
         else:
-            self.box((x-3,y,64 if action == 'tabs' else 42,32), (38,47,65), (107,128,157))
-            self.text('L1/R1' if ps and action == 'tabs' else 'LB/RB' if action == 'tabs' else '≡', x+2, y+5, 16, color, 60)
-        self.text(label, x+(72 if action == 'tabs' else 45), y+3, 20, width=220)
+            badge = ('L1/R1' if ps else 'LB/RB') if action == 'tabs' else ('OPTIONS' if ps else 'START')
+            badge_width = 64 if action == 'tabs' else 90 if ps else 72
+            self.box((x-3,y,badge_width,32), (38,47,65), (107,128,157))
+            self.text(badge, x+2, y+5, 16, color, badge_width-8)
+        label_offset = 45 if action in colors else badge_width+8
+        self.text(label, x+label_offset, y+3, 20, width=220)
 
     def volume(self, key):
         value = get(self.model.data, key)
@@ -533,7 +536,8 @@ class App:
             self.text('CONFIGURATEUR', 1100, 60, 20, (117, 213, 230), 280)
         self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' else None)
         self.text('BIBLIOTHÈQUE', 46, 163, 20, (122, 209, 229))
-        self.text(f'{len(self.model.rows)} jeux · Start : ajouter', 46, 201, 16, (160, 174, 199))
+        start_label = 'Options' if self.pads.family == 'ps' else 'Start'
+        self.text(f'{len(self.model.rows)} jeux · {start_label} : ajouter', 46, 201, 16, (160, 174, 199))
         offset = max(0, self.library - 8)
         for i, rom in enumerate(self.model.rows[offset:offset+10], offset):
             y = 246 + (i-offset)*50
