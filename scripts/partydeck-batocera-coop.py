@@ -351,11 +351,13 @@ def run_wine(original, target, player):
     return 128 - status if status < 0 else status
 
 
-def start_player(app, player, original, target, devices, rectangle, window_class):
+def start_player(app, player, original, target, devices, rectangle, window_class,
+                 shared_keyboard_mouse=True):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
-            "-W", str(width), "-H", str(height),
-            "--backend-disable-keyboard", "--backend-disable-mouse"]
+            "-W", str(width), "-H", str(height)]
+    if not shared_keyboard_mouse:
+        args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])
     kb_mouse = [str(d.node) for d in devices if d.category in {KEYBOARDS, MICE}]
     if kb_mouse:
         args.extend(["--libinput-hold-dev=" + ",".join(kb_mouse) + ",", "--grab"])
@@ -399,9 +401,15 @@ def run_session(app, base, original, target, count, split, input_mode):
         if not shutil.which(tool):
             raise RuntimeError(f"Commande indisponible : {tool}")
     players = assign_players(read_input_devices(), count, input_mode)
+    # If a player owns the physical keyboard/mouse, its libinput grab routes
+    # input exclusively. All-pad sessions use ordinary SDL window focus.
+    shared_keyboard_mouse = not any(d.category in {KEYBOARDS, MICE}
+                                    for devices in players for d in devices)
     boxes = layout(primary_monitor(), len(players), split)
     print(f"Joueurs : {len(players)} | demande : {count} | entrées : {input_mode} | "
           f"partage : {split}", flush=True)
+    if shared_keyboard_mouse:
+        print("Clavier et souris disponibles sur la fenêtre sélectionnée.", flush=True)
     probe = subprocess.run([*bubblewrap_command(app), *MOUNT_CAPS,
                             "--ro-bind", "/", "/", "--unshare-pid", "--proc", "/proc",
                             "--", "/bin/true"])
@@ -419,7 +427,8 @@ def run_session(app, base, original, target, count, split, input_mode):
             player.mkdir(parents=True, exist_ok=True)
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
             processes.append(start_player(app, player, original, target, devices, rectangle,
-                                          window_classes[index - 1]))
+                                          window_classes[index - 1],
+                                          shared_keyboard_mouse=shared_keyboard_mouse))
         pending = dict(enumerate(processes))
         seen_windows = {}
         next_attempt = dict.fromkeys(pending, 0)

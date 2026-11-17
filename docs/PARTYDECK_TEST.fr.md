@@ -65,6 +65,12 @@ pour permettre la préparation du runtime sous v44.
   `clavier-j2` permettent de réserver ce duo à un joueur. Les manettes
   utilisent un ordre stable par périphérique lorsqu'udev fournit un chemin.
 
+Quand chaque joueur utilise une manette, le clavier et la souris permettent
+d'interagir avec les menus de la fenêtre sélectionnée. Cliquez sur la fenêtre
+souhaitée pour changer d'instance. Si un jeu capture la souris, utilisez
+Alt+Tab pour changer de fenêtre. Lorsqu'un joueur utilise le clavier et la
+souris pour jouer, ces périphériques lui sont réservés.
+
 Sur Batocera v44 sous Wayland/labwc, commencez avec deux joueurs en
 `horizontal clavier-j2` pour comparer au test v43 sous Xorg. Vérifiez que le
 jeu apparaît dans les deux moitiés et que la manette pilote J1 pendant que le
