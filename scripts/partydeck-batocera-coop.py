@@ -396,6 +396,9 @@ def run_wine(original, target, player, saves=None):
             destination = UMU_HOME / name
             destination.mkdir(parents=True, exist_ok=True)
             subprocess.run(["mount", "--bind", str(private), str(destination)], check=True)
+    if saves is not None:
+        from partydeck_anchor import install_hook
+        install_hook(Path(__file__).resolve().parent, original, player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)

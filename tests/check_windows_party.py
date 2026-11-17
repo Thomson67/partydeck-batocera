@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
 script = Path(__file__).resolve().parents[1] / "scripts/partydeck-batocera-coop.py"
+sys.path.insert(0, str(script.parent))
 spec = importlib.util.spec_from_file_location("party", script)
 party = importlib.util.module_from_spec(spec)
 sys.modules["party"] = party

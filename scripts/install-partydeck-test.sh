@@ -219,7 +219,7 @@ fi
 if [[ ${1:-verifier} == installer ]]; then
     source_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
     source_helper="$source_dir/partydeck-batocera-coop.py"
-    [[ -f $source_helper && -f $source_dir/partydeck_profiles.py ]] ||
+    [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py ]] ||
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
 fi
 
@@ -295,6 +295,8 @@ if [[ ${1:-verifier} == installer ]]; then
     trap 'rm -rf -- "$staging"' EXIT
     cp -- "$source_helper" "$staging/partydeck-batocera-coop.py"
     cp -- "$source_dir/partydeck_profiles.py" "$staging/partydeck_profiles.py"
+    cp -- "$source_dir/partydeck_anchor.py" "$staging/partydeck_anchor.py"
+    mv -fT -- "$staging/partydeck_anchor.py" "$base/partydeck_anchor.py"
     mv -fT -- "$staging/partydeck_profiles.py" "$profiles_helper"
     mv -fT -- "$staging/partydeck-batocera-coop.py" "$coop_helper"
     rmdir -- "$staging"

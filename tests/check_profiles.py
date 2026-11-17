@@ -9,6 +9,7 @@ import tempfile
 from unittest.mock import Mock, patch
 
 script = Path(__file__).resolve().parents[1]/"scripts/partydeck_profiles.py"
+sys.path.insert(0, str(script.parent))
 spec = importlib.util.spec_from_file_location("profiles", script)
 profiles = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(profiles)

@@ -61,6 +61,40 @@ mode d'entrées pour actualiser son lanceur.
 Les données des anciens essais dans Ports restent accessibles via leurs
 lanceurs. Une entrée Windows Party commence avec ses propres profils.
 
+## Réglages propres à SoH / Anchor (version de test)
+
+Dans **Configurer Windows Party**, sélectionnez le jeu puis **SoH / Anchor**.
+Cochez **Gérer ce jeu avec le profil Anchor** pour activer cet adaptateur.
+Définissez la connexion automatique, le serveur/port, un Room ID commun,
+un nom différent et un Team ID pour chaque joueur. Les quatre identités sont
+mémorisées même si la session utilise seulement deux joueurs.
+
+Le formulaire propose aussi les règles de salle : PvP désactivé, activé ou
+avec tirs alliés ; positions visibles et téléportation pour personne, la même
+équipe ou tous ; synchronisation des objets et de la progression.
+Les règles sont envoyées par SoH lors de la connexion pour créer une salle.
+Une salle déjà existante conserve les règles décidées par son administrateur.
+Le salon public `soh-global` impose ses propres règles. L'action destructive
+« Clear All Team State » reste accessible uniquement dans SoH.
+
+Le chemin de configuration est relatif au dossier de lancement défini dans
+l'autorun Batocera : `shipofharkinian.json` par défaut. Si le batch entre dans un
+sous-dossier avant de lancer SoH, indiquez ce sous-dossier dans le chemin JSON.
+Choisissez un autre Room ID pour créer une nouvelle salle avec de nouvelles règles.
+
+L'adaptateur applique les réglages dans la vue Wine privée de chaque joueur,
+après montage du jeu, avant Wine/UMU. Il conserve les autres clés JSON et les
+identités attribuées par Anchor après la première connexion. Il utilise une copie
+temporaire du lanceur natif, visible uniquement dans l'espace de montage du joueur ;
+le fichier système et l'entrée solo ne sont pas modifiés. Si la structure du lanceur
+Batocera n'est pas reconnue, le lancement est refusé avec une erreur explicite.
+Les configurations SoH qui sont des liens symboliques sont refusées pour éviter
+d'écrire dans une sauvegarde solo ou dans celle d'un autre joueur.
+
+Tests locaux : `python3 tests/check_anchor.py`, `python3 tests/check_profiles.py`,
+`python3 tests/check_windows_party.py` et `python3 tests/check_coop.py`.
+La connexion réseau réelle avec cet adaptateur reste à valider sur Batocera.
+
 ## Profils et lancement direct
 
 Les paramètres sont conservés dans

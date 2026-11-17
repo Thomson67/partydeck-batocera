@@ -34,6 +34,11 @@ def validate(data, rom):
             or data.get("input") not in ("auto", "clavier-j1", "clavier-j2")
             or type(data.get("configure_before_launch")) is not bool):
         raise ValueError(f"Profil Windows Party invalide pour {rom}")
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor"):
+        raise ValueError("Adaptateur Windows Party inconnu.")
+    if data.get("adapter") == "soh-anchor":
+        from partydeck_anchor import validate as validate_anchor
+        validate_anchor(data.get("anchor"))
     return data
 
 
@@ -95,10 +100,10 @@ def edit_profile(base, rom):
                   "--field=Entrées:CB", choices("input", ["auto", "clavier-j1", "clavier-j2"]),
                   "--field=Afficher ces réglages avant chaque lancement:CHK",
                   str(data["configure_before_launch"]).upper(),
-                  "--button=Annuler:1", "--button=Enregistrer:0"])
+                  "--button=Annuler:1", "--button=SoH / Anchor:2", "--button=Enregistrer:0"])
     if result.returncode in {1, 252}:
         return False
-    if result.returncode:
+    if result.returncode not in {0, 2}:
         raise RuntimeError(f"Impossible d'ouvrir l'éditeur Yad (code {result.returncode}).")
     fields = result.stdout.rstrip("\n").split("\x1f")
     if len(fields) == 5 and not fields[-1]:
@@ -107,7 +112,55 @@ def edit_profile(base, rom):
         raise ValueError("Réponse de l'éditeur Windows Party invalide.")
     data.update(players=fields[0], split=fields[1], input=fields[2],
                 configure_before_launch=fields[3].upper() == "TRUE")
+    if result.returncode == 2 and not edit_anchor(data):
+        return False
     save_profile(base, rom, data)
+    return True
+
+
+def edit_anchor(data):
+    from partydeck_anchor import defaults as anchor_defaults, validate as validate_anchor
+    settings = dict(data.get("anchor") or anchor_defaults())
+    labels = {
+        "pvp": ["Désactivé", "Activé", "Activé + tirs alliés"],
+        "locations": ["Personne", "Même équipe", "Tous"],
+        "teleport": ["Personne", "Même équipe", "Tous"],
+    }
+    fields = ["--form", "--width=960", "--columns=2", "--separator=\x1f",
+              "--text=SoH / Anchor — règles communes et identité de chaque joueur.\n"
+              "Les règles de salle dépendent des droits administrateur sur le serveur.\n"
+              "Le chemin JSON est relatif au dossier de lancement du jeu.",
+              "--field=Gérer ce jeu avec le profil Anchor:CHK", str(data.get("adapter") == "soh-anchor").upper(),
+              "--field=Connexion automatique:CHK", str(settings["enabled"]).upper(),
+              "--field=Room ID commun", settings["room"],
+              "--field=Serveur", settings["host"],
+              "--field=Port", str(settings["port"]),
+              "--field=Configuration SoH (chemin relatif)", settings["config"]]
+    for key, label in (("pvp", "PvP"), ("locations", "Afficher les positions"), ("teleport", "Autoriser la téléportation")):
+        values = labels[key]
+        current = values[settings[key]]
+        fields.extend([f"--field={label}:CB", "!".join([current, *(v for v in values if v != current)])])
+    fields.extend(["--field=Synchroniser objets et progression:CHK", str(settings["sync"]).upper()])
+    for index in range(4):
+        fields.extend([f"--field=J{index + 1} — nom", settings["names"][index],
+                       f"--field=J{index + 1} — Team ID", settings["teams"][index]])
+    result = yad([*fields, "--button=Annuler:1", "--button=Enregistrer:0"])
+    if result.returncode in {1, 252}:
+        return False
+    if result.returncode:
+        raise RuntimeError("Impossible d'ouvrir les paramètres Anchor.")
+    values = result.stdout.rstrip("\n").split("\x1f")
+    if values and not values[-1]:
+        values.pop()
+    if len(values) != 18 or any(values[i].upper() not in {"TRUE", "FALSE"} for i in (0, 1, 9)):
+        raise ValueError("Réponse de l'éditeur Anchor invalide.")
+    settings.update(enabled=values[1].upper() == "TRUE", room=values[2], host=values[3],
+                    port=int(values[4]), config=values[5], sync=values[9].upper() == "TRUE",
+                    names=values[10::2], teams=values[11::2])
+    for index, key in enumerate(("pvp", "locations", "teleport"), 6):
+        settings[key] = labels[key].index(values[index])
+    validate_anchor(settings)
+    data.update(adapter="soh-anchor" if values[0].upper() == "TRUE" else "standard", anchor=settings)
     return True
 
 
