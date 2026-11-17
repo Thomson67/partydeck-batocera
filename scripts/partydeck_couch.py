@@ -576,7 +576,7 @@ class App:
                         self.box((946, y-1, 433, 42), (34, 47, 65),
                                  (99, 203, 219) if focused else (63, 83, 107))
                         self.text(value, 961, y+6, 20, (221, 236, 243), 400)
-            for i, label in enumerate(('▶  LANCER LA PARTIE', 'ENREGISTRER')):
+            for i, label in enumerate(('LANCER LA PARTIE', 'ENREGISTRER')):
                 active = self.pane == 'settings' and self.row == len(rows)+i
                 self.box((416+i*490, 750, 475, 36), (35,93,108) if i == 0 else (39,46,66),
                          (134,236,238) if active else None)
