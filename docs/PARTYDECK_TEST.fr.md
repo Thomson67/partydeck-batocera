@@ -50,6 +50,9 @@ Le jeu démarre directement avec le runner et l'`autorun.cmd` lus par
 `batocera-wine`. Les sauvegardes et écritures du test sont isolées pour chaque
 joueur dans `/userdata/system/partydeck-test/coop`. Le test démarre avec ses
 propres sauvegardes. OverlayFS est nécessaire pour les écritures du jeu.
+Les journaux Batocera sont écrits dans `jN/logs` et le cache du chargeur
+de bibliothèques dans `jN/ldconfig-cache`. Chaque joueur a ses propres copies
+pour permettre la préparation du runtime sous v44.
 
 - Choisissez `1`, `2`, `3`, `4` ou `auto`. `auto` adapte le nombre de joueurs
   aux manettes détectées au lancement, avec un maximum de quatre. Avec une

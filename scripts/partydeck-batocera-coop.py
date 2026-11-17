@@ -26,6 +26,8 @@ WRITABLE = {
     "/userdata/saves/windows": "saves",
     "/var/run/wine": "wine-run",
     "/userdata/system/cache": "cache",
+    "/userdata/system/logs": "logs",
+    "/var/cache/ldconfig": "ldconfig-cache",
 }
 UMU_HOME = Path("/userdata/system/umu")
 UMU_LOGS = Path("/userdata/system/logs/umu-runner")
