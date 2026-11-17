@@ -144,10 +144,10 @@ def edit_anchor(data):
     for index in range(4):
         fields.extend([f"--field=J{index + 1} — nom", settings["names"][index],
                        f"--field=J{index + 1} — Team ID", settings["teams"][index]])
-    result = yad([*fields, "--button=Annuler:1", "--button=Enregistrer:0"])
+    result = yad([*fields, "--button=Annuler:1", "--button=Graphismes / Audio:2", "--button=Enregistrer:0"])
     if result.returncode in {1, 252}:
         return False
-    if result.returncode:
+    if result.returncode not in {0, 2}:
         raise RuntimeError("Impossible d'ouvrir les paramètres Anchor.")
     values = result.stdout.rstrip("\n").split("\x1f")
     if values and not values[-1]:
@@ -160,7 +160,40 @@ def edit_anchor(data):
     for index, key in enumerate(("pvp", "locations", "teleport"), 6):
         settings[key] = labels[key].index(values[index])
     validate_anchor(settings)
+    if result.returncode == 2 and not edit_soh_graphics(settings):
+        return False
     data.update(adapter="soh-anchor" if values[0].upper() == "TRUE" else "standard", anchor=settings)
+    return True
+
+
+def edit_soh_graphics(settings):
+    from partydeck_anchor import graphics_defaults, validate_graphics
+    current = settings.get("graphics", graphics_defaults())
+    filters = ["Trois points (N64)", "Linéaire", "Aucun"]
+    selected = filters[current["texture_filter"]]
+    result = yad(["--form", "--width=660", "--separator=\x1f",
+                  "--text=Réglages communs à tous les joueurs SoH.\n"
+                  "Résolution interne : multiplicateur de la fenêtre de chaque joueur.\n"
+                  "La musique peut être réservée à J1 ; les bruitages restent actifs pour tous.",
+                  "--field=Internal resolution (0.5 à 2.0)", str(current["internal_resolution"]),
+                  "--field=Anti-aliasing MSAA (1 = désactivé, 2 à 8)", str(current["msaa"]),
+                  "--field=VSync:CHK", str(current["vsync"]).upper(),
+                  "--field=Texture filter:CB", "!".join([selected, *(v for v in filters if v != selected)]),
+                  "--field=Musique uniquement pour J1:CHK", str(current["music_j1_only"]).upper(),
+                  "--button=Annuler:1", "--button=Enregistrer:0"])
+    if result.returncode in {1, 252}:
+        return False
+    if result.returncode:
+        raise RuntimeError("Impossible d'ouvrir les réglages graphiques SoH.")
+    values = result.stdout.rstrip("\n").split("\x1f")
+    if values and not values[-1]:
+        values.pop()
+    if len(values) != 5 or any(values[i].upper() not in {"TRUE", "FALSE"} for i in (2, 4)):
+        raise ValueError("Réponse des réglages graphiques SoH invalide.")
+    settings["graphics"] = validate_graphics(dict(internal_resolution=float(values[0].replace(",", ".")),
+                                                msaa=int(values[1]), vsync=values[2].upper() == "TRUE",
+                                                texture_filter=filters.index(values[3]),
+                                                music_j1_only=values[4].upper() == "TRUE"))
     return True
 
 

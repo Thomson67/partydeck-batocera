@@ -77,14 +77,37 @@ Une salle déjà existante conserve les règles décidées par son administrateu
 Le salon public `soh-global` impose ses propres règles. L'action destructive
 « Clear All Team State » reste accessible uniquement dans SoH.
 
+Le bouton **Graphismes / Audio** permet de choisir la résolution interne
+(multiplicateur 0,5 à 2 de la fenêtre du joueur), le MSAA (1 = désactivé,
+2 à 8), la VSync et le filtre de textures (trois points N64, linéaire ou aucun).
+Les réglages de résolution avancée/pixel-perfect sont désactivés pour que le
+multiplicateur choisi soit effectivement utilisé par SoH.
+
+La musique est réservée à **J1** par défaut. Les volumes de musique principale,
+secondaire et des fanfares sont mis à zéro pour J2 à J4 ; bruitages, voix et
+volume général sont conservés. Décochez cette option pour restaurer les volumes
+du modèle commun chez tous les joueurs.
+
+Toutes les instances repartent à chaque lancement du même JSON commun :
+`/userdata/system/partydeck-test/templates/soh-common.json`. Le modèle fourni
+reprend le JSON transmis par Thomson, avec son interface, ses contrôles et ses
+réglages de jeu ; son Room ID, son nom et son identifiant de client ont été retirés.
+Les noms/équipes, les identifiants Anchor individuels et les différences audio
+sont ensuite appliqués à chaque copie privée. Ce fichier commun reste modifiable
+et n'est pas remplacé lors d'une mise à jour. Les changements faits directement
+dans le JSON d'un joueur sont remplacés au lancement suivant ; les changements
+communs doivent donc être faits dans le modèle ou dans le configurateur.
+Avant le premier remplacement, l'ancien JSON privé est conservé dans
+`party/<identifiant du jeu>/jN/soh-before-common.json` sous le dossier d'installation.
+
 Le chemin de configuration est relatif au dossier de lancement défini dans
 l'autorun Batocera : `shipofharkinian.json` par défaut. Si le batch entre dans un
 sous-dossier avant de lancer SoH, indiquez ce sous-dossier dans le chemin JSON.
 Choisissez un autre Room ID pour créer une nouvelle salle avec de nouvelles règles.
 
 L'adaptateur applique les réglages dans la vue Wine privée de chaque joueur,
-après montage du jeu, avant Wine/UMU. Il conserve les autres clés JSON et les
-identités attribuées par Anchor après la première connexion. Il utilise une copie
+après montage du jeu, avant Wine/UMU. Il conserve les autres clés du JSON commun
+et les identités attribuées par Anchor après la première connexion. Il utilise une copie
 temporaire du lanceur natif, visible uniquement dans l'espace de montage du joueur ;
 le fichier système et l'entrée solo ne sont pas modifiés. Si la structure du lanceur
 Batocera n'est pas reconnue, le lancement est refusé avec une erreur explicite.
@@ -94,6 +117,22 @@ d'écrire dans une sauvegarde solo ou dans celle d'un autre joueur.
 Tests locaux : `python3 tests/check_anchor.py`, `python3 tests/check_profiles.py`,
 `python3 tests/check_windows_party.py` et `python3 tests/check_coop.py`.
 La connexion réseau réelle avec cet adaptateur reste à valider sur Batocera.
+
+## Logo du système Windows Party
+
+Le logo validé est installé dans `assets/windows-party.png`. Un fichier
+`/userdata/roms/windows-party/theme.xml` reprend le thème Windows actuellement
+sélectionné et remplace uniquement l'image du logo. L'entrée Windows solo et
+les fichiers du thème d'origine restent inchangés. Un thème local personnalisé
+déjà présent est conservé. Après installation, redémarrez EmulationStation.
+Après un changement de thème, relancez l'installation, ou uniquement :
+
+```bash
+python3 /userdata/system/partydeck-test/partydeck_theme.py /userdata/system/partydeck-test
+```
+
+Si le thème courant ne peut pas être retrouvé, le logo reste installé et un
+message l'indique ; le système garde alors son habillage Windows habituel.
 
 ## Profils et lancement direct
 

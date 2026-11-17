@@ -1,5 +1,6 @@
 """SoH Anchor adapter; configuration is applied inside each private Wine view."""
 import json
+import copy
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -14,6 +15,24 @@ def defaults():
                 room="windows-party-" + uuid.uuid4().hex[:12],
                 config="shipofharkinian.json", pvp=0, locations=1, teleport=1, sync=True,
                 names=[f"Joueur{i}" for i in range(1, 5)], teams=["default"] * 4)
+
+
+def graphics_defaults():
+    return dict(internal_resolution=1.0, msaa=4, vsync=True, texture_filter=0,
+                music_j1_only=True)
+
+
+def validate_graphics(options):
+    if (not isinstance(options, dict)
+            or type(options.get("internal_resolution")) not in (float, int)
+            or not 0.5 <= options["internal_resolution"] <= 2.0
+            or type(options.get("msaa")) is not int or not 1 <= options["msaa"] <= 8
+            or type(options.get("vsync")) is not bool
+            or type(options.get("music_j1_only")) is not bool
+            or type(options.get("texture_filter")) is not int
+            or options["texture_filter"] not in (0, 1, 2)):
+        raise ValueError("Options graphiques ou audio SoH invalides.")
+    return options
 
 
 def validate(settings):
@@ -40,6 +59,7 @@ def validate(settings):
             raise ValueError("Définissez un nom et une équipe pour chacun des quatre joueurs.")
     if len(set(settings["names"])) != 4:
         raise ValueError("Chaque joueur doit avoir un nom différent.")
+    validate_graphics(settings.get("graphics", graphics_defaults()))
     return settings
 
 
@@ -57,9 +77,14 @@ def apply_config(directory, payload):
         cursor /= part
         if cursor.is_symlink():
             raise ValueError(f"Configuration SoH liée à un autre emplacement : {cursor}")
-    data = json.loads(path.read_text()) if path.exists() else {}
-    if not isinstance(data, dict):
+    previous = json.loads(path.read_text()) if path.exists() else {}
+    data = copy.deepcopy(payload["template"]) if "template" in payload else previous
+    if not isinstance(data, dict) or not isinstance(previous, dict):
         raise ValueError("La configuration SoH doit être un objet JSON.")
+    if "template" in payload and path.exists():
+        backup = Path(payload["identity_stamp"]).parent / "soh-before-common.json"
+        if not backup.exists():
+            atomic_write(backup, json.dumps(previous, ensure_ascii=False, indent=2) + "\n")
     anchor = data
     for key in ("CVars", "gRemote", "Anchor"):
         anchor = anchor.setdefault(key, {})
@@ -78,6 +103,20 @@ def apply_config(directory, payload):
     identity = json.dumps([settings["host"], settings["port"], settings["room"], settings["names"][index]])
     if stamp is None or not stamp.exists() or stamp.read_text() != identity:
         anchor["LastClientId"] = 0
+    elif "template" in payload:
+        anchor["LastClientId"] = previous.get("CVars", {}).get("gRemote", {}).get("Anchor", {}).get("LastClientId", 0)
+    if "template" in payload:
+        options = validate_graphics(settings.get("graphics", graphics_defaults()))
+        graphics = data["CVars"].setdefault("gSettings", {})
+        graphics.update(InternalResolution=float(options["internal_resolution"]),
+                        MSAAValue=options["msaa"], VsyncEnabled=int(options["vsync"]),
+                        TextureFilter=options["texture_filter"])
+        # Advanced fixed/pixel-perfect resolution overrides the normal scale
+        # slider in SoH. Disable it so the selected multiplier actually applies.
+        advanced = graphics.setdefault("AdvancedResolution", {})
+        advanced.update(Enabled=0, VerticalResolutionToggle=0, PixelPerfectMode=0)
+        if options["music_j1_only"] and index > 0:
+            graphics.setdefault("Volume", {}).update(MainMusic=0, SubMusic=0, Fanfare=0)
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     if stamp is not None:
         atomic_write(stamp, identity)
@@ -108,9 +147,15 @@ def install_hook(base, rom, player):
     if profile.get("adapter", "standard") != "soh-anchor":
         return
     settings = validate(profile["anchor"])
+    template = base / "templates" / "soh-common.json"
+    if not template.is_file():
+        raise ValueError("JSON commun SoH absent : réinstallez Windows Party.")
+    common = json.loads(template.read_text())
+    if not isinstance(common, dict) or not isinstance(common.get("CVars"), dict):
+        raise ValueError("Le JSON commun SoH est invalide.")
     index = int(player.name.removeprefix("j")) - 1
     payload = player / "anchor-launch.json"
-    atomic_write(payload, json.dumps(dict(settings=settings, index=index,
+    atomic_write(payload, json.dumps(dict(settings=settings, index=index, template=common,
                                          identity_stamp=str(player / "anchor-identity.json"))))
     binary = shutil.which("batocera-wine")
     if not binary:

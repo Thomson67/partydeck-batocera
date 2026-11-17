@@ -1,0 +1,426 @@
+{
+  "CVars": {
+    "gEnhancements": {
+      "AnubisFix": 1,
+      "AssignableTunicsAndBoots": 1,
+      "Autosave": 1,
+      "BetterOwl": 1,
+      "BushDropFix": 1,
+      "CreditsFix": 1,
+      "CrouchStabHammerFix": 0,
+      "CustomizeFrogsOcarinaGame": 1,
+      "DekuNutUpgradeFix": 1,
+      "DisableBlackBars": 1,
+      "DisableDrawDistance": 5,
+      "DisableFixedCamera": 0,
+      "DisableKokiriDrawDistance": 1,
+      "DisableLOD": 1,
+      "DpadEquips": 1,
+      "DpadNoDropOcarinaInput": 1,
+      "DynamicWalletIcon": 1,
+      "EnemySpawnsOverWaterboxes": 1,
+      "FasterRupeeAccumulator": 1,
+      "FixBrokenGiantsKnife": 1,
+      "FixCameraDrift": 0,
+      "FixCameraSwing": 0,
+      "FixDampeGoingBackwards": 1,
+      "FixDaruniaDanceSpeed": 1,
+      "FixDungeonMinimapIcon": 1,
+      "FixEyesOpenWhileSleeping": 1,
+      "FixFloorSwitches": 1,
+      "FixHammerHand": 1,
+      "FixKokiriForestQuestState": 1,
+      "FixMenuLR": 1,
+      "FixSawSoftlock": 1,
+      "FixTexturesOOB": 1,
+      "FixVineFall": 1,
+      "FixZoraHintDialogue": 1,
+      "FrogsModifyFailTime": 2,
+      "GCDoorsAfterFireFix": 1,
+      "GerudoWarriorClothingFix": 1,
+      "GravediggingTourFix": 1,
+      "InjectItemCounts": {
+        "GoldSkulltula": 1,
+        "HeartContainer": 1,
+        "HeartPiece": 1
+      },
+      "NaviTextFix": 1,
+      "PulsateBossIcon": 1,
+      "RedGanonBlood": 1,
+      "RememberMapToggleState": 1,
+      "SceneSpecificDirtPathFix": 1,
+      "SilverRupeeJingleExtend": 1,
+      "SkipSaveConfirmation": 1,
+      "SkipText": 1,
+      "TextSpeed": 5,
+      "TimeFlowFileSelect": 1,
+      "TwoHandedIdle": 1,
+      "VisualAgony": 1,
+      "WidescreenActorCulling": 1
+    },
+    "gForceCursorVisibility": 0,
+    "gGeneral": {
+      "OnFileSelectNameEntry": 0,
+      "PauseMenuAnimatedLinkTriforce": 0,
+      "SelectedPresets": [
+        1
+      ],
+      "SpoilerLog": ""
+    },
+    "gOpenWindows": {
+      "ModalWindow": 1,
+      "Notifications": 1
+    },
+    "gRemote": {
+      "Anchor": {
+        "Enabled": 0,
+        "Host": "anchor.hm64.org",
+        "Port": 43383,
+        "RoomSettings": {
+          "PvpMode": 0,
+          "ShowLocationsMode": 1,
+          "SyncItemsAndFlags": 1,
+          "TeleportMode": 1
+        },
+        "TeamId": "default"
+      }
+    },
+    "gSettings": {
+      "A11yTTS": 0,
+      "AdvancedResolution": {
+        "AspectRatioX": 16.0,
+        "AspectRatioY": 9.0,
+        "Enabled": 0,
+        "IntegerScale": {
+          "Factor": 6
+        },
+        "PixelPerfectMode": 1,
+        "UIComboItem": {
+          "AspectRatio": 3,
+          "PixelCount": 7
+        },
+        "VerticalPixelCount": 1080,
+        "VerticalResolutionToggle": 1
+      },
+      "AltAssets": 1,
+      "ControlNav": 1,
+      "Controllers": {
+        "AxisDirectionMappings": {
+          "P0-S0-D0-KB30": {
+            "AxisDirectionMappingClass": "KeyboardKeyToAxisDirectionMapping",
+            "Direction": 0,
+            "KeyboardScancode": 30,
+            "Stick": 0
+          },
+          "P0-S0-D0-SDLA0-ADN": {
+            "AxisDirection": -1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 0,
+            "SDLControllerAxis": 0,
+            "Stick": 0
+          },
+          "P0-S0-D1-KB32": {
+            "AxisDirectionMappingClass": "KeyboardKeyToAxisDirectionMapping",
+            "Direction": 1,
+            "KeyboardScancode": 32,
+            "Stick": 0
+          },
+          "P0-S0-D1-SDLA0-ADP": {
+            "AxisDirection": 1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 1,
+            "SDLControllerAxis": 0,
+            "Stick": 0
+          },
+          "P0-S0-D2-KB17": {
+            "AxisDirectionMappingClass": "KeyboardKeyToAxisDirectionMapping",
+            "Direction": 2,
+            "KeyboardScancode": 17,
+            "Stick": 0
+          },
+          "P0-S0-D2-SDLA1-ADN": {
+            "AxisDirection": -1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 2,
+            "SDLControllerAxis": 1,
+            "Stick": 0
+          },
+          "P0-S0-D3-KB31": {
+            "AxisDirectionMappingClass": "KeyboardKeyToAxisDirectionMapping",
+            "Direction": 3,
+            "KeyboardScancode": 31,
+            "Stick": 0
+          },
+          "P0-S0-D3-SDLA1-ADP": {
+            "AxisDirection": 1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 3,
+            "SDLControllerAxis": 1,
+            "Stick": 0
+          },
+          "P0-S1-D0-SDLA2-ADN": {
+            "AxisDirection": -1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 0,
+            "SDLControllerAxis": 2,
+            "Stick": 1
+          },
+          "P0-S1-D1-SDLA2-ADP": {
+            "AxisDirection": 1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 1,
+            "SDLControllerAxis": 2,
+            "Stick": 1
+          },
+          "P0-S1-D2-SDLA3-ADN": {
+            "AxisDirection": -1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 2,
+            "SDLControllerAxis": 3,
+            "Stick": 1
+          },
+          "P0-S1-D3-SDLA3-ADP": {
+            "AxisDirection": 1,
+            "AxisDirectionMappingClass": "SDLAxisDirectionToAxisDirectionMapping",
+            "Direction": 3,
+            "SDLControllerAxis": 3,
+            "Stick": 1
+          }
+        },
+        "ButtonMappings": {
+          "P0-B1-KB333": {
+            "Bitmask": 1,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 333
+          },
+          "P0-B1-SDLA2-ADP": {
+            "AxisDirection": 1,
+            "Bitmask": 1,
+            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+            "SDLControllerAxis": 2
+          },
+          "P0-B1024-KB34": {
+            "Bitmask": 1024,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 34
+          },
+          "P0-B1024-SDLB12": {
+            "Bitmask": 1024,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 12
+          },
+          "P0-B16-KB19": {
+            "Bitmask": 16,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 19
+          },
+          "P0-B16-SDLA5-ADP": {
+            "AxisDirection": 1,
+            "Bitmask": 16,
+            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+            "SDLControllerAxis": 5
+          },
+          "P0-B16384-KB46": {
+            "Bitmask": 16384,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 46
+          },
+          "P0-B16384-SDLB1": {
+            "Bitmask": 16384,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 1
+          },
+          "P0-B2-KB331": {
+            "Bitmask": 2,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 331
+          },
+          "P0-B2-SDLA2-ADN": {
+            "AxisDirection": -1,
+            "Bitmask": 2,
+            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+            "SDLControllerAxis": 2
+          },
+          "P0-B2048-KB20": {
+            "Bitmask": 2048,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 20
+          },
+          "P0-B2048-SDLB11": {
+            "Bitmask": 2048,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 11
+          },
+          "P0-B256-KB35": {
+            "Bitmask": 256,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 35
+          },
+          "P0-B256-SDLB14": {
+            "Bitmask": 256,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 14
+          },
+          "P0-B32-KB18": {
+            "Bitmask": 32,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 18
+          },
+          "P0-B32-SDLB9": {
+            "Bitmask": 32,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 9
+          },
+          "P0-B32768-KB45": {
+            "Bitmask": 32768,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 45
+          },
+          "P0-B32768-SDLB0": {
+            "Bitmask": 32768,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 0
+          },
+          "P0-B4-KB336": {
+            "Bitmask": 4,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 336
+          },
+          "P0-B4-SDLA3-ADP": {
+            "AxisDirection": 1,
+            "Bitmask": 4,
+            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+            "SDLControllerAxis": 3
+          },
+          "P0-B4096-KB57": {
+            "Bitmask": 4096,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 57
+          },
+          "P0-B4096-SDLB6": {
+            "Bitmask": 4096,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 6
+          },
+          "P0-B512-KB33": {
+            "Bitmask": 512,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 33
+          },
+          "P0-B512-SDLB13": {
+            "Bitmask": 512,
+            "ButtonMappingClass": "SDLButtonToButtonMapping",
+            "SDLControllerButton": 13
+          },
+          "P0-B8-KB328": {
+            "Bitmask": 8,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 328
+          },
+          "P0-B8-SDLA3-ADN": {
+            "AxisDirection": -1,
+            "Bitmask": 8,
+            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+            "SDLControllerAxis": 3
+          },
+          "P0-B8192-KB44": {
+            "Bitmask": 8192,
+            "ButtonMappingClass": "KeyboardKeyToButtonMapping",
+            "KeyboardScancode": 44
+          },
+          "P0-B8192-SDLA4-ADP": {
+            "AxisDirection": 1,
+            "Bitmask": 8192,
+            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+            "SDLControllerAxis": 4
+          }
+        },
+        "Port1": {
+          "Buttons": {
+            "1024ButtonMappingIds": "P0-B1024-SDLB12,P0-B1024-KB34,",
+            "16384ButtonMappingIds": "P0-B16384-KB46,P0-B16384-SDLB1,",
+            "16ButtonMappingIds": "P0-B16-KB19,P0-B16-SDLA5-ADP,",
+            "1ButtonMappingIds": "P0-B1-SDLA2-ADP,P0-B1-KB333,",
+            "2048ButtonMappingIds": "P0-B2048-SDLB11,P0-B2048-KB20,",
+            "256ButtonMappingIds": "P0-B256-KB35,P0-B256-SDLB14,",
+            "2ButtonMappingIds": "P0-B2-KB331,P0-B2-SDLA2-ADN,",
+            "32768ButtonMappingIds": "P0-B32768-KB45,P0-B32768-SDLB0,",
+            "32ButtonMappingIds": "P0-B32-KB18,P0-B32-SDLB9,",
+            "4096ButtonMappingIds": "P0-B4096-KB57,P0-B4096-SDLB6,",
+            "4ButtonMappingIds": "P0-B4-KB336,P0-B4-SDLA3-ADP,",
+            "512ButtonMappingIds": "P0-B512-KB33,P0-B512-SDLB13,",
+            "8192ButtonMappingIds": "P0-B8192-KB44,P0-B8192-SDLA4-ADP,",
+            "8ButtonMappingIds": "P0-B8-KB328,P0-B8-SDLA3-ADN,"
+          },
+          "HasConfig": 1,
+          "LeftStick": {
+            "DeadzonePercentage": 20,
+            "DownAxisDirectionMappingIds": "P0-S0-D3-KB31,P0-S0-D3-SDLA1-ADP,",
+            "LeftAxisDirectionMappingIds": "P0-S0-D0-KB30,P0-S0-D0-SDLA0-ADN,",
+            "NotchSnapAngle": 0,
+            "RightAxisDirectionMappingIds": "P0-S0-D1-KB32,P0-S0-D1-SDLA0-ADP,",
+            "SensitivityPercentage": 100,
+            "UpAxisDirectionMappingIds": "P0-S0-D2-KB17,P0-S0-D2-SDLA1-ADN,"
+          },
+          "RightStick": {
+            "DeadzonePercentage": 20,
+            "DownAxisDirectionMappingIds": "P0-S1-D3-SDLA3-ADP,",
+            "LeftAxisDirectionMappingIds": "P0-S1-D0-SDLA2-ADN,",
+            "NotchSnapAngle": 0,
+            "RightAxisDirectionMappingIds": "P0-S1-D1-SDLA2-ADP,",
+            "SensitivityPercentage": 100,
+            "UpAxisDirectionMappingIds": "P0-S1-D2-SDLA3-ADN,"
+          },
+          "RumbleMappingIds": "P0,"
+        },
+        "RumbleMappings": {
+          "P0": {
+            "HighFrequencyIntensity": 50,
+            "LowFrequencyIntensity": 50,
+            "RumbleMappingClass": "SDLRumbleMapping"
+          }
+        }
+      },
+      "Controls": {
+        "InvertAimingYAxis": 0
+      },
+      "EnabledMods": "OoT_Reloaded_v11.0.0_4K|Enhanced 3DS Adult Link Reworked Custom Tunics|Enhanced 3DS Young Link Reworked Custom Tunics|TEXTURES - Enhanced 3DS Adult Link Reworked Custom Tunics|TEXTURES - Enhanced 3DS Young Link Reworked Custom Tunics|Enhanced 3DS Adult Zelda Reworked|Enhanced Young Zelda Reworked|TEXTURES - Enhanced 3DS Adult Zelda Reworked|Enhanced Future Ganondorf Reworked|Enhanced Past Ganondorf Reworked|Enhanced 3DS Equipment|TEXTURES - Enhanced 3DS Equipment|Enhanced 3DS NPCs Reworked|TEXTURES - Enhanced 3DS NPCs Reworked|Enhanced 3DS Crescent Mirror Shield (OPTIONAL)|Enhanced 3DS Custom Master Sword (OPTIONAL)|Enhanced 3DS Slimmer Deku Shield (OPTIONAL)|Enhanced 3DS Smaller Hylian Shield (OPTIONAL)|Kin_BunnyHood3DS (OPTIONAL)",
+      "FreeLook": {
+        "MaxCameraDistance": 100
+      },
+      "ImGuiScale": 1,
+      "InternalResolution": 1.0,
+      "InterpolationFPS": 60,
+      "Languages": 2,
+      "MSAAValue": 4,
+      "MatchRefreshRate": 1,
+      "Menu": {
+        "ActiveHeader": "Settings",
+        "EnhancementsSidebarSection": "Graphics",
+        "NetworkSidebarSection": "Anchor",
+        "RandomizerSidebarSection": "General",
+        "SettingsSidebarSection": "Graphics"
+      },
+      "OverlayFont": "Press Start 2P",
+      "TextureFilter": 0,
+      "TitleScreenTranslation": 1
+    }
+  },
+  "ConfigVersion": 6,
+  "Window": {
+    "AudioBackend": "wasapi",
+    "Backend": {
+      "Id": 0,
+      "Name": "DirectX 11"
+    },
+    "Fullscreen": {
+      "Enabled": true,
+      "Height": 1080,
+      "Width": 1920
+    },
+    "Height": 1984,
+    "PositionX": 0,
+    "PositionY": 56,
+    "Width": 3840
+  }
+}

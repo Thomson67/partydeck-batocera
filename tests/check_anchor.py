@@ -80,6 +80,8 @@ with tempfile.TemporaryDirectory() as folder:
     # validation and shell syntax checking; the on-disk launcher stays intact.
     source_rom = root / "test.wsquashfs"
     profiles.save_profile(root, source_rom, data)
+    (root / "templates").mkdir()
+    (root / "templates/soh-common.json").write_text(json.dumps(before))
     # Execute a simulated native launcher: config must exist before Wine starts,
     # and mounting/setup must complete before the config hook runs.
     target.unlink()
