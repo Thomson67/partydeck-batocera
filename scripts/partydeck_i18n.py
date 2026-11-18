@@ -62,6 +62,13 @@ def get_language():
 
 
 EN = {
+    'RUNNER WINE':'WINE RUNNER',
+    'Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.':'Windows Party runner. Auto: use the original Windows game’s runner.',
+    'Configuration ES Windows Party personnalisée ; fichier conservé : {p0}':'Custom Windows Party ES configuration; file retained: {p0}',
+    'Runner Windows Party invalide.':'Invalid Windows Party runner.',
+    'Lanceur Wine non reconnu ; sélection du runner Windows Party refusée.':'Unrecognized Wine launcher; Windows Party runner selection refused.',
+    'Windows Party : runner dédié {p0}.':'Windows Party: dedicated runner {p0}.',
+
     'Scraps Windows repris pour {p0} jeu(x), sans copier les médias.':'Windows scraped metadata reused for {p0} game(s), without copying media.',
     'Reprise des scraps différée : {p0}':'Scraped metadata synchronization deferred: {p0}',
 

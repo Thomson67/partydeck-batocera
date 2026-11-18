@@ -256,6 +256,8 @@ def install_system(config_dir=Path("/userdata/system/configs/emulationstation"),
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
+    from partydeck_profiles import install_runner_editor
+    install_runner_editor(config_dir)
     PARTY_ROMS.mkdir(parents=True, exist_ok=True)
     PARTY_SAVES.mkdir(parents=True, exist_ok=True)
     print(f"Système Windows Party installé : {path}")
@@ -429,6 +431,8 @@ def _run_wine(original, target, player, saves=None):
             destination.mkdir(parents=True, exist_ok=True)
             subprocess.run(["mount", "--bind", str(private), str(destination)], check=True)
     if saves is not None:
+        from partydeck_profiles import install_party_runner_hook
+        install_party_runner_hook(original,player)
         from partydeck_anchor import install_hook
         install_hook(Path(__file__).resolve().parent, original, player)
         from partydeck_borderlands2 import install_hook as install_bl2

@@ -432,6 +432,35 @@ Les tests locaux `tests/check_sm64coopdx.py` couvrent J1–J4, les sauvegardes,
 les redirections, UMU, la configuration commune et les réglages à la manette.
 Le lancement réel sur Batocera reste à valider avec ce nouveau profil.
 
+## Runner distinct dans les options avancées ES
+
+Après installation, **redémarrez EmulationStation**, puis ouvrez les options
+avancées du jeu dans **Windows Party** : **RUNNER WINE** utilise le sélecteur
+natif Wine et les mêmes runners personnalisés installés.
+
+- **Auto** : reprend le runner du jeu Windows d'origine.
+- **Runner choisi pour ce jeu** : prioritaire uniquement dans Windows Party.
+- Un runner choisi dans les options du système Windows Party s'applique aux
+  jeux sans choix individuel. Auto au niveau du jeu reprend ce choix système.
+
+ES conserve ces valeurs dans `windows-party["<lanceur>.sh"].wine-runner` et
+`windows-party.wine-runner`. Les valeurs `windows.*` restent intactes. Lors du
+lancement, un relais privé remplace uniquement la sélection du runner natif,
+avant les profils spécifiques au jeu ; les autres réglages Wine continuent
+à provenir du jeu Windows d'origine. Aucun binaire système n'est modifié sur
+disque. Un runner peut ainsi être testé en multi sans changer le lancement solo.
+
+Les définitions de menus sont limitées au système Windows Party dans
+`es_features_windows-party.cfg`. Ce fichier pourra recevoir d'autres options
+propres au système ; le premier ajout est uniquement le choix du runner.
+
+**English:** Restart EmulationStation after updating. Windows Party advanced
+game options now include the native **WINE RUNNER** picker. Auto inherits the
+original Windows runner, unless a Windows Party system-level runner is set.
+An explicit per-game Party runner takes priority. Solo settings are unchanged;
+all other native Wine options still come from the original game. The menu
+extension is scoped to Windows Party and can host future system-only options.
+
 ## Scraps des jeux Windows d'origine
 
 Les entrées Windows Party reprennent automatiquement les informations du jeu

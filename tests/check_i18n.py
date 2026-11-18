@@ -27,6 +27,12 @@ for selected,labels in (('fr',('Langue du jeu','Activer la manette en jeu','Fran
     assert label_value('l4d2.language','french')==labels[2]
     assert label_value('l4d2.language','keep')==labels[3]
 
+for language,title in (('fr','RUNNER WINE'),('en','WINE RUNNER')):
+    lang.set_language(language)
+    assert lang.tr('RUNNER WINE')==title
+    hint=lang.tr('Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.')
+    assert ('original Windows' in hint) if language=='en' else ('d’origine' in hint)
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);conf=root/'batocera.conf';es=root/'es_settings.cfg'
     env={'LANG':'fr_FR.UTF-8'}
