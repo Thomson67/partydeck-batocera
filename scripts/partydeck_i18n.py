@@ -62,6 +62,9 @@ def get_language():
 
 
 EN = {
+    'Bloc de langue Left 4 Dead 2 incomplet ; fichier conservé.':'Incomplete Left 4 Dead 2 language block; file retained.',
+    'start.bat Left 4 Dead 2 introuvable ; langue Windows/Steam non appliquée.':'Left 4 Dead 2 start.bat was not found; Windows/Steam language was not applied.',
+    'Left 4 Dead 2 : langue Windows/Steam {p0} appliquée au démarrage privé.':'Left 4 Dead 2: Windows/Steam language {p0} applied at private startup.',
     'Activer la manette en jeu':'Enable gamepad in game',
     'Sans bordure et résolution automatiques · langue : fichiers du jeu requis':'Automatic borderless and resolution · language files must be installed',
     'Réglages Left 4 Dead 2 invalides.':'Invalid Left 4 Dead 2 settings.',

@@ -169,6 +169,27 @@ def managed_cfg(text, commands):
     return text.rstrip('\r\n')+nl+BEGIN+nl+nl.join(commands)+nl+END+nl
 
 
+def language_batch(text, language):
+    """Set Steam's UI language inside the same Wine session as the game.
+
+    Editing an offline user.reg can miss UMU's materialized prefix or a running
+    wineserver. A reg.exe command in the private batch targets the actual HKCU.
+    The original batch body/arguments (including server commands) stay intact.
+    """
+    begin='@rem Windows Party language begin'
+    end='@rem Windows Party language end'
+    block=re.compile(r'(?m)^'+re.escape(begin)+r'\r?\n.*?^'+re.escape(end)+r'\r?\n',re.S)
+    text=block.sub('',text)
+    if begin in text or end in text:
+        raise ValueError(tr('Bloc de langue Left 4 Dead 2 incomplet ; fichier conservé.'))
+    if language=='keep':return text
+    if language not in LANGUAGES:
+        raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
+    nl='\r\n' if '\r\n' in text else '\n'
+    command='@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d '+language+' /f >nul'
+    return begin+nl+command+nl+end+nl+text
+
+
 def game_edits(directory, player, payload, allowed):
     width,height=dimensions(payload)
     options=validate(payload['settings'])
@@ -191,6 +212,15 @@ def game_edits(directory, player, payload, allowed):
             text=managed_cfg(text,commands)
         backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'-'+name),(player,))
         edits.append((path,before,text.encode(encoding),backup))
+    batch=safe_path(child(directory,'start.bat'),allowed)
+    if batch.is_file():
+        before=batch.read_bytes()
+        text,encoding=decode(before)
+        after=language_batch(text,options['language']).encode(encoding)
+        backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(batch)).hexdigest()[:16]+'-start.bat'),(player,))
+        edits.append((batch,before,after,backup))
+    elif options['language']!='keep':
+        raise ValueError(tr('start.bat Left 4 Dead 2 introuvable ; langue Windows/Steam non appliquée.'))
     return edits
 
 
@@ -258,6 +288,8 @@ def apply_config(directory, prefix, payload, private_binds=PRIVATE_BINDS):
     for path,before,after,backup in edits:
         if before!=after:
             write_bytes(path,after)
+    if options['language']!='keep':
+        print(tr('Left 4 Dead 2 : langue Windows/Steam {p0} appliquée au démarrage privé.',p0=options['language']),flush=True)
     print(tr('Left 4 Dead 2 J{p0} : identité Goldberg privée {p1} · {p2} configuration(s).',
              p0=index+1,p1=identity['steamid'],p2=len(edits)),flush=True)
 
