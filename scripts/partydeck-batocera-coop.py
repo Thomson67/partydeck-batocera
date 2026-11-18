@@ -425,7 +425,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            if profile.get('adapter') == 'borderlands2' and profile['borderlands2']['fit_resolution']:
+            if profile.get('adapter') == 'borderlands2':
                 args.extend(['-w',str(width),'-h',str(height)])
     if not shared_keyboard_mouse:
         args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])

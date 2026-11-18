@@ -97,6 +97,7 @@ EN = {
     'BIBLIOTHÈQUE':'LIBRARY', 'STOCKAGE':'STORAGE', '{p0} jeux · {p1} : ajouter':'{p0} games · {p1}: add',
     'MODIFIÉ · non enregistré':'MODIFIED · not saved', 'Profil prêt':'Profile ready',
     'Borderlands 2 · réglages communs · PhysX indépendant du préréglage':'Borderlands 2 · shared settings · separate PhysX quality',
+    'Borderlands 2 · affichage automatique · VSync et PhysX indépendants':'Borderlands 2 · automatic display · separate VSync and PhysX',
     'SoH / Anchor · réglages communs aux joueurs de cette session':'SoH / Anchor · shared settings for this session',
     'SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages':'SoH / Anchor · enable this profile in Session to apply these settings',
     'DISSOCIER LE JEU':'UNLINK GAME', 'RETIRER LE JEU':'REMOVE GAME', 'LANCER LA PARTIE':'LAUNCH GAME', 'ENREGISTRER':'SAVE',

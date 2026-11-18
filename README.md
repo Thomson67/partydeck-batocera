@@ -227,8 +227,10 @@ Un nouvel ajout reconnu comme Borderlands 2 utilise automatiquement ce profil.
 Pour un jeu déjà ajouté avec le profil Standard, choisissez **Profil du jeu →
 Borderlands 2** dans Session, puis ouvrez l'onglet **Image**.
 
-Le plein écran fenêtré et l'adaptation à la portion d'écran du joueur sont activés
-par défaut. L'adaptateur écrit dans `[SystemSettings]` de `WillowEngine.ini` :
+L'onglet affiche uniquement **Préréglage graphique**, **VSync** et **Qualité PhysX**.
+Le plein écran fenêtré et l'adaptation à la portion d'écran du joueur sont
+**systématiques**, sans options à activer. L'adaptateur écrit dans `[SystemSettings]`
+de `WillowEngine.ini` :
 
 ```ini
 Fullscreen=False
@@ -260,17 +262,23 @@ préréglages expérimentaux, pas des profils officiels du jeu :
 | Distance du feuillage | 0,5 | 0,75 | 1 | 1 |
 
 **PhysX est indépendant du préréglage** : conserver, bas, moyen ou élevé.
-Le choix initial conserve le niveau existant, y compris avec Max. La VSync,
-le limiteur d'images, les effets artistiques non listés, les contrôles et les
-paramètres réseau ne sont pas modifiés. « Conserver » laisse les valeurs actuelles
-en place ; il ne restaure pas automatiquement les valeurs précédant un préréglage.
-De même, désactiver le forçage du plein écran fenêtré conserve le mode déjà écrit.
+Le choix initial conserve le niveau existant, y compris avec Max.
+**VSync** propose conserver, activé ou désactivé et écrit `UseVsync=True/False`
+dans `[SystemSettings]`. Conserver laisse la valeur actuelle en place. Le
+préréglage graphique n'impose aucun de ces deux réglages indépendants.
+Le limiteur d'images, les effets artistiques non listés, les contrôles et les
+paramètres réseau ne sont pas modifiés. « Conserver » ne restaure pas
+automatiquement les valeurs précédant un préréglage.
 
 Le chemin standard recherché est `drive_c/users/<utilisateur>/Documents/My Games/
 Borderlands 2/WillowGame/Config/WillowEngine.ini`, avec prise en charge de
 `My Documents`, de la casse des chemins Windows et des redirections vers les
-sauvegardes privées du joueur. **Fichier INI** peut rester sur `auto`, ou recevoir
-un chemin `.ini` relatif au préfixe Wine pour une installation portable particulière.
+sauvegardes privées du joueur. La recherche est automatique : aucun chemin INI
+n'est demandé dans l'interface. Les anciens profils sont compatibles ; les
+anciennes options `windowed_fullscreen`, `fit_resolution` et `config` sont retirées
+de leur représentation chargée et lors du prochain enregistrement. Leurs anciennes
+valeurs ne peuvent pas désactiver la politique d'affichage ou changer le chemin.
+Les profils antérieurs sans VSync utilisent « Conserver ».
 Si le préfixe ne comporte encore aucun utilisateur Wine, initialisez le jeu en solo
 avant de le lancer dans Windows Party.
 
@@ -288,6 +296,27 @@ Référence graphique : [guide technique NVIDIA Borderlands 2](https://www.nvidi
 Les valeurs sont définies par Windows Party et restent à valider en jeu avec Wine.
 Tests locaux : `python3 tests/check_borderlands2.py` et
 `python3 tests/check_library_remove.py`, en complément des tests du configurateur.
+
+### LAN et nom du joueur : état de la vérification
+
+Le choix LAN n'est **pas forcé dans cette version**. Aucun réglage fiable n'a été
+identifié dans les INI fournis. La solution de référence identifiée dans le mod
+[All My Homies Hate SHiFT](https://github.com/PyrexBLJ/blsdk-mods/tree/main/AllMyHomiesHateSHiFT)
+utilise le Python SDK et appelle `AttemptNetworkTransition(1, 2, True)` au démarrage
+du jeu. Ce hook nécessite une intégration et une validation distinctes ; aucune
+clé LAN inventée, désactivation de Steam ou modification de `profile.bin` n'est
+appliquée. Le LAN se sélectionne donc encore dans le menu du jeu.
+
+Les fichiers fournis contiennent trois champs utiles pour étudier le nom :
+
+- `WillowGame.ini`, `[DefaultPlayer]` : `Name=Player`.
+- `WillowGame.ini`, `[Engine.PlayerController]` : `bOverrideOnlineProfileName=false`.
+- `WillowEngine.ini`, `[URL]` : `Name=Player`.
+
+Ce sont des candidats pour un nom local. Leur effet sur le pseudo réseau affiché
+reste à confirmer avec la version du jeu et son fournisseur de profil en ligne.
+Le configurateur ne modifie pas encore ces champs et ne propose pas de réglage
+de nom Borderlands 2 non validé.
 
 ## Stockage et entretien automatique (version de test)
 

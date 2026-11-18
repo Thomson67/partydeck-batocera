@@ -32,6 +32,13 @@ with tempfile.TemporaryDirectory() as folder:
     assert profile['adapter']=='borderlands2'
     save_profile(root,rom,profile)
     assert read_profile(root,rom)['borderlands2']==bl2.defaults()
+    legacy=dict(windowed_fullscreen=False,fit_resolution=False,config='../old.ini',preset='keep',physx='keep')
+    assert bl2.validate(legacy)==bl2.defaults()
+    old=defaults(rom);old['borderlands2']=legacy
+    save_profile(root,rom,old)
+    assert read_profile(root,rom)['borderlands2']==bl2.defaults()
+    forced=bl2.overrides(legacy,960,1080)
+    assert forced['SystemSettings']['WindowedFullscreen']=='True' and forced['SystemSettings']['ResX']==960
     for index,(width,height) in enumerate(((1920,540),(960,1080),(960,540),(1280,720)),1):
         player=root/f'j{index}'
         prefix=player/'prefix'
@@ -57,6 +64,10 @@ with tempfile.TemporaryDirectory() as folder:
             bl2.apply_config(prefix,payload,private_binds=())
         assert 'MaxShadowResolution=4096' in path.read_text()
         assert 'MaxAnisotropy=16' in path.read_text() and 'ViewDistance=3' in path.read_text()
+        for mode,expected in (('on','True'),('off','False'),('keep','False')):
+            payload['settings']['vsync']=mode
+            bl2.apply_config(prefix,payload,private_binds=())
+            assert 'UseVsync='+expected in path.read_text()
         assert saves.read_bytes()==b'PROGRESSION'
         assert len(list((player/'borderlands2-before').glob('*.ini')))==1
         assert list((player/'borderlands2-before').glob('*.ini'))[0].read_bytes()==ORIGINAL.encode()
@@ -85,17 +96,17 @@ with tempfile.TemporaryDirectory() as folder:
     bl2.apply_config(prefix,payload,private_binds=())
     assert 'WindowedFullscreen=True' in reused_ini.read_text()
     # UTF-16 configs and case-insensitive existing Windows paths stay usable.
-    explicit=prefix/'Custom'/'WILLOWENGINE.INI';explicit.parent.mkdir()
+    original_ini=user/'Documents/My Games/Borderlands 2/WillowGame/Config/WillowEngine.ini'
+    explicit=original_ini.with_name('WILLOWENGINE.INI');original_ini.rename(explicit)
     explicit.write_bytes(codecs.BOM_UTF16_LE+ORIGINAL.encode('utf-16-le'))
-    payload['settings']['config']='custom/willowengine.ini'
-    # Test explicit path separately from the unrelated cached prefixes.
+    # Test automatic discovery separately from the unrelated cached prefixes.
     shutil_path=player/'umu-private'
     import shutil
     shutil.rmtree(shutil_path)
     bl2.apply_config(prefix,payload,private_binds=())
     assert explicit.read_bytes().startswith(codecs.BOM_UTF16_LE)
     assert 'WindowedFullscreen=True' in explicit.read_bytes().decode('utf-16')
-    for key,value in (('preset','ultra-invalid'),('config','../solo.ini'),('config','/tmp/a.ini')):
+    for key,value in (('preset','ultra-invalid'),('vsync','invalid'),('physx','invalid')):
         try:
             bl2.validate(dict(bl2.defaults(),**{key:value}))
             raise AssertionError('invalid options accepted')
@@ -107,8 +118,8 @@ with tempfile.TemporaryDirectory() as folder:
     source='#!/bin/bash\nset -e\n'
     for name in ('play_wine','play_pc','play_squashfs'):
         source+=name+'() {\n if [[ -n "${WINE_LANG:-}" ]]; then\n'
-        source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q WindowedFullscreen=True Custom/WILLOWENGINE.INI)\n else\n'
-        source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q WindowedFullscreen=True Custom/WILLOWENGINE.INI)\n fi\n}\n'
+        source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q WindowedFullscreen=True "drive_c/users/root/Documents/My Games/Borderlands 2/WillowGame/Config/WILLOWENGINE.INI")\n else\n'
+        source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q WindowedFullscreen=True "drive_c/users/root/Documents/My Games/Borderlands 2/WillowGame/Config/WILLOWENGINE.INI")\n fi\n}\n'
     source+=f'WINEPOINT={shlex.quote(str(prefix))}\nWINE_DIR=.\nplay_squashfs\n'
     native=player/'native.sh'
     hook=[sys.executable,str(Path(bl2.__file__)),str(payload_file)]

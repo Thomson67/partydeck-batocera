@@ -4,7 +4,7 @@ import codecs
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -24,20 +24,19 @@ def matches(rom):
 
 
 def defaults():
-    return dict(windowed_fullscreen=True, fit_resolution=True, preset='keep', physx='keep', config='auto')
+    return dict(preset='keep', vsync='keep', physx='keep')
 
 
 def validate(options):
-    if (not isinstance(options, dict) or type(options.get('windowed_fullscreen')) is not bool
-            or type(options.get('fit_resolution')) is not bool or options.get('preset') not in PRESETS
-            or options.get('physx') not in ('keep', '0', '1', '2')
-            or not isinstance(options.get('config'), str)):
+    if not isinstance(options,dict):
         raise ValueError(tr('Réglages Borderlands 2 invalides.'))
-    relative = PurePosixPath(options['config'])
-    if options['config'] != 'auto' and (relative.is_absolute() or '..' in relative.parts
-            or relative.suffix.lower() != '.ini' or '\\' in str(relative) or ':' in str(relative)):
-        raise ValueError(tr('INI Borderlands 2 : auto ou chemin .ini relatif au préfixe, sans « .. ».'))
-    return options
+    # Old profiles may contain toggles and a manually specified INI path. The
+    # display policy and config discovery are now mandatory, not user options.
+    normalized = {key:options.get(key,value) for key,value in defaults().items()}
+    if (normalized['preset'] not in PRESETS or normalized['vsync'] not in ('keep','on','off')
+            or normalized['physx'] not in ('keep','0','1','2')):
+        raise ValueError(tr('Réglages Borderlands 2 invalides.'))
+    return normalized
 
 
 def patch_ini(text, updates):
@@ -80,16 +79,11 @@ def patch_ini(text, updates):
 
 
 def overrides(options, width, height):
-    validate(options)
-    values, startup = {}, {}
-    if options['windowed_fullscreen']:
-        values.update(Fullscreen='False', WindowedFullscreen='True')
-        startup['StartupFullscreen'] = 'False'
-    if options['fit_resolution']:
-        if type(width) is not int or type(height) is not int or not (64 <= width <= 32768 and 64 <= height <= 32768):
-            raise ValueError(tr('Dimensions de la fenêtre Borderlands 2 indisponibles.'))
-        values.update(ResX=width, ResY=height)
-        startup.update(StartupResolutionX=width, StartupResolutionY=height)
+    options = validate(options)
+    if type(width) is not int or type(height) is not int or not (64 <= width <= 32768 and 64 <= height <= 32768):
+        raise ValueError(tr('Dimensions de la fenêtre Borderlands 2 indisponibles.'))
+    values = dict(Fullscreen='False',WindowedFullscreen='True',ResX=width,ResY=height,bAutoDetectSettings='False')
+    startup = dict(StartupFullscreen='False',StartupResolutionX=width,StartupResolutionY=height)
     preset = options['preset']
     if preset != 'keep':
         level = PRESETS.index(preset)-1
@@ -105,16 +99,10 @@ def overrides(options, width, height):
                       MaxWholeSceneDominantShadowResolution=(512,1024,2048,4096)[level])
     if options['physx'] != 'keep':
         values['PhysXLevel'] = options['physx']
-    if values:
-        values['bAutoDetectSettings'] = 'False'
-    result = {}
-    if values:
-        result['SystemSettings'] = values
-    if startup:
-        result['WinDrv.WindowsClient'] = startup
-    if options['windowed_fullscreen']:
-        result['WillowGame.WillowGameEngine'] = dict(bPauseLostFocusWindowed='False')
-    return result
+    if options['vsync'] != 'keep':
+        values['UseVsync'] = 'True' if options['vsync']=='on' else 'False'
+    return {'SystemSettings':values,'WinDrv.WindowsClient':startup,
+            'WillowGame.WillowGameEngine':dict(bPauseLostFocusWindowed='False')}
 
 
 def safe_path(path, allowed):
@@ -135,13 +123,7 @@ def child(directory, name):
     return directory / name
 
 
-def targets(prefix, options, allowed):
-    if options['config'] != 'auto':
-        target = prefix
-        for part in PurePosixPath(options['config']).parts:
-            safe_path(target, allowed)
-            target = child(target, part)
-        return [safe_path(target, allowed)]
+def targets(prefix, allowed):
     users = safe_path(child(child(prefix, 'drive_c'), 'users'), allowed)
     excluded = {'public', 'default', 'default user', 'all users'}
     candidates = [p for p in users.iterdir() if p.name.casefold() not in excluded
@@ -211,7 +193,7 @@ def apply_config(prefix, payload, private_binds=PRIVATE_BINDS):
                         prefixes.append(candidate)
     paths = []
     for candidate in dict.fromkeys(prefixes):
-        paths.extend(targets(candidate, options, allowed))
+        paths.extend(targets(candidate, allowed))
     # Validate and prepare every path before touching any player configuration.
     edits = []
     for path in dict.fromkeys(paths):

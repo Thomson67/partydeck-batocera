@@ -68,11 +68,9 @@ def fields(tab, adapter='standard'):
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2'])]
     if adapter == 'borderlands2':
-        return [('borderlands2.windowed_fullscreen',tr('Forcer le plein écran fenêtré'),[True,False]),
-                ('borderlands2.fit_resolution',tr('Résolution adaptée au partage'),[True,False]),
-                ('borderlands2.preset',tr('Préréglage graphique'),list(PRESETS)),
-                ('borderlands2.physx',tr('Qualité PhysX'),['keep','0','1','2']),
-                ('borderlands2.config',tr('Fichier INI (auto ou relatif au préfixe)'),None)]
+        return [('borderlands2.preset',tr('Préréglage graphique'),list(PRESETS)),
+                ('borderlands2.vsync',tr('VSync'),['keep','on','off']),
+                ('borderlands2.physx',tr('Qualité PhysX'),['keep','0','1','2'])]
     if tab == 1:
         return [('anchor.enabled', tr('Connexion automatique Anchor'), [False, True]),
                 ('anchor.room', tr('Room ID commun'), None), ('anchor.host', tr('Serveur'), None),
@@ -126,6 +124,8 @@ def label_value(key, value):
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2'}.get(value, value)
     if key == 'borderlands2.preset':
         return tr(PRESET_LABELS[value])
+    if key == 'borderlands2.vsync':
+        return {'keep':tr('Conserver'), 'on':tr('Activé'), 'off':tr('Désactivé')}[value]
     if key == 'borderlands2.physx':
         return {'keep':tr('Conserver'), '0':tr('Bas'),'1':tr('Moyen'),'2':tr('Élevé')}[value]
     if key in ('anchor.locations', 'anchor.teleport'):
@@ -983,7 +983,7 @@ class App:
                     self.pg.draw.line(self.canvas, (100,222,237), (430+position*241,291), (630+position*241,291), 3)
                 self.text(title, 434+position*241, 258, 20)
             if self.tab:
-                subtitle = (tr('Borderlands 2 · réglages communs · PhysX indépendant du préréglage') if self.model.data['adapter'] == 'borderlands2' else
+                subtitle = (tr('Borderlands 2 · affichage automatique · VSync et PhysX indépendants') if self.model.data['adapter'] == 'borderlands2' else
                             tr('SoH / Anchor · réglages communs aux joueurs de cette session') if self.model.data['adapter'] == 'soh-anchor'
                             else tr('SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages'))
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)

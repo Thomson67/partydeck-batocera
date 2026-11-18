@@ -64,6 +64,10 @@ with tempfile.TemporaryDirectory() as folder:
     assert ('save','Save') in context_hints('main','ps')
     assert label_value('input','clavier-j1')=='Keyboard/mouse · P1'
     assert label_value('borderlands2.preset','medium')=='Medium'
+    assert label_value('borderlands2.vsync','on')=='Enabled'
+    assert label_value('borderlands2.vsync','off')=='Disabled'
+    assert label_value('borderlands2.vsync','keep')=='Keep current'
+    assert [key for key,_,_ in fields(1,'borderlands2')]==['borderlands2.preset','borderlands2.vsync','borderlands2.physx']
     assert label_value('anchor.locations',1)=='Team only'
     assert label_value('anchor.graphics.texture_filter',0)=='N64 three-point'
     assert label_value('anchor.names.0','Enregistrer')=='Enregistrer'

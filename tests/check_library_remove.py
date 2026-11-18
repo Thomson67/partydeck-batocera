@@ -91,8 +91,16 @@ with tempfile.TemporaryDirectory() as folder:
     assert app.available_tabs()==(0,1)
     app.action('next');assert app.tab==1
     assert any(key=='borderlands2.preset' for key,_,_ in app.current_fields())
-    app.row=2;app.action('right')
+    app.row=0;app.action('right')
     assert app.model.data['borderlands2']['preset']=='high'  # retained medium -> high
+    app.row=1;app.action('right')
+    assert app.model.data['borderlands2']['vsync']=='on'
+    app.action('right')
+    assert app.model.data['borderlands2']['vsync']=='off'
+    with patch('partydeck_couch.subprocess.run',return_value=Mock(returncode=0)):
+        assert app.save()
+    assert profiles.read_profile(base,game)['borderlands2']['vsync']=='off'
+    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx'}
     app.draw()
     app.row=len(app.current_fields())+2;app.action('ok')
     assert app.removal and app.removal['common'] and app.help_context()=='remove'

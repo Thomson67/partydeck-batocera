@@ -49,7 +49,7 @@ def validate(data, rom):
         validate_anchor(data.get("anchor"))
     if data.get('adapter') == 'borderlands2':
         from partydeck_borderlands2 import validate as validate_bl2
-        validate_bl2(data.get('borderlands2'))
+        data['borderlands2'] = validate_bl2(data.get('borderlands2'))
     return data
 
 
