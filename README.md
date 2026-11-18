@@ -152,6 +152,85 @@ mode d'entrées pour actualiser son lanceur.
 Les données des anciens essais dans Ports restent accessibles via leurs
 lanceurs. Une entrée Windows Party commence avec ses propres profils.
 
+## Stockage et entretien automatique (version de test)
+
+Dans la bibliothèque du configurateur, descendez jusqu'au bouton **Stockage**,
+puis validez. Cet écran reste utilisable à la manette et au clavier. L'analyse
+et le nettoyage se font en arrière-plan pour conserver une interface réactive.
+Il affiche les volumes occupés par jeu, triés du plus volumineux au plus petit,
+ainsi que l'espace libre. **LB/RB**, **L1/R1** ou **PgUp/PgDn** parcourent les jeux
+par pages de trois. Le bilan inclut les anciens essais `coop` et les données
+sans profil dans ses totaux, sans créer artificiellement des entrées de jeu.
+
+| Réglage global | Valeur initiale |
+| --- | --- |
+| Entretien automatique | Activé |
+| Caches cumulés | 2 Gio |
+| Journaux cumulés | 128 Mio |
+| Journaux conservés | 20 au maximum, selon le budget total |
+| Taille d'un journal fermé | 8 Mio, fin conservée |
+| Espace libre nécessaire avant lancement | 2 Gio |
+| Journal Proton détaillé | Désactivé |
+
+Ces budgets sont **communs à tous les jeux et joueurs**, pas multipliés par
+leur nombre. Les réglages affichés dans l'écran Stockage sont
+modifiables par gauche/droite ; Entrée/Croix/A permet aussi de saisir les
+valeurs numériques avec le clavier virtuel. Les réglages sont enregistrés
+automatiquement dans `/userdata/system/partydeck-test/storage.json` et sont
+conservés lors des mises à jour. `log_keep` et `log_file_mib` sont modifiables
+directement dans ce JSON. Une valeur de 0 pour un budget ne conserve aucun
+fichier éligible de cette catégorie ; 0 pour `reserve_mib` désactive le seuil.
+
+L'entretien intervient avant et après les sessions Wine Windows Party et lors
+des vérifications du lanceur. Il supprime d'abord les caches et journaux les
+plus anciens lorsque leur budget est dépassé. **Nettoyer** applique ces règles ;
+**Vider les caches** supprime tous les fichiers de cache éligibles et applique
+la rétention habituelle des journaux, sans changer les limites enregistrées.
+Les caches seront reconstruits et un prochain lancement pourra être plus lent.
+Les restes d'installation identifiés de plus de 24 heures sont aussi supprimés.
+Le `/tmp` privé des instances est déjà temporaire et disparaît avec leur espace
+de noms ; aucun nettoyage générique des dossiers Temp des jeux n'est effectué.
+
+Le nettoyage ne touche pas aux ROMs, sauvegardes, réglages de jeu, préfixes Wine,
+surcouches persistantes ou copies UMU privées. La catégorie **Persistant**
+comprend donc plus que la seule progression ; **Runtime** comprend les données
+Wine/UMU privées qui ne sont pas identifiées comme des caches ou journaux.
+Les liens symboliques et montages imbriqués ne sont pas parcourus. Le bilan
+utilise les blocs réellement alloués aux fichiers et ne compte pas deux fois
+les liens physiques rencontrés ; il ignore les cibles des liens symboliques,
+les montages séparés et l'espace des répertoires eux-mêmes.
+
+Un verrou empêche le nettoyage pendant une session ou une installation. Les
+instances encore actives après interruption sont également détectées. Les
+fichiers ouverts, liés physiquement ou modifiés depuis moins d'une minute sont
+conservés : les budgets sont des objectifs d'entretien **hors jeu**, pas des
+quotas. En mode diagnostic, un journal peut donc grossir pendant une partie.
+La variable explicite `PROTON_LOG` reste prioritaire sur le réglage de l'interface.
+
+Avant le lancement Wine, les systèmes de fichiers qui hébergent le runtime et
+les sauvegardes sont vérifiés. Si l'espace libre est inférieur au seuil, un
+entretien automatique tente aussi de vider les caches éligibles. Si cela ne
+suffit pas, le jeu n'est pas lancé ; depuis le configurateur, un message reste
+affiché sans fermer l'interface. Le seuil ne réserve pas réellement de blocs
+et ne garantit pas qu'un autre programme ne remplira pas le disque en cours
+de partie. Les données persistantes ne sont ni plafonnées ni supprimées pour
+atteindre ce seuil ; certains jeux peuvent toujours nécessiter beaucoup d'espace.
+
+Depuis SSH, sans session graphique requise :
+
+```bash
+/userdata/system/partydeck-test/partydeck stockage bilan
+/userdata/system/partydeck-test/partydeck stockage reglages
+/userdata/system/partydeck-test/partydeck stockage nettoyer
+/userdata/system/partydeck-test/partydeck stockage purger-caches
+```
+
+Tests locaux : `python3 tests/check_storage.py` (fichiers réels temporaires,
+liens, montages simulés, fichiers ouverts, verrous, manque d'espace, commande SSH
+et diagnostic Proton) et `python3 tests/check_storage_ui.py` (navigation,
+traitement asynchrone, réglages, refus et annulation du lancement avec SDL simulé).
+L'intégration de cette fonction reste à confirmer sur Batocera v43/v44.
+
 ## Réglages propres à SoH / Anchor (version de test)
 
 Dans **Configurer Windows Party**, sélectionnez le jeu puis **SoH / Anchor**.

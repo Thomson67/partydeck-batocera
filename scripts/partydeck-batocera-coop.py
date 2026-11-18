@@ -17,6 +17,8 @@ import time
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote_to_bytes
 
+from partydeck_storage import session as storage_session, settings as storage_settings
+
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
 PARTY_ROMS = Path("/userdata/roms/windows-party")
@@ -342,7 +344,7 @@ def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=N
         shared = os.environ.get("PRESSURE_VESSEL_FILESYSTEMS_RW", "")
         shared = f"{shared}:{proton_logs}" if shared else str(proton_logs)
         args.extend(["--setenv", "PRESSURE_VESSEL_FILESYSTEMS_RW", shared,
-                     "--setenv", "PROTON_LOG", os.environ.get("PROTON_LOG", "1"),
+                     "--setenv", "PROTON_LOG", os.environ.get("PROTON_LOG", "1" if storage_settings(player.parents[2])['diagnostic'] else "0"),
                      "--setenv", "PROTON_LOG_DIR", str(proton_logs)])
     for item in player_paths(player, saves):
         args.extend(item)
@@ -458,6 +460,12 @@ def handle_exit(signum, _frame):
 
 
 def run_session(app, base, original, target, count, split, input_mode, party=False):
+    # Keep maintenance and the whole process lifetime mutually exclusive.
+    with storage_session(base, PARTY_SAVES):
+        return _run_session(app, base, original, target, count, split, input_mode, party)
+
+
+def _run_session(app, base, original, target, count, split, input_mode, party=False):
     for tool in ("batocera-wine", "xdotool", "mount"):
         if not shutil.which(tool):
             raise RuntimeError(f"Commande indisponible : {tool}")

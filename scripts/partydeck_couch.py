@@ -1,10 +1,12 @@
 """Windows Party's controller-first configurator. Original Pygame implementation."""
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import json
 import math
 import os
 from pathlib import Path
 import subprocess
+import textwrap
 import time
 import xml.etree.ElementTree as ET
 
@@ -12,6 +14,8 @@ from partydeck_profiles import (defaults, read_profile, save_profile, profile_pa
                                validate, ROM_TYPES)
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOLUME_FIELDS
 from partydeck_catalog import CommonGame, COMMON, discover, matches_soh, is_rom
+from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
+                               snapshot as storage_snapshot, clean as clean_storage, prepare_launch, human)
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'tabs':'PgUp/PgDn'}
@@ -29,6 +33,10 @@ def control_label(action, mode):
 
 
 def context_hints(context, mode, has_tabs=True):
+    if context == 'storage-error':
+        return [('back','Fermer')]
+    if context == 'storage':
+        return [('ok','Choisir'), ('back','Retour'), ('tabs','Jeux par taille')]
     if context == 'confirm':
         return [('ok','Enregistrer'), ('search','Abandonner'), ('back','Annuler')]
     if context == 'missing':
@@ -351,6 +359,14 @@ class App:
         self.pending = None
         self.missing = None
         self.pending_common = None
+        self.storage_open = False
+        self.storage_row = self.storage_page = 0
+        self.storage_result = None
+        self.storage_future = self.storage_pool = None
+        self.storage_task = None
+        self.launch_pending = False
+        self.launch_error = None
+        self.storage_config = None
         self.logo = None
         logo = Path(base) / 'assets/windows-party.png'
         if logo.exists():
@@ -428,8 +444,132 @@ class App:
         self.text(label, x+label_offset, y+3, 20, width=max(0,width-label_offset))
 
     def help_context(self):
-        return ('confirm' if self.modal else 'missing' if self.missing is not None else
-                'keyboard' if self.keyboard else 'browser' if self.browser is not None else 'main')
+        return ('storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
+                'keyboard' if self.keyboard else 'browser' if self.browser is not None else
+                'storage' if self.storage_open else 'main')
+
+    def storage_job(self, task='scan'):
+        if self.storage_future is not None:
+            self.toast('Analyse / nettoyage en cours…')
+            return
+        if self.storage_pool is None:
+            self.storage_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='party-storage')
+        self.storage_task = task
+        if task == 'launch':
+            self.storage_future = self.storage_pool.submit(prepare_launch, self.model.base)
+        elif task == 'scan':
+            self.storage_future = self.storage_pool.submit(storage_snapshot, self.model.base)
+        else:
+            self.storage_future = self.storage_pool.submit(clean_storage, self.model.base, task == 'purge')
+
+    def poll_storage(self):
+        if self.storage_future is None or not self.storage_future.done():
+            return
+        future, task = self.storage_future, self.storage_task
+        self.storage_future = None
+        try:
+            result = future.result()
+            if task == 'launch':
+                if self.launch_pending:
+                    self.accepted = True
+                    self.launch_requested = not self.single
+                    self.running = False
+                self.launch_pending = False
+            elif task == 'scan':
+                self.storage_result = result
+            else:
+                self.toast(f"{human(result['freed'])} libérés · {len(result['errors'])} erreurs · sauvegardes conservées")
+                self.storage_job()
+        except (OSError, ValueError, RuntimeError) as error:
+            self.launch_pending = False
+            if task == 'launch':
+                self.launch_error = str(error)
+            else:
+                self.toast(str(error))
+
+    def open_storage(self):
+        try:
+            self.storage_config = storage_settings(self.model.base)
+        except (OSError, ValueError) as error:
+            self.toast(str(error))
+            return
+        self.storage_open, self.storage_row, self.storage_page = True, 0, 0
+        self.storage_job()
+
+    def storage_action(self, action):
+        if action == 'back':
+            self.storage_open = False
+            return
+        if action in ('prev', 'next'):
+            count = len(self.storage_result['games']) if self.storage_result else 0
+            pages = max(1, (count + 2) // 3)
+            self.storage_page = (self.storage_page + (1 if action == 'next' else -1)) % pages
+        elif action in ('up', 'down'):
+            self.storage_row = (self.storage_row + (1 if action == 'down' else -1)) % 8
+        elif action in ('left', 'right', 'ok'):
+            if self.storage_row >= 5:
+                if action == 'ok':
+                    self.storage_job(('clean', 'purge', 'scan')[self.storage_row-5])
+                return
+            key = ('auto_clean', 'cache_mib', 'logs_mib', 'reserve_mib', 'diagnostic')[self.storage_row]
+            value = self.storage_config[key]
+            def apply(value):
+                candidate = dict(self.storage_config, **{key: value})
+                save_storage_settings(self.model.base, candidate)
+                self.storage_config = candidate
+            try:
+                if type(value) is bool:
+                    apply(not value)
+                elif action == 'ok':
+                    def entered(text):
+                        apply(int(text))
+                    self.edit('Valeur en Mio (0 = ' + ('seuil désactivé' if key == 'reserve_mib' else 'aucune rétention') + ')', value, entered)
+                else:
+                    step = {'cache_mib':256, 'logs_mib':32, 'reserve_mib':512}[key]
+                    apply(max(0, min(1048576, value + (-step if action == 'left' else step))))
+            except (OSError, ValueError) as error:
+                self.toast(str(error))
+
+    def draw_storage(self):
+        self.text('STOCKAGE WINDOWS PARTY', 416, 161, 28, width=960)
+        result = self.storage_result
+        if result:
+            self.text('Occupé : ' + human(result['total']) + ' · hors jeux Windows d’origine', 418, 204, 20, width=960)
+            self.text(' · '.join(human(d['free']) + ' libres sur ' + d['path'] for d in result['disks']),
+                      418, 237, 16, (159,213,227), 955)
+            c = result['categories']
+            self.text(f"Persistant {human(c['persistent'])} · Runtime {human(c['runtime'])} · Installation {human(c['installation'])}",
+                      418, 266, 16, width=955)
+            self.text(f"Caches {human(c['cache'])} · Journaux {human(c['logs'])}", 418, 290, 16, width=955)
+        else:
+            self.text('Analyse du disque en cours…', 418, 221, 20, width=955)
+        rows = [('auto_clean','Entretien automatique'), ('cache_mib','Caches cumulés (Mio)'),
+                ('logs_mib','Journaux cumulés (Mio)'), ('reserve_mib','Espace libre avant lancement (Mio)'),
+                ('diagnostic','Diagnostic Proton détaillé')]
+        for index, (key, title) in enumerate(rows):
+            y = 331+index*38
+            focused = self.storage_row == index
+            self.box((410,y-5,986,35), (38,64,86) if focused else (25,33,50), (90,210,229) if focused else None)
+            self.text(title,430,y,20,width=640)
+            value = self.storage_config[key]
+            self.text('‹ ' + (('Activé' if value else 'Désactivé') if type(value) is bool else str(value)) + ' ›',
+                      1130,y,20,(144,223,234),240)
+        for index, title in enumerate(('NETTOYER', 'VIDER LES CACHES', 'ACTUALISER')):
+            focused = self.storage_row == index+5
+            self.box((416+index*327,533,314,40),(35,75,92), (134,236,238) if focused else None)
+            self.text(title,430+index*327,543,16,width=290)
+        self.text('Sauvegardes, préfixes et réglages conservés. Limites appliquées hors jeu.',418,588,16,width=960)
+        if self.storage_future is not None:
+            self.text('Analyse en cours…' if self.storage_task == 'scan' else 'Nettoyage en cours…',418,614,16,(141,220,234),950)
+        else:
+            self.text('JEUX PAR TAILLE · progression et réglages inclus dans « persistant »',418,614,16,width=950)
+        if result:
+            for index, game in enumerate(result['games'][self.storage_page*3:self.storage_page*3+3]):
+                y = 648+index*45
+                self.text(game['name'],430,y,20,width=730)
+                self.text(human(game['total']),1200,y,20,width=180)
+                self.text(f"Persistant {human(game['persistent'])} · Runtime {human(game['runtime'])} · Caches {human(game['cache'])} · Logs {human(game['logs'])}",
+                          430,y+25,16,(148,169,191),945)
 
     def volume(self, key):
         value = get(self.model.data, key)
@@ -509,10 +649,12 @@ class App:
         return False
 
     def launch(self):
+        if self.storage_future is not None:
+            self.toast('Attendez la fin de l’analyse / du nettoyage.')
+            return
         if self.save():
-            self.accepted = True
-            self.launch_requested = not self.single
-            self.running = False
+            self.launch_pending = True
+            self.storage_job('launch')
 
     def browse(self, directory=Path('/userdata/roms/windows')):
         try:
@@ -533,12 +675,30 @@ class App:
         self.pane, self.tab, self.row = 'settings', 0, 0
 
     def action(self, action):
+        if self.launch_pending and action in ('back','quit'):
+            self.launch_pending = False
+            if action == 'back':
+                self.poll_storage()
+                self.toast('Lancement annulé.')
+                return
+        self.poll_storage()
+        if self.launch_pending and action != 'quit':
+            if action == 'back':
+                self.launch_pending = False
+                self.toast('Lancement annulé.')
+            return
         if action == 'quit':
+            self.launch_pending = False
+            self.accepted = False
             self.keyboard = None
             self.pg.key.stop_text_input()
             self.browser, self.missing = None, None
             self.launch_requested = False
             self.switch(lambda: setattr(self, 'running', False))
+            return
+        if self.launch_error:
+            if action in ('ok', 'back'):
+                self.launch_error = None
             return
         if self.missing is not None:
             if action == 'ok':
@@ -562,6 +722,9 @@ class App:
                 self.pending()
             elif action == 'back':
                 self.modal = None
+            return
+        if self.storage_open:
+            self.storage_action(action)
             return
         if self.browser is not None:
             if action == 'back':
@@ -600,14 +763,17 @@ class App:
             self.tab = available[(current + (1 if action == 'next' else -1)) % len(available)]
             self.row, self.pane = 0, 'settings'
         elif self.pane == 'library':
-            if action in ('up', 'down') and self.model.rows:
-                index = (self.library + (1 if action == 'down' else -1)) % len(self.model.rows)
+            if action in ('up', 'down'):
+                index = (self.library + (1 if action == 'down' else -1)) % (len(self.model.rows)+1)
                 def select():
                     self.library = index
-                    self.model.select(self.model.rows[index])
-                self.switch(select)
+                    if index < len(self.model.rows):
+                        self.model.select(self.model.rows[index])
+                select() if index == len(self.model.rows) else self.switch(select)
             elif action in ('ok', 'right'):
-                if isinstance(self.model.selected, CommonGame):
+                if self.library == len(self.model.rows):
+                    self.open_storage()
+                elif isinstance(self.model.selected, CommonGame):
                     self.missing = self.model.selected
                 elif self.model.data:
                     if not is_rom(self.model.rom):
@@ -661,6 +827,7 @@ class App:
         self.library, self.pane = 0, 'library'
 
     def draw(self):
+        self.poll_storage()
         if self.tab not in self.available_tabs():
             self.tab, self.row = 0, 0
         self.canvas.blit(self.background, (0,0))
@@ -673,19 +840,24 @@ class App:
                              (int(self.logo.get_width()*factor), int(self.logo.get_height()*factor))), (1110, 35))
         else:
             self.text('CONFIGURATEUR', 1100, 60, 20, (117, 213, 230), 280)
-        self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' else None)
+        self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open else None)
         self.text('BIBLIOTHÈQUE', 46, 163, 20, (122, 209, 229))
         start_label = control_label('add', self.input_mode)
         self.text(f'{len(self.model.rows)} jeux · {start_label} : ajouter', 46, 201, 16, (160, 174, 199))
-        offset = max(0, self.library - 8)
+        offset = max(0, min(self.library, len(self.model.rows)-1) - 8)
         for i, rom in enumerate(self.model.rows[offset:offset+10], offset):
             y = 246 + (i-offset)*50
-            selected = self.model.selected == rom
+            selected = self.model.selected == rom and self.library < len(self.model.rows)
             if selected:
                 self.box((38, y-7, 312, 45), (35, 75, 94), (72, 202, 222))
             self.text(rom.stem, 50, y, 20, width=284)
-        self.box((386, 142, 1030, 652), (20, 25, 40))
-        if self.model.data:
+        self.box((38,750,312,36), (35,75,94) if self.library == len(self.model.rows) else (29,39,55),
+                 (72,202,222) if self.library == len(self.model.rows) else None)
+        self.text('STOCKAGE',50,758,16,width=284)
+        self.box((386, 142, 1030, 652), (20, 25, 40), (76,197,219) if self.storage_open else None)
+        if self.storage_open:
+            self.draw_storage()
+        elif self.model.data:
             self.text(self.model.rom.stem, 416, 161, 28, width=950)
             self.text(('MODIFIÉ · non enregistré' if self.model.dirty() else 'Profil prêt') + '  ·  ' + self.model.rom.suffix,
                       418, 208, 16, (144, 160, 186))
@@ -749,6 +921,8 @@ class App:
             subtitle = ''
         elif context == 'browser':
             subtitle = navigation
+        elif context == 'storage':
+            subtitle = 'Gauche / droite : ajuster · ' + control_label('ok', self.input_mode) + ' : saisir / exécuter · réglages enregistrés automatiquement'
         if context == 'keyboard':
             subtitle = 'Saisie directe au clavier · Retour arrière : effacer' if self.input_mode == 'keyboard' else 'Maj, espace, effacement et caractères spéciaux sur le clavier virtuel'
         self.text(subtitle,
@@ -784,6 +958,16 @@ class App:
             self.box((210,310,1020,250), (36,45,65), (100,213,230))
             self.text('Plusieurs versions détectées' if self.missing.matches else 'Jeu non détecté dans Windows', 240,340,28,width=950)
             self.text('Vous devez disposer du jeu pour utiliser ce profil commun.',240,395,20,width=950)
+        if self.launch_pending:
+            self.box((230,340,980,210), (36,45,65), (100,213,230))
+            self.text('PRÉPARATION DE LA PARTIE',255,368,28,width=920)
+            self.text('Vérification de l’espace libre et entretien du stockage…',255,425,20,width=920)
+            self.text(control_label('back',self.input_mode) + ' : annuler',255,480,16,width=920)
+        if self.launch_error:
+            self.box((190,280,1060,360), (36,45,65), (244,164,128))
+            self.text('LANCEMENT INTERROMPU',220,308,28,width=1000)
+            for index, line in enumerate(textwrap.wrap(self.launch_error, width=85)[:6]):
+                self.text(line,220,365+index*34,20,width=1000)
         if time.monotonic() < self.notice_until:
             self.box((100, 743, 1240, 57), (48, 73, 91))
             self.text(self.notice, 120, 759, 20, width=1200)
@@ -827,6 +1011,8 @@ class App:
                 self.clock.tick(60)
         finally:
             self.pg.quit()
+            if self.storage_pool is not None:
+                self.storage_pool.shutdown(wait=False, cancel_futures=True)
         return self.accepted
 
 

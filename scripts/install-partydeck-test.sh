@@ -38,6 +38,7 @@ usage() {
 Usage :
   bash install-partydeck-test.sh installer
   /userdata/system/partydeck-test/partydeck-test verifier
+  /userdata/system/partydeck-test/partydeck stockage [bilan|nettoyer|purger-caches|reglages]
   /userdata/system/partydeck-test/partydeck-test preparer-port "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
   /userdata/system/partydeck-test/partydeck-test jouer "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
   /userdata/system/partydeck-test/partydeck-test preparer-coop "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
@@ -184,6 +185,7 @@ case "${1:-verifier}" in
     configurer) [[ $# -le 2 ]] || { usage; exit 2; } ;;
     profil) [[ $# -eq 2 ]] || { usage; exit 2; } ;;
     installer|verifier) [[ $# -le 1 ]] || die 'Argument inattendu.' ;;
+    stockage) [[ $# -le 2 ]] || { usage; exit 2; } ;;
     jouer|preparer-port) [[ $# -ge 2 && $# -le 3 ]] || { usage; exit 2; } ;;
     coop|preparer-coop|party|ajouter) [[ $# -ge 2 && $# -le 5 ]] || { usage; exit 2; } ;;
     *) usage; exit 2 ;;
@@ -202,6 +204,11 @@ if [[ ${1:-verifier} == configurer || ${1:-verifier} == profil ]]; then
     shift
     load_graphical_environment
     exec python3 "$profiles_helper" "$mode" "$base" "$@"
+fi
+
+if [[ ${1:-verifier} == stockage ]]; then
+    shift
+    exec python3 "$base/partydeck_storage.py" "${1:-bilan}" "$base"
 fi
 
 exec 9>"$base/test.lock"
@@ -223,6 +230,7 @@ if [[ ${1:-verifier} == installer ]]; then
     source_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
     source_helper="$source_dir/partydeck-batocera-coop.py"
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
+    [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py && -f $source_dir/partydeck_theme.py && -f $source_dir/../assets/windows-party.png && -f $source_dir/../templates/soh-common.json ]] ||
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
@@ -261,6 +269,11 @@ if [[ ${1:-verifier} == preparer-port ]]; then
     printf 'Entrée enregistrée : %s\n' "$port"
     printf 'Actualisez les listes de jeux dans EmulationStation, puis lancez Ports → PartyDeck - Test.\n'
     exit 0
+fi
+
+if [[ -f $base/partydeck_storage.py && ${1:-verifier} != party && ${1:-verifier} != coop ]]; then
+    python3 "$base/partydeck_storage.py" _maintenance "$base" ||
+        printf 'Entretien stockage différé ; consultez le configurateur.\n' >&2
 fi
 
 log=$(mktemp "$base/logs/partydeck-$(date +%Y%m%d-%H%M%S)-XXXXXX")
@@ -303,6 +316,8 @@ if [[ ${1:-verifier} == installer ]]; then
     cp -- "$source_dir/partydeck_anchor.py" "$staging/partydeck_anchor.py"
     cp -- "$source_dir/partydeck_theme.py" "$staging/partydeck_theme.py"
     cp -- "$source_dir/partydeck_couch.py" "$staging/partydeck_couch.py"
+    cp -- "$source_dir/partydeck_storage.py" "$staging/partydeck_storage.py"
+    mv -fT -- "$staging/partydeck_storage.py" "$base/partydeck_storage.py"
     cp -- "$source_dir/partydeck_catalog.py" "$staging/partydeck_catalog.py"
     mv -fT -- "$staging/partydeck_catalog.py" "$base/partydeck_catalog.py"
     mv -fT -- "$staging/partydeck_couch.py" "$base/partydeck_couch.py"
@@ -451,4 +466,7 @@ if [[ $session == Xorg ]] && command -v unclutter-remote >/dev/null; then
         printf 'Impossible de réafficher le curseur Xorg via unclutter-remote.\n' >&2
     fi
 fi
+# The original PartyDeck GUI also owns caches while it is running.
+exec 8>"$base/storage.lock"
+flock -n 8 || die 'Une session ou un nettoyage Windows Party est déjà en cours.'
 "$appdir/AppRun" --exec "$executable"
