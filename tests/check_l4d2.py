@@ -135,15 +135,22 @@ with tempfile.TemporaryDirectory() as folder:
     assert (player/'l4d2-goldberg-identity.json').read_bytes()==identity_before
     batch=game/'start.bat'
     original_batch=b'@echo off\r\nstart /wait left4dead2.exe -novid +sv_lan 1\r\n'
-    assert batch.read_bytes().endswith(original_batch)
-    assert b'HKCU\\Software\\Valve\\Steam' in batch.read_bytes()
-    assert b'/v Language /t REG_SZ /d english /f' in batch.read_bytes()
-    assert batch.read_bytes().count(b'@rem Windows Party language begin')==1
-    assert l4d2.language_batch(l4d2.language_batch(original_batch.decode(),'french'),'keep')==original_batch.decode()
-    assert l4d2.language_batch(l4d2.language_batch(original_batch.decode(),'french'),'french')==l4d2.language_batch(original_batch.decode(),'french')
-    payload['settings']['language']='keep'
-    l4d2.apply_config(game,prefix,payload,private_binds=())
     assert batch.read_bytes()==original_batch
+    # Migration removes the previous private preamble for every language,
+    # preserving the exact original body and line endings; missing batches
+    # no longer prevent a native launch from selecting its own entrypoint.
+    for language in ('keep','french','english'):
+        old='@rem Windows Party language begin\r\n@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d french /f >nul\r\n@rem Windows Party language end\r\n'
+        batch.write_bytes(old.encode()+original_batch)
+        payload['settings']['language']=language
+        l4d2.apply_config(game,prefix,payload,private_binds=())
+        assert batch.read_bytes()==original_batch
+        l4d2.apply_config(game,prefix,payload,private_binds=())
+        assert batch.read_bytes()==original_batch
+    batch.unlink()
+    l4d2.apply_config(game,prefix,payload,private_binds=())
+    assert not batch.exists()
+    batch.write_bytes(original_batch)
     # A symlink to the solo launcher is refused before touching any config.
     batch.unlink();solo_batch=root/'solo-start.bat';solo_batch.write_bytes(original_batch);batch.symlink_to(solo_batch)
     before_users=[user.read_bytes() for user in user_configs]

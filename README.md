@@ -473,12 +473,12 @@ L'onglet **Options** / **Options** ajoute :
   défaut), ou choisir une langue. Le choix est appliqué à tous les joueurs dans
   `configs.user.ini`. Si `supported_languages.txt` existe, la langue choisie est
   ajoutée à cette liste privée pour éviter le repli silencieux vers l'anglais.
-  Le batch privé `start.bat` définit aussi `HKCU\Software\Valve\Steam` →
-  `Language` avant les commandes d'origine : ce réglage Windows/Steam vise la
-  langue des textes Source, distincte du seul réglage Goldberg. La commande
-  `reg add` s'exécute dans la même session Wine que le jeu, y compris avec UMU,
-  sans modifier la langue système de Batocera. Le bloc est remplacé à chaque
-  changement et retiré si l'on choisit « Conserver » (la valeur actuelle reste).
+  Le forçage Windows/Steam introduit dans la révision de test `1361c32` est
+  retiré à la suite d'un échec de lancement signalé. Le prochain démarrage
+  enlève uniquement le préambule ajouté à la copie privée de `start.bat`, sans
+  modifier ses commandes d'origine. L'absence de ce batch ne bloque plus le
+  profil. La langue des textes Source reste à diagnostiquer : le choix actuel
+  couvre Goldberg et ne garantit pas la langue de l'interface du jeu.
   Les fichiers de traduction/doublage doivent déjà être présents dans le jeu ;
   le configurateur ne télécharge pas de ressources linguistiques.
 - **Activer la manette en jeu** / **Enable gamepad in game** : activé par défaut.
@@ -498,10 +498,11 @@ de joueurs ; un fichier vidéo invalide est conservé et signalé.
 
 **English:** The Options tab adds game language (keep current by default) and
 gamepad activation (enabled by default). Language assets must already be
-installed. The private startup batch also sets Steam's Windows registry
-language in the actual Wine session before the original game commands, to
-cover Source's UI text language. Selecting Keep current removes that startup
-override and keeps the current registry value. Each launch forces borderless windowed rendering at the player's
+installed. The Windows/Steam registry startup override from test revision
+`1361c32` has been retired following a reported launch failure. Its exact private
+batch preamble is removed on the next launch; original commands are preserved,
+and a missing batch no longer blocks startup. Source UI language remains under
+investigation; the current option configures Goldberg only. Each launch forces borderless windowed rendering at the player's
 viewport resolution, including Gamescope's internal size. Existing quality
 settings, keyboard binds, startup scripts and networking commands are preserved.
 Only private player copies are updated; the solo installation is unchanged.
