@@ -1,5 +1,6 @@
 """Community configuration recipes, independent of the user's game files."""
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import re
@@ -17,7 +18,8 @@ class CommonGame:
         return self.name
 
 
-COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),)
+COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
+          CommonGame('borderlands2', 'Borderlands 2 · profil commun', 'borderlands2'))
 
 
 def is_rom(path):
@@ -31,7 +33,32 @@ def matches_soh(path):
     return bool(re.search(r'ship[\s_-]*of[\s_-]*harkinian|(?<![a-z0-9])soh(?![a-z0-9])', name))
 
 
-def discover(root):
+def recipe_for(rom, adapter=None):
+    from partydeck_borderlands2 import matches as matches_bl2
+    if adapter is not None:
+        return next((r for r in COMMON if r.adapter == adapter), None)
+    return COMMON[0] if matches_soh(rom) else COMMON[1] if matches_bl2(rom) else None
+
+
+def unlinked(base):
+    path = base/'catalog.json'
+    data = json.loads(path.read_text()) if path.exists() else {}
+    if not isinstance(data,dict):
+        raise ValueError('État du catalogue Windows Party invalide.')
+    ids = data.get('unlinked',[])
+    if not isinstance(ids,list) or any(i not in {r.id for r in COMMON} for i in ids):
+        raise ValueError('État du catalogue Windows Party invalide.')
+    return set(ids)
+
+
+def set_unlinked(base, recipe, value):
+    from partydeck_profiles import atomic_write
+    ids = unlinked(base)
+    ids.add(recipe.id) if value else ids.discard(recipe.id)
+    atomic_write(base/'catalog.json',json.dumps(dict(unlinked=sorted(ids)))+'\n')
+
+
+def discover(root, matcher=matches_soh):
     """Inspect names only; never enter Wine prefixes or mount/extract archives."""
     found = []
     for i, (folder, dirs, files) in enumerate(os.walk(root, followlinks=False)):
@@ -45,13 +72,13 @@ def discover(root):
             if name.startswith('.'):
                 continue
             if path.suffix.lower() in {'.wine', '.pc'}:
-                if matches_soh(path) and is_rom(path):
+                if matcher(path) and is_rom(path):
                     found.append(path)
             elif depth < 3:
                 keep.append(name)
         dirs[:] = keep
         for name in files:
             path = parent / name
-            if path.suffix.lower() == '.wsquashfs' and matches_soh(path) and is_rom(path):
+            if path.suffix.lower() == '.wsquashfs' and matcher(path) and is_rom(path):
                 found.append(path)
     return tuple(sorted(found, key=lambda p: str(p).casefold()))

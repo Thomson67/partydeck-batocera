@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Persistent Windows Party profiles and their optional graphical editor."""
 import hashlib
+import fcntl
 import html
 import json
 import os
@@ -22,8 +23,12 @@ def profile_path(base, rom):
 
 
 def defaults(rom):
-    return dict(version=1, rom=str(rom), players="auto", split="horizontal",
+    data = dict(version=1, rom=str(rom), players="auto", split="horizontal",
                 input="auto", configure_before_launch=False, keyboard_player=True)
+    from partydeck_borderlands2 import matches, defaults as bl2_defaults
+    if matches(rom):
+        data.update(adapter='borderlands2',borderlands2=bl2_defaults())
+    return data
 
 
 def validate(data, rom):
@@ -36,11 +41,14 @@ def validate(data, rom):
         raise ValueError(f"Profil Windows Party invalide pour {rom}")
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError("Option clavier comme joueur invalide.")
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor"):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2"):
         raise ValueError("Adaptateur Windows Party inconnu.")
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
         validate_anchor(data.get("anchor"))
+    if data.get('adapter') == 'borderlands2':
+        from partydeck_borderlands2 import validate as validate_bl2
+        validate_bl2(data.get('borderlands2'))
     return data
 
 
@@ -78,6 +86,38 @@ def prepare_profile(base, rom, count, split, input_mode):
     data = read_profile(base, rom) if path.exists() or path.is_symlink() else defaults(rom)
     data.update(players=count, split=split, input=input_mode)
     save_profile(base, rom, data)
+
+
+def remove_profile(base, rom, roms=None):
+    """Remove only our generated launcher and its settings; never ROM/save data."""
+    roms = PARTY_ROMS if roms is None else roms
+    with (base/'test.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError('Attendez la fin de la session ou de l’installation avant de retirer ce jeu.') from None
+        path = profile_path(base,rom)
+        if path.exists() or path.is_symlink():
+            read_profile(base,rom)
+        digest = hashlib.sha256(os.fsencode(rom)).hexdigest()[:10]
+        entry = roms/f'{rom.stem[:90]} [{digest}].sh'
+        if entry.is_symlink():
+            raise ValueError('Le lanceur est un lien utilisateur ; retrait refusé.')
+        if entry.exists():
+            lines = entry.read_text().splitlines()
+            command = shlex.split(lines[2]) if len(lines) == 3 else []
+            expected = ['exec',str(base/'partydeck-test'),'profil',str(rom)]
+            legacy = len(command)==7 and command[:4] == ['exec',str(base/'partydeck-test'),'party',str(rom)]
+            if len(lines)!=3 or lines[1]!=MARKER or (command!=expected and not legacy):
+                raise ValueError('Le lanceur a été personnalisé ; retrait automatique refusé.')
+        previous = entry.read_text() if entry.exists() else None
+        entry.unlink(missing_ok=True)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            if previous is not None:
+                atomic_write(entry,previous,0o755)
+            raise
 
 
 def yad(arguments):

@@ -134,7 +134,7 @@ def apply_config(directory, payload):
     print(f"Anchor J{index + 1} : configuration appliquée (connexion={settings['enabled']}).", flush=True)
 
 
-def instrument_native(source, hook):
+def instrument_native(source, hook, prefix_argument=False):
     # The native launcher selects/mounts the ROM and its saves before these cd
     # statements. Run the adapter synchronously there, before Wine/UMU starts.
     # Fail closed if a future Batocera changes this contract.
@@ -143,10 +143,11 @@ def instrument_native(source, hook):
     for name in ("play_wine", "play_pc", "play_squashfs"):
         bodies = [body for body in functions if body.startswith(name + "() {")]
         if len(bodies) != 1 or len(pattern.findall(bodies[0])) != 2:
-            raise RuntimeError(f"Lanceur batocera-wine non reconnu ({name}) : adaptateur Anchor refusé.")
-    rewritten, count = pattern.subn(lambda m: m[0] + shlex.join(hook) + ' "$PWD" && ', source)
+            raise RuntimeError(f"Lanceur batocera-wine non reconnu ({name}) : adaptateur de jeu refusé.")
+    arguments = ' "$PWD"' + (' "${WINEPOINT:-${GAMENAME}}"' if prefix_argument else '')
+    rewritten, count = pattern.subn(lambda m: m[0] + shlex.join(hook) + arguments + ' && ', source)
     if count < 6:
-        raise RuntimeError("Lanceur batocera-wine non reconnu : profil Anchor non appliqué. Aucune modification système effectuée.")
+        raise RuntimeError("Lanceur batocera-wine non reconnu : profil non appliqué. Aucune modification système effectuée.")
     return rewritten
 
 

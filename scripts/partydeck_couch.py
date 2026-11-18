@@ -11,9 +11,11 @@ import time
 import xml.etree.ElementTree as ET
 
 from partydeck_profiles import (defaults, read_profile, save_profile, profile_path,
-                               validate, ROM_TYPES)
+                               validate, ROM_TYPES, remove_profile, atomic_write)
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOLUME_FIELDS
-from partydeck_catalog import CommonGame, COMMON, discover, matches_soh, is_rom
+from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
+                              recipe_for, unlinked, set_unlinked)
+from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
                                snapshot as storage_snapshot, clean as clean_storage, prepare_launch, human)
 
@@ -33,6 +35,8 @@ def control_label(action, mode):
 
 
 def context_hints(context, mode, has_tabs=True):
+    if context == 'remove':
+        return [('ok','Confirmer'), ('back','Annuler')]
     if context == 'storage-error':
         return [('back','Fermer')]
     if context == 'storage':
@@ -52,14 +56,20 @@ KEYS = [list('azertyuiop'), list('qsdfghjklm'), list('wxcvbn0123'),
         list("'\";<>^~{}|"), ['Maj', 'Espace', 'Effacer', 'Vider', 'Valider']]
 
 
-def fields(tab):
+def fields(tab, adapter='standard'):
     if tab == 0:
         return [('players', 'Joueurs', ['auto', '1', '2', '3', '4']),
                 ('split', 'Partage de l’écran', ['horizontal', 'vertical']),
                 ('input', 'Attribution des contrôles', ['auto', 'clavier-j1', 'clavier-j2']),
                 ('keyboard_player', 'Clavier/souris utilisable comme joueur', [True, False]),
                 ('configure_before_launch', 'Configurer avant chaque lancement', [False, True]),
-                ('adapter', 'Profil du jeu', ['standard', 'soh-anchor'])]
+                ('adapter', 'Profil du jeu', ['standard', 'soh-anchor', 'borderlands2'])]
+    if adapter == 'borderlands2':
+        return [('borderlands2.windowed_fullscreen','Forcer le plein écran fenêtré',[True,False]),
+                ('borderlands2.fit_resolution','Résolution adaptée au partage',[True,False]),
+                ('borderlands2.preset','Préréglage graphique',list(PRESETS)),
+                ('borderlands2.physx','Qualité PhysX',['keep','0','1','2']),
+                ('borderlands2.config','Fichier INI (auto ou relatif au préfixe)',None)]
     if tab == 1:
         return [('anchor.enabled', 'Connexion automatique Anchor', [False, True]),
                 ('anchor.room', 'Room ID commun', None), ('anchor.host', 'Serveur', None),
@@ -104,7 +114,11 @@ def label_value(key, value):
     if type(value) is bool:
         return 'Activé' if value else 'Désactivé'
     if key == 'adapter':
-        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor'}.get(value, value)
+        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2'}.get(value, value)
+    if key == 'borderlands2.preset':
+        return PRESET_LABELS[value]
+    if key == 'borderlands2.physx':
+        return {'keep':'Conserver', '0':'Bas','1':'Moyen','2':'Élevé'}[value]
     if key in ('anchor.locations', 'anchor.teleport'):
         return ['Personne', 'Même équipe', 'Tous'][value]
     if key == 'anchor.pvp':
@@ -119,7 +133,7 @@ class Model:
         self.base, self.rom = Path(base), rom
         self.windows = windows
         self.selected = rom
-        self.detected = discover(windows)
+        self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2)}
         self.common_for_rom = {}
         self.data = None
         self.saved = None
@@ -132,24 +146,32 @@ class Model:
     def reload(self):
         self.rows = []
         self.common_for_rom = {}
-        registered_soh = False
+        registered = set()
         for path in sorted((self.base / 'profiles').glob('*.json')):
             data = json.loads(path.read_text())
             rom = Path(data['rom'])
             validate(data, rom)
-            registered_soh |= data.get('adapter') == 'soh-anchor' or matches_soh(rom)
+            recipe = recipe_for(rom,data.get('adapter')) or recipe_for(rom)
+            if recipe:
+                registered.add(recipe.id)
+            if recipe and data.get('adapter') == recipe.adapter:
+                self.common_for_rom[rom] = recipe
             if self.filter.casefold() in rom.stem.casefold():
                 self.rows.append(rom)
-        if not registered_soh:
-            recipe = COMMON[0]
-            if len(self.detected) == 1:
-                rom = self.detected[0]
+        detached = unlinked(self.base)
+        for recipe in COMMON:
+            if recipe.id in registered:
+                continue
+            found = self.detected[recipe.id]
+            if len(found) == 1 and recipe.id not in detached:
+                rom = found[0]
                 self.common_for_rom[rom] = recipe
                 if self.filter.casefold() in (rom.stem + recipe.name).casefold():
                     self.rows.append(rom)
             elif self.filter.casefold() in recipe.name.casefold():
-                self.rows.append(CommonGame(recipe.id, recipe.name, recipe.adapter, self.detected))
-        self.rows.sort(key=lambda p: p.stem.casefold())
+                self.rows.append(CommonGame(recipe.id, recipe.name, recipe.adapter, found))
+        self.rows.sort(key=lambda p: (isinstance(p,CommonGame),
+                      str(next(i for i,r in enumerate(COMMON) if r.id==p.id)) if isinstance(p,CommonGame) else p.stem.casefold()))
 
     def select(self, rom, common=None):
         self.selected = rom
@@ -157,14 +179,24 @@ class Model:
             self.rom, self.data, self.saved = None, None, None
             return
         self.rom = rom
-        self.data = read_profile(self.base, rom) if profile_path(self.base, rom).exists() else defaults(rom)
+        recipe = common or self.common_for_rom.get(rom)
+        detached = self.base/'detached-profiles'/f'{recipe.id}.json' if recipe else None
+        if profile_path(self.base,rom).exists():
+            self.data = read_profile(self.base,rom)
+        elif detached is not None and detached.exists():
+            self.data = json.loads(detached.read_text())
+            self.data['rom'] = str(rom)
+            validate(self.data,rom)
+        else:
+            self.data = defaults(rom)
         self.data.setdefault('adapter', 'standard')
         self.data.setdefault('keyboard_player', True)
         self.data.setdefault('anchor', anchor_defaults())
+        self.data.setdefault('borderlands2', bl2_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
-        recipe = common or self.common_for_rom.get(rom)
         if recipe:
             self.data['adapter'] = recipe.adapter
+            self.common_for_rom[rom] = recipe
         self.saved = copy.deepcopy(self.data)
 
     def dirty(self):
@@ -178,6 +210,8 @@ class Model:
         stored = copy.deepcopy(self.data)
         if stored.get('adapter') != 'soh-anchor':
             stored.pop('anchor', None)
+        if stored.get('adapter') != 'borderlands2':
+            stored.pop('borderlands2', None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'partydeck-test'), 'ajouter', str(self.rom),
@@ -192,6 +226,41 @@ class Model:
             raise
         self.saved = copy.deepcopy(self.data)
         self.reload()
+        recipe = recipe_for(self.rom,self.data.get('adapter'))
+        if recipe:
+            set_unlinked(self.base,recipe,False)
+
+    def remove(self, roms=None):
+        rom = self.rom
+        recipe = recipe_for(rom,self.data.get('adapter'))
+        changes = []
+        if recipe:
+            validate(self.data,rom)
+            for path in (self.base/'catalog.json',self.base/'detached-profiles'/f'{recipe.id}.json'):
+                if path.is_symlink():
+                    raise ValueError('Métadonnées de catalogue liées à un autre emplacement ; dissociation refusée.')
+                changes.append((path,path.read_bytes() if path.exists() else None))
+            stored = copy.deepcopy(self.data)
+            stored.pop('rom')
+            atomic_write(changes[1][0],json.dumps(stored,ensure_ascii=False,indent=2)+'\n')
+            set_unlinked(self.base,recipe,True)
+        elif recipe_for(rom):
+            # A manually configured standard game can still match a catalogue
+            # name. Removing it must not immediately re-add it by detection.
+            path = self.base/'catalog.json'
+            changes.append((path,path.read_bytes() if path.exists() else None))
+            set_unlinked(self.base,recipe_for(rom),True)
+        try:
+            remove_profile(self.base,rom,roms)
+        except Exception:
+            for path,before in changes:
+                path.unlink(missing_ok=True) if before is None else atomic_write(path,before.decode())
+            raise
+        self.rom = self.selected = self.data = self.saved = None
+        self.filter = ''
+        self.reload()
+        if self.rows:
+            self.select(next((p for p in self.rows if recipe and isinstance(p,CommonGame) and p.id==recipe.id),self.rows[0]))
 
 
 class Pads:
@@ -358,6 +427,7 @@ class App:
         self.browser_rows = []
         self.pending = None
         self.missing = None
+        self.removal = None
         self.pending_common = None
         self.storage_open = False
         self.storage_row = self.storage_page = 0
@@ -380,7 +450,12 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get('adapter') == 'borderlands2':
+            return (0,1)
         return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
+
+    def current_fields(self):
+        return fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard')
 
     def text(self, value, x, y, size=24, color=(228, 234, 247), width=1000):
         font = self.fonts[size]
@@ -444,7 +519,7 @@ class App:
         self.text(label, x+label_offset, y+3, 20, width=max(0,width-label_offset))
 
     def help_context(self):
-        return ('storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
+        return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
                 'keyboard' if self.keyboard else 'browser' if self.browser is not None else
                 'storage' if self.storage_open else 'main')
 
@@ -656,6 +731,22 @@ class App:
             self.launch_pending = True
             self.storage_job('launch')
 
+    def request_remove(self):
+        recipe = recipe_for(self.model.rom,self.model.data.get('adapter'))
+        self.removal = dict(name=self.model.rom.stem, common=recipe is not None)
+
+    def confirm_remove(self):
+        try:
+            self.model.remove()
+            self.library = self.model.rows.index(self.model.selected) if self.model.selected in self.model.rows else 0
+            self.pane,self.tab,self.row = 'library',0,0
+            self.removal = None
+            if self.single:
+                self.accepted,self.running = False,False
+            self.toast('Jeu retiré / dissocié. ROM et sauvegardes conservées. Actualisez les listes EmulationStation.')
+        except (OSError,ValueError,RuntimeError) as error:
+            self.toast(str(error))
+
     def browse(self, directory=Path('/userdata/roms/windows')):
         try:
             children = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.casefold()))
@@ -693,8 +784,15 @@ class App:
             self.keyboard = None
             self.pg.key.stop_text_input()
             self.browser, self.missing = None, None
+            self.removal = None
             self.launch_requested = False
             self.switch(lambda: setattr(self, 'running', False))
+            return
+        if self.removal:
+            if action == 'back':
+                self.removal = None
+            elif action == 'ok':
+                self.confirm_remove()
             return
         if self.launch_error:
             if action in ('ok', 'back'):
@@ -777,22 +875,28 @@ class App:
                     self.missing = self.model.selected
                 elif self.model.data:
                     if not is_rom(self.model.rom):
-                        if self.model.data.get('adapter') == 'soh-anchor' or matches_soh(self.model.rom):
-                            self.missing = COMMON[0]
+                        recipe = recipe_for(self.model.rom,self.model.data.get('adapter')) or recipe_for(self.model.rom)
+                        if recipe:
+                            self.missing = recipe
                         else:
                             self.toast('Jeu introuvable : vous devez d’abord disposer du jeu. Start permet de choisir un autre jeu.')
                     else:
                         self.pane, self.row = 'settings', 0
         elif self.model.data:
-            rows = fields(self.tab)
+            rows = self.current_fields()
             if action in ('up', 'down'):
-                self.row = (self.row + (1 if action == 'down' else -1)) % (len(rows)+2)
+                self.row = (self.row + (1 if action == 'down' else -1)) % (len(rows)+3)
             elif action in ('left', 'right', 'ok'):
                 if self.row >= len(rows):
                     if action == 'ok':
-                        self.launch() if self.row == len(rows) else self.save()
+                        if self.row == len(rows):
+                            self.launch()
+                        elif self.row == len(rows)+1:
+                            self.save()
+                        else:
+                            self.request_remove()
                     elif action in ('left','right'):
-                        self.row = len(rows) + (0 if action == 'left' else 1)
+                        self.row = len(rows)+(self.row-len(rows)+(-1 if action=='left' else 1))%3
                     return
                 key, title, choices = rows[self.row]
                 value = get(self.model.data, key)
@@ -862,16 +966,17 @@ class App:
             self.text(('MODIFIÉ · non enregistré' if self.model.dirty() else 'Profil prêt') + '  ·  ' + self.model.rom.suffix,
                       418, 208, 16, (144, 160, 186))
             for position, i in enumerate(self.available_tabs()):
-                title = TABS[i]
+                title = 'Image' if i == 1 and self.model.data.get('adapter') == 'borderlands2' else TABS[i]
                 self.box((416+position*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
                 if i == self.tab:
                     self.pg.draw.line(self.canvas, (100,222,237), (430+position*241,291), (630+position*241,291), 3)
                 self.text(title, 434+position*241, 258, 20)
             if self.tab:
-                subtitle = ('SoH / Anchor · réglages communs aux joueurs de cette session' if self.model.data['adapter'] == 'soh-anchor'
+                subtitle = ('Borderlands 2 · réglages communs · PhysX indépendant du préréglage' if self.model.data['adapter'] == 'borderlands2' else
+                            'SoH / Anchor · réglages communs aux joueurs de cette session' if self.model.data['adapter'] == 'soh-anchor'
                             else 'SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages')
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
-            rows = fields(self.tab)
+            rows = self.current_fields()
             offset = max(0, min(self.row, len(rows)-1) - 6)
             for i, (key, title, choices) in enumerate(rows[offset:offset+7], offset):
                 y = 348+(i-offset)*57
@@ -892,11 +997,12 @@ class App:
                         self.box((946, y-1, 433, 42), (34, 47, 65),
                                  (99, 203, 219) if focused else (63, 83, 107))
                         self.text(value, 961, y+6, 20, (221, 236, 243), 400)
-            for i, label in enumerate(('LANCER LA PARTIE', 'ENREGISTRER')):
+            remove_label = 'DISSOCIER LE JEU' if recipe_for(self.model.rom,self.model.data.get('adapter')) else 'RETIRER LE JEU'
+            for i, label in enumerate(('LANCER LA PARTIE', 'ENREGISTRER', remove_label)):
                 active = self.pane == 'settings' and self.row == len(rows)+i
-                self.box((416+i*490, 750, 475, 36), (35,93,108) if i == 0 else (39,46,66),
+                self.box((416+i*327, 750, 314, 36), (35,93,108) if i == 0 else (39,46,66),
                          (134,236,238) if active else None)
-                self.text(label, 435+i*490, 757, 16, width=440)
+                self.text(label, 430+i*327, 757, 16, width=290)
         else:
             if isinstance(self.model.selected, CommonGame):
                 self.text(self.model.selected.name, 430, 365, 28, width=900)
@@ -912,12 +1018,12 @@ class App:
         for i, (action, label) in enumerate(hints):
             self.hint(action, label, 45+i*spacing, 815, width=spacing-12)
         volume_selected = (self.model.data and self.browser is None and self.pane == 'settings'
-                           and self.row < len(fields(self.tab)) and '.volumes.' in fields(self.tab)[self.row][0])
+                           and self.row < len(self.current_fields()) and '.volumes.' in self.current_fields()[self.row][0])
         navigation = 'Flèches : naviguer' if self.input_mode == 'keyboard' else 'Croix directionnelle / stick : naviguer'
         quit_hint = 'Échap : retour / quitter' if self.input_mode == 'keyboard' else 'HK + ' + control_label('add', self.input_mode) + ' : quitter'
         subtitle = ('Gauche / droite : volume par pas de 5 % · ' + control_label('ok', self.input_mode) + ' : valeur JSON commun' if volume_selected and context == 'main'
                     else navigation + ' · ' + quit_hint)
-        if context in ('confirm','missing'):
+        if context in ('confirm','missing','remove'):
             subtitle = ''
         elif context == 'browser':
             subtitle = navigation
@@ -956,8 +1062,14 @@ class App:
             self.text(self.modal, 255, 368, 24, width=920)
         if self.missing is not None:
             self.box((210,310,1020,250), (36,45,65), (100,213,230))
-            self.text('Plusieurs versions détectées' if self.missing.matches else 'Jeu non détecté dans Windows', 240,340,28,width=950)
+            self.text('Plusieurs versions détectées' if len(self.missing.matches)>1 else 'Choisir le fichier du jeu' if self.missing.matches else 'Jeu non détecté dans Windows', 240,340,28,width=950)
             self.text('Vous devez disposer du jeu pour utiliser ce profil commun.',240,395,20,width=950)
+        if self.removal:
+            self.box((190,295,1060,305), (36,45,65), (244,164,128))
+            self.text('DISSOCIER CE JEU ?' if self.removal['common'] else 'RETIRER CE JEU DE WINDOWS PARTY ?',220,325,28,width=1000)
+            self.text(self.removal['name'],220,380,24,width=1000)
+            self.text('Le profil commun et vos options resteront disponibles.' if self.removal['common'] else 'Le lanceur et ses options Windows Party seront retirés.',220,445,20,width=1000)
+            self.text('Le jeu d’origine et toutes ses sauvegardes seront conservés.',220,495,20,width=1000)
         if self.launch_pending:
             self.box((230,340,980,210), (36,45,65), (100,213,230))
             self.text('PRÉPARATION DE LA PARTIE',255,368,28,width=920)

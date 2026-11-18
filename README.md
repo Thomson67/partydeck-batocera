@@ -64,6 +64,11 @@ Le navigateur accepte les dossiers `.wine`/`.pc` et les fichiers `.wsquashfs`.
 Annuler rappelle qu'il faut d'abord disposer du jeu et ne crée aucun lanceur.
 Aucun jeu n'est fourni ou téléchargé par le catalogue, uniquement sa configuration.
 
+Elle propose aussi **Borderlands 2**, avec les mêmes possibilités de détection
+et d'association manuelle. Les noms « Borderlands 2 », « Borderlands_2 » ou
+« Borderlands II » sont reconnus. Les jeux personnels figurent avant les profils
+communs encore sans fichier associé.
+
 Dans **Choisir un jeu**, **LB/RB** parcourt la liste par pages de neuf entrées.
 **HK + Start** quitte le configurateur : le Hotkey de `es_input.cfg` est utilisé
 (`hotkey` ou `hotkeyenable`) ; sans mapping, le bouton Guide + Start SDL sert de
@@ -94,8 +99,8 @@ Les cinq volumes SoH utilisent des curseurs : **gauche/droite** ajuste par pas
 de 5 %, entre 0 et 100. **Croix/A** reprend la valeur du JSON commun (repère
 « JSON » et poignée creuse). Aucun clavier virtuel n'est nécessaire pour le son.
 
-Deux boutons fixes sont présents sous les réglages : **Lancer la partie** et
-**Enregistrer**. Descendez après la dernière option pour les sélectionner. Lancer
+Trois boutons fixes sont présents sous les réglages : **Lancer la partie**,
+**Enregistrer**, et **Retirer / Dissocier le jeu**. Descendez après la dernière option pour les sélectionner. Lancer
 enregistre le profil, ferme SDL et passe au lanceur natif Windows Party. Si
 l'enregistrement échoue, le jeu n'est pas lancé. Le choix de configurer avant
 chaque lancement reste mémorisé sans rouvrir une seconde fois le configurateur.
@@ -151,6 +156,93 @@ Relancez `ajouter` avec `vertical`, un autre nombre de joueurs ou un autre
 mode d'entrées pour actualiser son lanceur.
 Les données des anciens essais dans Ports restent accessibles via leurs
 lanceurs. Une entrée Windows Party commence avec ses propres profils.
+
+### Retirer ou dissocier un jeu
+
+Un troisième bouton est disponible sous les options du jeu. Descendez après la
+dernière option pour l'atteindre, puis validez et confirmez :
+
+- **Retirer le jeu** enlève le lanceur et les options Windows Party d'un jeu standard.
+- **Dissocier le jeu** enlève l'association au fichier d'un profil commun SoH ou
+  Borderlands 2. Son entrée reste proposée dans la bibliothèque et ses options
+  personnelles sont conservées dans `detached-profiles/<profil>.json` sous le
+  dossier d'installation, pour une nouvelle association manuelle.
+
+Les fichiers du jeu, sauvegardes, préfixes et données privées sont conservés.
+Après dissociation, la détection automatique ne réassocie pas immédiatement le
+même fichier ; choisissez explicitement le jeu pour le relier de nouveau. Cet
+état est conservé dans `catalog.json` lors des mises à jour. Actualisez ensuite
+les listes de jeux EmulationStation pour retirer son ancien lanceur de cette vue.
+Les lanceurs personnalisés ou remplacés par des liens utilisateur ne sont pas
+supprimés automatiquement. Annuler la confirmation ne change rien.
+
+## Borderlands 2 : affichage et préréglages (version de test)
+
+Un nouvel ajout reconnu comme Borderlands 2 utilise automatiquement ce profil.
+Pour un jeu déjà ajouté avec le profil Standard, choisissez **Profil du jeu →
+Borderlands 2** dans Session, puis ouvrez l'onglet **Image**.
+
+Le plein écran fenêtré et l'adaptation à la portion d'écran du joueur sont activés
+par défaut. L'adaptateur écrit dans `[SystemSettings]` de `WillowEngine.ini` :
+
+```ini
+Fullscreen=False
+WindowedFullscreen=True
+ResX=<largeur de la fenêtre du joueur>
+ResY=<hauteur de la fenêtre du joueur>
+```
+
+Les dimensions de démarrage sont aussi synchronisées dans `[WinDrv.WindowsClient]`.
+La pause lors de la perte de focus en mode fenêtré est désactivée pour laisser
+les instances jouer simultanément.
+Avec deux joueurs sur un écran 1920×1080, cela donne 1920×540 en horizontal ou
+960×1080 en vertical. Le mode interne Gamescope est aligné sur ces dimensions.
+Les mêmes options sont appliquées à toutes les instances, chacune avec sa résolution.
+
+Le réglage **Préréglage graphique** propose **Conserver les réglages**, **Bas**,
+**Moyen**, **Élevé** et **Max**. Les quatre ensembles Windows Party sont des
+préréglages expérimentaux, pas des profils officiels du jeu :
+
+| Option | Bas | Moyen | Élevé | Max |
+| --- | --- | --- | --- | --- |
+| Textures | Basses | Moyennes | Hautes | Hautes |
+| Distance de vue | Basse | Moyenne | Haute | Très haute |
+| Filtrage anisotrope | ×2 | ×4 | ×8 | ×16 |
+| FXAA | Non | Oui | Oui | Oui |
+| Occlusion ambiante / profondeur de champ / rayons lumineux | Non | Non | Oui | Oui |
+| Ombres dynamiques | Non | Oui | Oui | Oui |
+| Résolution maximale des ombres | 512 | 1024 | 2048 | 4096 |
+| Distance du feuillage | 0,5 | 0,75 | 1 | 1 |
+
+**PhysX est indépendant du préréglage** : conserver, bas, moyen ou élevé.
+Le choix initial conserve le niveau existant, y compris avec Max. La VSync,
+le limiteur d'images, les effets artistiques non listés, les contrôles et les
+paramètres réseau ne sont pas modifiés. « Conserver » laisse les valeurs actuelles
+en place ; il ne restaure pas automatiquement les valeurs précédant un préréglage.
+De même, désactiver le forçage du plein écran fenêtré conserve le mode déjà écrit.
+
+Le chemin standard recherché est `drive_c/users/<utilisateur>/Documents/My Games/
+Borderlands 2/WillowGame/Config/WillowEngine.ini`, avec prise en charge de
+`My Documents`, de la casse des chemins Windows et des redirections vers les
+sauvegardes privées du joueur. **Fichier INI** peut rester sur `auto`, ou recevoir
+un chemin `.ini` relatif au préfixe Wine pour une installation portable particulière.
+Si le préfixe ne comporte encore aucun utilisateur Wine, initialisez le jeu en solo
+avant de le lancer dans Windows Party.
+
+L'application intervient après montage du jeu par le lanceur natif et avant Wine/UMU,
+dans la vue privée du joueur. Les préfixes UMU privés réutilisés après interruption
+sont également mis à jour. Les sections, commentaires, listes répétées et options
+non concernées du fichier existant sont conservés ; le fichier complet fourni par
+un utilisateur n'est pas distribué ni recopié chez tous les joueurs. La première
+version de chaque INI modifié est conservée sous `party/<jeu>/jN/borderlands2-before`
+dans le dossier d'installation. Un INI absent est initialisé avec les seules options
+gérées. Une redirection hors du préfixe ou des emplacements privés autorisés refuse
+le lancement pour éviter une écriture dans les données solo.
+
+Référence graphique : [guide technique NVIDIA Borderlands 2](https://www.nvidia.com/en-gb/geforce/news/borderlands-2-borderlands-the-pre-sequel-tweak-guide/).
+Les valeurs sont définies par Windows Party et restent à valider en jeu avec Wine.
+Tests locaux : `python3 tests/check_borderlands2.py` et
+`python3 tests/check_library_remove.py`, en complément des tests du configurateur.
 
 ## Stockage et entretien automatique (version de test)
 

@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as folder:
     windows = root/'windows'; windows.mkdir()
     base = root/'install'
     model = Model(base, windows=windows)
-    assert len(model.rows) == 1 and isinstance(model.rows[0], CommonGame)
+    assert len(model.rows) == 2 and isinstance(model.rows[0], CommonGame)
     model.select(model.rows[0]); assert model.rom is None and model.data is None
     assert not (base/'profiles').exists()
     assert not matches_soh(Path('Ocarina of Time 3D.wsquashfs'))
@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory() as folder:
         rom.touch() if suffix == '.wsquashfs' else rom.mkdir()
         assert discover(windows) == (rom,)
         model = Model(base, windows=windows)
-        assert model.rows == [rom]
+        assert [p for p in model.rows if not isinstance(p,CommonGame)] == [rom]
         model.select(rom); assert model.data['adapter'] == 'soh-anchor'
         rom.unlink() if rom.is_file() else rom.rmdir()
     a=windows/'SoH.wsquashfs'; b=windows/'Ship of Harkinian.pc'; a.touch();b.mkdir()

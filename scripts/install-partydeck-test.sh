@@ -231,6 +231,7 @@ if [[ ${1:-verifier} == installer ]]; then
     source_helper="$source_dir/partydeck-batocera-coop.py"
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
+    [[ -f $source_dir/partydeck_borderlands2.py ]] || die 'Module Borderlands 2 absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py && -f $source_dir/partydeck_theme.py && -f $source_dir/../assets/windows-party.png && -f $source_dir/../templates/soh-common.json ]] ||
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
@@ -316,6 +317,8 @@ if [[ ${1:-verifier} == installer ]]; then
     cp -- "$source_dir/partydeck_anchor.py" "$staging/partydeck_anchor.py"
     cp -- "$source_dir/partydeck_theme.py" "$staging/partydeck_theme.py"
     cp -- "$source_dir/partydeck_couch.py" "$staging/partydeck_couch.py"
+    cp -- "$source_dir/partydeck_borderlands2.py" "$staging/partydeck_borderlands2.py"
+    mv -fT -- "$staging/partydeck_borderlands2.py" "$base/partydeck_borderlands2.py"
     cp -- "$source_dir/partydeck_storage.py" "$staging/partydeck_storage.py"
     mv -fT -- "$staging/partydeck_storage.py" "$base/partydeck_storage.py"
     cp -- "$source_dir/partydeck_catalog.py" "$staging/partydeck_catalog.py"

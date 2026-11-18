@@ -323,6 +323,7 @@ def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=N
             # The Batocera UMU runner derives its runtime directory from its own HOME.
             "--unsetenv", "XDG_DATA_HOME",
             "--setenv", "ENABLE_GAMESCOPE_WSI", "0",
+            "--setenv", "PARTYDECK_PRIVATE_PLAYER", str(player),
             "--bind", str(player), str(player)]
     if saves is not None:
         saves.mkdir(parents=True, exist_ok=True)
@@ -406,6 +407,8 @@ def run_wine(original, target, player, saves=None):
     if saves is not None:
         from partydeck_anchor import install_hook
         install_hook(Path(__file__).resolve().parent, original, player)
+        from partydeck_borderlands2 import install_hook as install_bl2
+        install_bl2(Path(__file__).resolve().parent, original, player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)
@@ -417,6 +420,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
+    if saves is not None:
+        from partydeck_profiles import profile_path, read_profile
+        base = Path(__file__).resolve().parent
+        if profile_path(base,original).exists():
+            profile = read_profile(base,original)
+            if profile.get('adapter') == 'borderlands2' and profile['borderlands2']['fit_resolution']:
+                args.extend(['-w',str(width),'-h',str(height)])
     if not shared_keyboard_mouse:
         args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])
     kb_mouse = [str(d.node) for d in devices if d.category in {KEYBOARDS, MICE}]
@@ -433,7 +443,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     # SDL writes this identifier to the outer X11 window's WM_CLASS. The
     # AppImage's launcher PID and the game's title can both differ.
     return subprocess.Popen(args, env={**os.environ, "SDL_VIDEODRIVER": "x11",
-                                       "SDL_VIDEO_X11_WMCLASS": window_class},
+                                       "SDL_VIDEO_X11_WMCLASS": window_class,
+                                       "PARTYDECK_PLAYER_WIDTH": str(width),
+                                       "PARTYDECK_PLAYER_HEIGHT": str(height)},
                             start_new_session=True)
 
 
