@@ -82,6 +82,14 @@ cyan/violet. Les indications de boutons sont dessinées dans l'interface et pass
 au style PlayStation ou Xbox selon la manette qui commande le configurateur.
 Les manettes dont le nom n'identifie pas un modèle PlayStation gardent les pictogrammes Xbox.
 
+Le bandeau de commandes suit la **dernière entrée utilisée** : touches clavier
+après une touche pressée, pictogrammes Xbox ou PlayStation après une action à la
+manette. Sans manette, il démarre directement en mode clavier. **Inser : Ajouter**
+est ainsi visible au clavier, et devient **START : Ajouter** ou **OPTIONS : Ajouter**
+avec les manettes. Les pages sont indiquées par **PgUp/PgDn**, **LB/RB** ou **L1/R1**.
+Le navigateur, le clavier virtuel et les confirmations partagent ce bandeau :
+seules leurs commandes utiles sont affichées, sans légendes clavier/manette en double.
+
 Les cinq volumes SoH utilisent des curseurs : **gauche/droite** ajuste par pas
 de 5 %, entre 0 et 100. **Croix/A** reprend la valeur du JSON commun (repère
 « JSON » et poignée creuse). Aucun clavier virtuel n'est nécessaire pour le son.

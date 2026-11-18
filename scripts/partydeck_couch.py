@@ -14,6 +14,31 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import CommonGame, COMMON, discover, matches_soh, is_rom
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
+KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'tabs':'PgUp/PgDn'}
+
+
+def control_label(action, mode):
+    if mode == 'keyboard':
+        return KEY_LABELS[action]
+    if action == 'tabs':
+        return 'L1/R1' if mode == 'ps' else 'LB/RB'
+    if action == 'add':
+        return 'OPTIONS' if mode == 'ps' else 'START'
+    return ({'ok':'Croix', 'back':'Cercle', 'save':'Carré', 'search':'Triangle'} if mode == 'ps'
+            else {'ok':'A', 'back':'B', 'save':'X', 'search':'Y'})[action]
+
+
+def context_hints(context, mode, has_tabs=True):
+    if context == 'confirm':
+        return [('ok','Enregistrer'), ('search','Abandonner'), ('back','Annuler')]
+    if context == 'missing':
+        return [('ok','Choisir le jeu'), ('back','Annuler')]
+    if context == 'keyboard':
+        return [('ok','Valider'), ('back','Annuler')] if mode == 'keyboard' else [('ok','Saisir'), ('save','Valider'), ('back','Annuler')]
+    if context == 'browser':
+        return [('ok','Choisir'), ('back','Annuler'), ('tabs','Parcourir')]
+    return [('ok','Choisir'), ('back','Retour'), ('save','Enregistrer'), ('search','Rechercher'),
+            *([('tabs','Onglets')] if has_tabs else []), ('add','Ajouter')]
 KEYS = [list('azertyuiop'), list('qsdfghjklm'), list('wxcvbn0123'),
         list('456789 .-_'), list('@:/\\!?éèàç'), list('[]()#&+=$%'),
         list("'\";<>^~{}|"), ['Maj', 'Espace', 'Effacer', 'Vider', 'Valider']]
@@ -191,6 +216,9 @@ class Pads:
             profile = next((c for c in configs if c.get('deviceGUID', '').lower() == stick.get_guid().lower()), None)
             mapping = {n.get('name'): n.attrib for n in profile} if profile is not None else {}
             self.raw.append((stick, mapping))
+            if i == 0 and not self.previous:
+                name = stick.get_name().lower()
+                self.family = 'ps' if any(n in name for n in ('dualsense', 'dualshock', 'playstation', 'sony', 'ps4', 'ps5')) else 'xbox'
             if self.controllers and self.controllers.is_controller(i):
                 self.devices.append(('sdl', self.controllers.Controller(i), mapping))
             else:
@@ -309,6 +337,7 @@ class App:
             except (OSError, ValueError, AttributeError):
                 pass
         self.pads = Pads(pg)
+        self.input_mode = self.pads.family if self.pads.devices else 'keyboard'
         self.library = 0
         self.tab, self.row, self.pane = 0, 0, 'settings' if rom else 'library'
         self.running, self.accepted = True, False
@@ -364,13 +393,18 @@ class App:
         if border:
             self.pg.draw.rect(self.canvas, border, rect, 2, border_radius=12)
 
-    def hint(self, action, label, x, y):
+    def hint(self, action, label, x, y, width=220):
         draw = self.pg.draw
-        ps = self.pads.family == 'ps'
+        ps = self.input_mode == 'ps'
         colors = {'ok':(95,216,164), 'back':(255,121,126), 'save':(111,177,255), 'search':(242,208,109)}
         color = colors.get(action, (167,187,219))
         center = (x+16, y+16)
-        if action in colors:
+        if self.input_mode == 'keyboard':
+            badge = control_label(action, 'keyboard')
+            badge_width = self.fonts[16].size(badge)[0]+18
+            self.box((x-3,y,badge_width,32), (38,47,65), (107,128,157))
+            self.text(badge, x+5, y+5, 16, color, badge_width-10)
+        elif action in colors:
             draw.circle(self.canvas, (15,22,35), center, 17)
             draw.circle(self.canvas, color, center, 16, 2)
             if ps:
@@ -386,12 +420,16 @@ class App:
             else:
                 self.text({'ok':'A','back':'B','save':'X','search':'Y'}[action], x+9, y+3, 20, color, 25)
         else:
-            badge = ('L1/R1' if ps else 'LB/RB') if action == 'tabs' else ('OPTIONS' if ps else 'START')
+            badge = control_label(action, self.input_mode)
             badge_width = 64 if action == 'tabs' else 90 if ps else 72
             self.box((x-3,y,badge_width,32), (38,47,65), (107,128,157))
             self.text(badge, x+2, y+5, 16, color, badge_width-8)
-        label_offset = 45 if action in colors else badge_width+8
-        self.text(label, x+label_offset, y+3, 20, width=220)
+        label_offset = 45 if action in colors and self.input_mode != 'keyboard' else badge_width+8
+        self.text(label, x+label_offset, y+3, 20, width=max(0,width-label_offset))
+
+    def help_context(self):
+        return ('confirm' if self.modal else 'missing' if self.missing is not None else
+                'keyboard' if self.keyboard else 'browser' if self.browser is not None else 'main')
 
     def volume(self, key):
         value = get(self.model.data, key)
@@ -637,7 +675,7 @@ class App:
             self.text('CONFIGURATEUR', 1100, 60, 20, (117, 213, 230), 280)
         self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' else None)
         self.text('BIBLIOTHÈQUE', 46, 163, 20, (122, 209, 229))
-        start_label = 'Options' if self.pads.family == 'ps' else 'Start'
+        start_label = control_label('add', self.input_mode)
         self.text(f'{len(self.model.rows)} jeux · {start_label} : ajouter', 46, 201, 16, (160, 174, 199))
         offset = max(0, self.library - 8)
         for i, rom in enumerate(self.model.rows[offset:offset+10], offset):
@@ -691,24 +729,35 @@ class App:
             if isinstance(self.model.selected, CommonGame):
                 self.text(self.model.selected.name, 430, 365, 28, width=900)
                 self.text('Profil prêt · le jeu doit être présent sur votre Batocera.', 430, 420, 20, width=900)
-                self.text('Valider : choisir le jeu manuellement · B : retour', 430, 470, 20, width=900)
+                self.text('Choisissez le jeu pour préparer votre session.', 430, 470, 20, width=900)
             else:
                 self.text('Préparez votre première partie', 430, 365, 36, width=900)
-                self.text('Start : choisir un jeu .wine, .pc ou .wsquashfs', 430, 430, 24, width=900)
+                self.text(start_label + ' : choisir un jeu .wine, .pc ou .wsquashfs', 430, 430, 24, width=900)
         self.box((24,805,1392,80), (20,27,43))
-        for action, label, x in [('ok','Choisir',45), ('back','Retour',230), ('save','Enregistrer',410),
-                                  ('search','Rechercher',650), ('tabs','Onglets',900), ('add','Ajouter',1150)]:
-            self.hint(action,label,x,815)
+        context = self.help_context()
+        hints = context_hints(context, self.input_mode, len(self.available_tabs()) > 1)
+        spacing = min(380, 1350 // len(hints))
+        for i, (action, label) in enumerate(hints):
+            self.hint(action, label, 45+i*spacing, 815, width=spacing-12)
         volume_selected = (self.model.data and self.browser is None and self.pane == 'settings'
                            and self.row < len(fields(self.tab)) and '.volumes.' in fields(self.tab)[self.row][0])
-        self.text('← / → : régler par pas de 5 % · A / Croix : reprendre le JSON commun' if volume_selected else
-                  'Croix directionnelle / stick : naviguer · Toutes les modifications sont enregistrées avec Carré / X',
+        navigation = 'Flèches : naviguer' if self.input_mode == 'keyboard' else 'Croix directionnelle / stick : naviguer'
+        quit_hint = 'Échap : retour / quitter' if self.input_mode == 'keyboard' else 'HK + ' + control_label('add', self.input_mode) + ' : quitter'
+        subtitle = ('Gauche / droite : volume par pas de 5 % · ' + control_label('ok', self.input_mode) + ' : valeur JSON commun' if volume_selected and context == 'main'
+                    else navigation + ' · ' + quit_hint)
+        if context in ('confirm','missing'):
+            subtitle = ''
+        elif context == 'browser':
+            subtitle = navigation
+        if context == 'keyboard':
+            subtitle = 'Saisie directe au clavier · Retour arrière : effacer' if self.input_mode == 'keyboard' else 'Maj, espace, effacement et caractères spéciaux sur le clavier virtuel'
+        self.text(subtitle,
                   45,858,16,(151,171,195),1320)
         if self.browser is not None:
             self.box((160, 150, 1120, 640), (25, 34, 52), (91, 207, 228))
             self.text('CHOISIR UN JEU', 195, 175, 28)
             self.text(self.browser, 195, 225, 16, width=1040)
-            self.text('LB/RB : page précédente / suivante · B : annuler', 195, 250, 16, width=1040)
+            self.text(f'{self.row+1} / {len(self.browser_rows)}', 195, 250, 16, width=1040)
             offset = max(0, self.row-8)
             for i, path in enumerate(self.browser_rows[offset:offset+9], offset):
                 y = 278+(i-offset)*50
@@ -728,19 +777,13 @@ class App:
                     rect = (235+c*cell, 334+r*row_height, cell-7, row_height-6)
                     self.box(rect, (47, 118, 144) if (r,c) == (k['row'],k['col']) else (38, 47, 66))
                     self.text(key.upper() if k['shift'] and len(key)==1 else key, rect[0]+9, rect[1]+14, 20, width=cell-17)
-            self.hint('ok','Saisir',245,725)
-            self.hint('save','Valider',520,725)
-            self.hint('back','Annuler',800,725)
         if self.modal:
             self.box((230, 340, 980, 210), (36, 45, 65), (100, 213, 230))
             self.text(self.modal, 255, 368, 24, width=920)
-            self.text('A : enregistrer   Y : abandonner les modifications   B : annuler', 255, 455, 20, width=920)
         if self.missing is not None:
             self.box((210,310,1020,250), (36,45,65), (100,213,230))
             self.text('Plusieurs versions détectées' if self.missing.matches else 'Jeu non détecté dans Windows', 240,340,28,width=950)
             self.text('Vous devez disposer du jeu pour utiliser ce profil commun.',240,395,20,width=950)
-            self.hint('ok','Choisir le jeu',245,475)
-            self.hint('back','Annuler',700,475)
         if time.monotonic() < self.notice_until:
             self.box((100, 743, 1240, 57), (48, 73, 91))
             self.text(self.notice, 120, 759, 20, width=1200)
@@ -764,9 +807,13 @@ class App:
                         self.action('back')
                     elif event.type in (self.pg.JOYDEVICEADDED, self.pg.JOYDEVICEREMOVED):
                         self.pads.refresh()
+                        if not self.pads.devices:
+                            self.input_mode = 'keyboard'
                     elif event.type == self.pg.TEXTINPUT and self.keyboard:
+                        self.input_mode = 'keyboard'
                         self.keyboard['value'] += event.text
                     elif event.type == self.pg.KEYDOWN:
+                        self.input_mode = 'keyboard'
                         if self.keyboard and event.key == self.pg.K_BACKSPACE:
                             self.keyboard['value'] = self.keyboard['value'][:-1]
                         elif self.keyboard and event.key == self.pg.K_RETURN:
@@ -774,6 +821,7 @@ class App:
                         elif event.key in keymap:
                             self.action(keymap[event.key])
                 for action in self.pads.poll():
+                    self.input_mode = self.pads.family
                     self.action(action)
                 self.draw()
                 self.clock.tick(60)
