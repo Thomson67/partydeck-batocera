@@ -227,8 +227,8 @@ Un nouvel ajout reconnu comme Borderlands 2 utilise automatiquement ce profil.
 Pour un jeu déjà ajouté avec le profil Standard, choisissez **Profil du jeu →
 Borderlands 2** dans Session, puis ouvrez l'onglet **Image**.
 
-L'onglet **Image & langue** affiche **Préréglage graphique**, **VSync**,
-**Qualité PhysX** et **Langue du jeu**. L'onglet **Joueurs** permet de saisir
+L'onglet **Image** affiche **Préréglage graphique**, **VSync** et
+**Qualité PhysX**. L'onglet **Joueurs** permet de saisir
 un nom facultatif pour J1 à J4, avec le clavier virtuel à la manette.
 Le plein écran fenêtré et l'adaptation à la portion d'écran du joueur sont
 **systématiques**, sans options à activer. L'adaptateur écrit dans `[SystemSettings]`
@@ -299,34 +299,39 @@ Les valeurs sont définies par Windows Party et restent à valider en jeu avec W
 Tests locaux : `python3 tests/check_borderlands2.py` et
 `python3 tests/check_library_remove.py`, en complément des tests du configurateur.
 
-### Langue et nom du joueur
+### Nom du joueur
 
 Pour les installations disposant d'un `steam_emu.ini` avec `[Settings] AppId=49520`,
-Windows Party peut régler **Language** et **UserName** séparément dans les vues
+Windows Party peut régler **UserName** séparément dans les vues
 privées de lancement. La recherche vise le dossier de lancement et
 `Binaries/Win32`, sans distinction de casse. Ce fichier existant n'est jamais
 remplacé par un modèle livré par Windows Party.
 
-- **Langue du jeu** : Conserver / Français / Anglais, commun aux joueurs.
-  Les fichiers de langue doivent être présents dans l'installation ; aucune
-  traduction n'est téléchargée. La langue du jeu est indépendante de celle de l'UI.
 - **Joueurs** : nom facultatif pour chaque joueur. Un champ vide conserve le nom
   actuel, y compris `CODEX` si c'est celui de l'installation. Les noms sont conservés
   tels que saisis et ne sont pas traduits.
 - Les nouveaux réglages conservent les valeurs existantes par défaut, y compris
   pour les anciens profils. « Conserver » ne restaure pas une ancienne valeur.
-- Seules les clés `Language` et `UserName` sont modifiées dans ce fichier.
+- Seule la clé `UserName` est modifiée dans ce fichier pour les noms.
   Identifiants, Steam Account ID, lobby, paramètres réseau, DLC et interfaces
   restent inchangés. La première version du fichier est sauvegardée dans le
   dossier privé `borderlands2-before` du joueur.
 - Si une personnalisation est demandée sans INI reconnu, le lancement est refusé
-  avec une explication. Revenir à Conserver et laisser les noms vides permet de
+  avec une explication. Laisser les noms vides permet de
   garder le lancement habituel ; aucune configuration n'est inventée pour une
   autre édition du jeu.
 
-Les tests locaux vérifient l'écriture et l'isolation des quatre joueurs,
-les encodages et la conservation des autres réglages. Le pseudo réellement
-affiché et le chargement de la langue restent à valider dans le jeu.
+Le changement de langue du jeu a été retiré après un problème constaté en jeu.
+Les anciennes valeurs `borderlands2.language` sont ignorées et supprimées au
+prochain enregistrement. Au prochain lancement, si une sauvegarde originale
+`borderlands2-before/steam_emu-*.ini` existe pour le fichier (quelle que soit sa
+casse), sa clé `Language` est restaurée **une seule fois**, sans remplacer les
+noms ni les autres réglages. Cette migration est marquée dans
+`borderlands2-language-retired`. En l'absence de sauvegarde, la langue n'est pas
+modifiée. Les changements manuels ultérieurs ne sont pas écrasés.
+
+Les noms de joueurs ont été validés en jeu par l'utilisateur. Les tests locaux
+vérifient leur isolation, les encodages et le retrait de l'ancien réglage de langue.
 
 ### LAN : état de la vérification
 

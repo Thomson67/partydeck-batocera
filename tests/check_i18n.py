@@ -67,10 +67,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert label_value('borderlands2.vsync','on')=='Enabled'
     assert label_value('borderlands2.vsync','off')=='Disabled'
     assert label_value('borderlands2.vsync','keep')=='Keep current'
-    assert [key for key,_,_ in fields(1,'borderlands2')]==['borderlands2.preset','borderlands2.vsync','borderlands2.physx','borderlands2.language']
-    assert label_value('borderlands2.language','keep')=='Keep current'
-    assert label_value('borderlands2.language','french')=='French'
-    assert label_value('borderlands2.language','english')=='English'
+    assert [key for key,_,_ in fields(1,'borderlands2')]==['borderlands2.preset','borderlands2.vsync','borderlands2.physx']
     assert label_value('borderlands2.names.0','')=='Keep current'
     assert label_value('borderlands2.names.0','Joueur français')=='Joueur français'
     assert fields(2,'borderlands2')[0][1]=='Player 1 · Name'
@@ -81,7 +78,6 @@ with tempfile.TemporaryDirectory() as folder:
     assert 'shared profile' in COMMON[0].stem
     # Create French-named user data before switching the configurator to English.
     lang.set_language('fr')
-    assert label_value('borderlands2.language','english')=='Anglais'
     assert fields(2,'borderlands2')[0][1]=='J1 · Nom'
     rom=root/'Enregistrer.wsquashfs';rom.touch()
     data=defaults(rom);data.update(adapter='soh-anchor',anchor=anchor_defaults())

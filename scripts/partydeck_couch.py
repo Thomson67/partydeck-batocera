@@ -16,7 +16,7 @@ from partydeck_profiles import (defaults, read_profile, save_profile, profile_pa
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOLUME_FIELDS
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
-from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, LANGUAGES, matches as matches_bl2
+from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
                                snapshot as storage_snapshot, clean as clean_storage, prepare_launch, human)
 
@@ -72,8 +72,7 @@ def fields(tab, adapter='standard'):
             return [(f'borderlands2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
         return [('borderlands2.preset',tr('Préréglage graphique'),list(PRESETS)),
                 ('borderlands2.vsync',tr('VSync'),['keep','on','off']),
-                ('borderlands2.physx',tr('Qualité PhysX'),['keep','0','1','2']),
-                ('borderlands2.language',tr('Langue du jeu'),list(LANGUAGES))]
+                ('borderlands2.physx',tr('Qualité PhysX'),['keep','0','1','2'])]
     if tab == 1:
         return [('anchor.enabled', tr('Connexion automatique Anchor'), [False, True]),
                 ('anchor.room', tr('Room ID commun'), None), ('anchor.host', tr('Serveur'), None),
@@ -131,8 +130,6 @@ def label_value(key, value):
         return {'keep':tr('Conserver'), 'on':tr('Activé'), 'off':tr('Désactivé')}[value]
     if key == 'borderlands2.physx':
         return {'keep':tr('Conserver'), '0':tr('Bas'),'1':tr('Moyen'),'2':tr('Élevé')}[value]
-    if key == 'borderlands2.language':
-        return {'keep':tr('Conserver'),'french':tr('Français'),'english':tr('Anglais')}[value]
     if key.startswith('borderlands2.names.') and value == '':
         return tr('Conserver')
     if key in ('anchor.locations', 'anchor.teleport'):
@@ -984,7 +981,7 @@ class App:
             self.text((tr('MODIFIÉ · non enregistré') if self.model.dirty() else tr('Profil prêt')) + '  ·  ' + self.model.rom.suffix,
                       418, 208, 16, (144, 160, 186))
             for position, i in enumerate(self.available_tabs()):
-                title = tr('Image & langue') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
+                title = tr('Image') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
                 self.box((416+position*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
                 if i == self.tab:
                     self.pg.draw.line(self.canvas, (100,222,237), (430+position*241,291), (630+position*241,291), 3)

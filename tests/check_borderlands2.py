@@ -32,6 +32,9 @@ with tempfile.TemporaryDirectory() as folder:
     assert profile['adapter']=='borderlands2'
     save_profile(root,rom,profile)
     assert read_profile(root,rom)['borderlands2']==bl2.defaults()
+    retired=defaults(rom);retired['borderlands2']['language']='english'
+    save_profile(root,rom,retired)
+    assert 'language' not in read_profile(root,rom)['borderlands2']
     legacy=dict(windowed_fullscreen=False,fit_resolution=False,config='../old.ini',preset='keep',physx='keep')
     assert bl2.validate(legacy)==bl2.defaults()
     old=defaults(rom);old['borderlands2']=legacy
@@ -107,7 +110,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert explicit.read_bytes().startswith(codecs.BOM_UTF16_LE)
     assert 'WindowedFullscreen=True' in explicit.read_bytes().decode('utf-16')
     for key,value in (('preset','ultra-invalid'),('vsync','invalid'),('physx','invalid'),
-                      ('language','invalid'),('names',['one']),('names',['bad\nLanguage=foo','','','']),
+                      ('names',['one']),('names',['bad\nLanguage=foo','','','']),
                       ('names',['bad;name','','','']),('names',[' ']*4),('names',['x'*65]*4)):
         try:
             bl2.validate(dict(bl2.defaults(),**{key:value}))
@@ -146,7 +149,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert args[args.index('-w')+1]=='1920' and args[args.index('-h')+1]=='540'
         assert launch.call_args.kwargs['env']['PARTYDECK_PLAYER_HEIGHT']=='540'
 
-    # Persona/language are taken from the supplied INI, never from Willow Name.
+    # Names change independently; retired language options are ignored.
     original=(b'### legacy header \xdc\xb2\r\n[Settings]\r\nAppId=49520\r\nUserName=CODEX\r\n'
               b'Language=french\r\nOffline=0\r\nLobbyEnabled=1\r\n#AccountId=0\r\n'
               b'[DLC]\r\nDLCUnlockall=0\r\n[Interfaces]\r\nSteamFriends=SteamFriends013\r\n')
@@ -162,16 +165,31 @@ with tempfile.TemporaryDirectory() as folder:
                      settings=dict(bl2.defaults(),language='english',names=names))
         bl2.apply_config(prefix,payload,private_binds=(),directory=game)
         after=ini.read_bytes()
-        assert after==original.replace(b'UserName=CODEX',('UserName='+names[index]).encode()).replace(b'Language=french',b'Language=english')
+        assert after==original.replace(b'UserName=CODEX',('UserName='+names[index]).encode())
         assert any(p.read_bytes()==original for p in (player/'borderlands2-before').glob('*.ini'))
         configs.append(ini)
         payload['settings']=bl2.defaults()
         bl2.apply_config(prefix,payload,private_binds=(),directory=game)
         assert ini.read_bytes()==after  # Keep leaves the current player values intact.
     assert b'UserName=Alice' in configs[0].read_bytes() and b'UserName=David' in configs[3].read_bytes()
-    payload['settings']=dict(bl2.defaults(),language='french')
+    # Simulate the previous version: an altered language, an original backup,
+    # no migration stamp. Restore only Language, retaining all player identities.
+    for index,ini in enumerate(configs):
+        player=root/f'persona/j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
+        shutil.rmtree(player/'borderlands2-language-retired')
+        ini.write_bytes(ini.read_bytes().replace(b'Language=french',b'Language=english'))
+        payload=dict(player=str(player),index=index,width=960,height=540,
+                     settings=dict(bl2.defaults(),language='english'))
+        bl2.apply_config(prefix,payload,private_binds=(),directory=game)
+        assert ini.read_bytes()==original.replace(b'UserName=CODEX',('UserName='+names[index]).encode())
+        # Later manual language changes are respected, even if stale profiles
+        # still contain the removed key. No repeated restoration occurs.
+        ini.write_bytes(ini.read_bytes().replace(b'Language=french',b'Language=english'))
+        bl2.apply_config(prefix,payload,private_binds=(),directory=game)
+        assert b'Language=english' in ini.read_bytes()
+    payload['settings']=dict(bl2.defaults(),names=names)
     bl2.apply_config(prefix,payload,private_binds=(),directory=game)
-    assert b'Language=french' in ini.read_bytes() and b'UserName=David' in ini.read_bytes()
+    assert b'Language=english' in ini.read_bytes() and b'UserName=David' in ini.read_bytes()
     # Refuse another game's config, external links or missing configurations,
     # validating everything before any of the Willow display edits are written.
     willow=prefix/'drive_c/users/steamuser/Documents/My Games/Borderlands 2/WillowGame/Config/WillowEngine.ini'

@@ -97,10 +97,6 @@ with tempfile.TemporaryDirectory() as folder:
     assert app.model.data['borderlands2']['vsync']=='on'
     app.action('right')
     assert app.model.data['borderlands2']['vsync']=='off'
-    app.row=3;app.action('right')
-    assert app.model.data['borderlands2']['language']=='french'
-    app.action('right')
-    assert app.model.data['borderlands2']['language']=='english'
     app.action('next');assert app.tab==2
     app.row=0;app.action('ok')
     assert app.keyboard is not None
@@ -109,8 +105,8 @@ with tempfile.TemporaryDirectory() as folder:
     with patch('partydeck_couch.subprocess.run',return_value=Mock(returncode=0)):
         assert app.save()
     saved=profiles.read_profile(base,game)['borderlands2']
-    assert saved['vsync']=='off' and saved['language']=='english' and saved['names'][0]=='Alice'
-    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx','language','names'}
+    assert saved['vsync']=='off' and saved['names'][0]=='Alice'
+    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx','names'}
     app.draw()
     app.row=len(app.current_fields())+2;app.action('ok')
     assert app.removal and app.removal['common'] and app.help_context()=='remove'

@@ -13,7 +13,6 @@ import tempfile
 
 PRESETS = ('keep', 'low', 'medium', 'high', 'max')
 PRESET_LABELS = dict(keep='Conserver les réglages', low='Bas', medium='Moyen', high='Élevé', max='Max')
-LANGUAGES = ('keep', 'french', 'english')
 PRIVATE_BINDS = (Path('/userdata/saves/windows'), Path('/userdata/system/wine-bottles/windows'),
                  Path('/var/run/wine'))
 
@@ -25,18 +24,17 @@ def matches(rom):
 
 
 def defaults():
-    return dict(preset='keep', vsync='keep', physx='keep', language='keep', names=[''] * 4)
+    return dict(preset='keep', vsync='keep', physx='keep', names=[''] * 4)
 
 
 def validate(options):
     if not isinstance(options,dict):
         raise ValueError(tr('Réglages Borderlands 2 invalides.'))
-    # Old profiles may contain toggles and a manually specified INI path. The
-    # display policy and config discovery are now mandatory, not user options.
+    # Discard retired toggles, custom paths and language overrides from old
+    # profiles. Display policy and config discovery are mandatory.
     normalized = {key:options.get(key,value) for key,value in defaults().items()}
     if (normalized['preset'] not in PRESETS or normalized['vsync'] not in ('keep','on','off')
-            or normalized['physx'] not in ('keep','0','1','2')
-            or normalized['language'] not in LANGUAGES):
+            or normalized['physx'] not in ('keep','0','1','2')):
         raise ValueError(tr('Réglages Borderlands 2 invalides.'))
     names = normalized['names']
     if (not isinstance(names,list) or len(names) != 4
@@ -182,10 +180,26 @@ def decode(data):
         return data.decode('cp1252'), 'cp1252'
 
 
-def game_config_edits(directory, options, index, allowed):
-    """Change only the supplied installation's existing Steam persona/language INI."""
-    if options['language'] == 'keep' and not options['names'][index]:
-        return []
+def original_language(text):
+    section, value = None, None
+    for line in text.splitlines():
+        header = re.match(r'^\s*\[([^\]]+)\]',line)
+        if header:
+            section = header[1].casefold()
+        match = re.match(r'^\s*Language\s*=\s*([a-zA-Z_-]+)\s*(?:[;#].*)?$',line,re.I)
+        if section == 'settings' and match:
+            value = match[1]
+    return value
+
+
+def backup_path(player, path):
+    return player/'borderlands2-before'/(path.stem+'-'+hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'.ini')
+
+
+def game_config_edits(directory, options, index, allowed, player):
+    """Set only the persona; retire old language overrides once using our backup."""
+    if not options['names'][index] and not (player/'borderlands2-before').is_dir():
+        return [], []
     directory = safe_path(directory, allowed)
     candidates = []
     for parts in (('steam_emu.ini',), ('Binaries','Win32','steam_emu.ini')):
@@ -197,14 +211,12 @@ def game_config_edits(directory, options, index, allowed):
             if path.is_symlink():
                 raise ValueError(tr('Configuration Borderlands 2 liée à un autre emplacement : {p0}',p0=path))
             candidates.append(path)
-    if not candidates:
-        raise ValueError(tr('Langue ou nom Borderlands 2 : steam_emu.ini introuvable dans la vue privée du jeu. Choisissez Conserver pour utiliser cette installation.'))
+    if not candidates and options['names'][index]:
+        raise ValueError(tr('Nom Borderlands 2 : steam_emu.ini introuvable dans la vue privée du jeu. Laissez les noms vides pour utiliser cette installation.'))
     changes = {}
-    if options['language'] != 'keep':
-        changes['Language'] = options['language']
     if options['names'][index]:
         changes['UserName'] = options['names'][index]
-    edits = []
+    edits, retired = [], []
     for path in dict.fromkeys(candidates):
         before = path.read_bytes()
         # Preserve the legacy non-UTF-8 ASCII-art header exactly; Steam names
@@ -219,12 +231,25 @@ def game_config_edits(directory, options, index, allowed):
             if section == 'settings' and value:
                 appid = value[1]
         if appid != '49520':
-            raise ValueError(tr('Configuration steam_emu.ini non reconnue pour Borderlands 2 : {p0}',p0=path))
-        after = patch_ini(text,{'Settings':changes}).encode('utf-8',errors='surrogateescape')
+            if options['names'][index]:
+                raise ValueError(tr('Configuration steam_emu.ini non reconnue pour Borderlands 2 : {p0}',p0=path))
+            continue
+        values = dict(changes)
+        backup = backup_path(player,path)
+        stamp = player/'borderlands2-language-retired'/backup.name
+        safe_path(stamp,(player,))
+        if not stamp.exists():
+            if backup.is_file():
+                safe_path(backup,(player,))
+                previous = original_language(backup.read_bytes().decode('utf-8-sig',errors='surrogateescape'))
+                if previous is not None:
+                    values['Language'] = previous
+            retired.append(stamp)
+        after = patch_ini(text,{'Settings':values}).encode('utf-8',errors='surrogateescape')
         if before.startswith(codecs.BOM_UTF8):
             after = codecs.BOM_UTF8 + after
         edits.append((path,before,after))
-    return edits
+    return edits, retired
 
 
 def apply_config(prefix, payload, private_binds=PRIVATE_BINDS, directory=None):
@@ -251,7 +276,7 @@ def apply_config(prefix, payload, private_binds=PRIVATE_BINDS, directory=None):
     for candidate in dict.fromkeys(prefixes):
         paths.extend(targets(candidate, allowed))
     # Validate and prepare every path before touching any player configuration.
-    edits = game_config_edits(directory or prefix/'drive_c/game',options,index,allowed)
+    edits, retired = game_config_edits(directory or prefix/'drive_c/game',options,index,allowed,player)
     for path in dict.fromkeys(paths):
         before = path.read_bytes() if path.exists() else b''
         text, encoding = decode(before)
@@ -260,11 +285,14 @@ def apply_config(prefix, payload, private_binds=PRIVATE_BINDS, directory=None):
     for path,before,after in edits:
         if before == after:
             continue
-        backup = player/'borderlands2-before'/(path.stem+'-'+hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'.ini')
+        backup = backup_path(player,path)
         if before and not backup.exists():
             write_bytes(backup,before)
         write_bytes(path,after)
         print(f'Borderlands 2 {player.name} : {path} · {PRESET_LABELS[options["preset"]]} · {payload["width"]}×{payload["height"]}', flush=True)
+    for stamp in retired:
+        safe_path(stamp,(player,))
+        write_bytes(stamp,b'Language override retired\n')
 
 
 def install_hook(base, rom, player):
