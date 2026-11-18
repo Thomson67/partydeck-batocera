@@ -1,7 +1,7 @@
 """Private Goldberg/gbe_fork identities for Left 4 Dead 2 (AppID 550).
 
 No emulator, Steam binary or user-supplied configuration is distributed.
-Only existing local account_steamid/account_name values are patched.
+Identity, language, controller and viewport settings are applied privately.
 """
 from partydeck_i18n import tr
 import hashlib
@@ -18,6 +18,12 @@ from partydeck_borderlands2 import child, decode, patch_ini, write_bytes, PRIVAT
 
 STEAM64_BASE = 76561197960265728  # Public, individual, desktop instance.
 ACCOUNT_MAX = (1 << 32)-1
+LANGUAGES = dict(zip(('keep','french','english','german','italian','spanish','portuguese',
+                     'dutch','polish','czech','russian','japanese'),
+                    ('Conserver','Français','Anglais','Allemand','Italien','Espagnol','Portugais',
+                     'Néerlandais','Polonais','Tchèque','Russe','Japonais')))
+BEGIN = '// Windows Party begin'
+END = '// Windows Party end'
 
 
 def matches(rom):
@@ -25,7 +31,7 @@ def matches(rom):
 
 
 def defaults():
-    return dict(names=[tr('Joueur{p0}',p0=i) for i in range(1,5)])
+    return dict(names=[tr('Joueur{p0}',p0=i) for i in range(1,5)],language='keep',gamepad=True)
 
 
 def validate(options):
@@ -35,7 +41,11 @@ def validate(options):
                    or any(ord(c)<32 or ord(c)==127 or c in ';#' for c in name) for name in names)
             or len(set(names))!=4):
         raise ValueError(tr('Left 4 Dead 2 : quatre noms différents, non vides, de 63 octets UTF-8 maximum, sans caractères de contrôle ni ; #.'))
-    return dict(names=list(names))
+    language=options.get('language','keep')
+    gamepad=options.get('gamepad',True)
+    if not isinstance(language,str) or language not in LANGUAGES or type(gamepad) is not bool:
+        raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
+    return dict(names=list(names),language=language,gamepad=gamepad)
 
 
 def valid_id(value):
@@ -110,6 +120,80 @@ def config_files(directory, allowed):
     return list(dict.fromkeys(files))
 
 
+def dimensions(payload):
+    width,height=payload.get('width'),payload.get('height')
+    if any(type(n) is not int or not 1 <= n <= 16384 for n in (width,height)):
+        raise ValueError(tr('Dimensions de la fenêtre Left 4 Dead 2 indisponibles ou invalides.'))
+    return width,height
+
+
+def patch_video(text, width, height):
+    """Patch the flat VideoConfig KeyValues object, preserving graphics quality."""
+    values={'setting.defaultres':str(width),'setting.defaultresheight':str(height),
+            'setting.fullscreen':'0','setting.nowindowborder':'1'}
+    if not text.strip():
+        text='"VideoConfig"\n{\n}\n'
+    # Parse the real flat KeyValues grammar, so comments/quoted braces and
+    # duplicate managed keys cannot cause a replacement in an unrelated field.
+    token=re.compile(r'\s+|//[^\r\n]*|"(?:[^"\\]|\\.)*"|[{}]|[^\s{}"]+')
+    tokens=[];end=0
+    for m in token.finditer(text):
+        if m.start()!=end:
+            raise ValueError(tr('Fichier video.txt Left 4 Dead 2 invalide ; fichier conservé.'))
+        end=m.end()
+        if m[0].isspace() or m[0].startswith('//'):continue
+        tokens.append(m)
+    def plain(m):return m[0].strip('"').casefold()
+    if (end!=len(text) or len(tokens)<3 or plain(tokens[0])!='videoconfig'
+            or tokens[1][0]!='{' or tokens[-1][0]!='}' or (len(tokens)-3)%2
+            or any(t[0] in ('{','}') for t in tokens[2:-1])):
+        raise ValueError(tr('Fichier video.txt Left 4 Dead 2 invalide ; fichier conservé.'))
+    edits=[];seen=set()
+    for key,val in zip(tokens[2:-1:2],tokens[3:-1:2]):
+        name=plain(key)
+        if name in values:
+            edits.append((val.start(),val.end(),'"'+values[name]+'"'));seen.add(name)
+    nl='\r\n' if '\r\n' in text else '\n'
+    missing=''.join(f'\t"{k}"\t"{v}"{nl}' for k,v in values.items() if k not in seen)
+    if missing:edits.append((tokens[-1].start(),tokens[-1].start(),nl+missing))
+    for start,end,replacement in sorted(edits,reverse=True):text=text[:start]+replacement+text[end:]
+    return text
+
+
+def managed_cfg(text, commands):
+    nl='\r\n' if '\r\n' in text else '\n'
+    block=re.compile(r'(?m)^'+re.escape(BEGIN)+r'\r?\n.*?^'+re.escape(END)+r'[^\r\n]*(?:\r?\n|$)',re.S)
+    text=block.sub('',text)
+    if BEGIN in text or END in text:
+        raise ValueError(tr('Bloc Windows Party Left 4 Dead 2 incomplet ; fichier conservé.'))
+    return text.rstrip('\r\n')+nl+BEGIN+nl+nl.join(commands)+nl+END+nl
+
+
+def game_edits(directory, player, payload, allowed):
+    width,height=dimensions(payload)
+    options=validate(payload['settings'])
+    folder=directory if directory.name.casefold()=='left4dead2' else child(directory,'left4dead2')
+    folder=safe_path(folder,allowed)
+    if not folder.is_dir():
+        raise ValueError(tr('Dossier left4dead2 introuvable dans la vue privée du jeu.'))
+    cfg=safe_path(child(folder,'cfg'),allowed)
+    edits=[]
+    for name in ('video.txt','config.cfg','autoexec.cfg'):
+        path=safe_path(child(cfg,name),allowed)
+        before=path.read_bytes() if path.exists() else b''
+        text,encoding=decode(before)
+        if name=='video.txt':
+            text=patch_video(text,width,height)
+        else:
+            commands=['joystick "'+str(int(options['gamepad']))+'"']
+            if options['gamepad']:commands.append('+jlook')
+            if name=='autoexec.cfg':commands.append(f'mat_setvideomode {width} {height} 1')
+            text=managed_cfg(text,commands)
+        backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'-'+name),(player,))
+        edits.append((path,before,text.encode(encoding),backup))
+    return edits
+
+
 def apply_config(directory, prefix, payload, private_binds=PRIVATE_BINDS):
     player=Path(payload['player']).resolve()
     prefix=prefix.resolve()
@@ -144,14 +228,26 @@ def apply_config(directory, prefix, payload, private_binds=PRIVATE_BINDS):
         if len(seeds)!=1:
             raise ValueError(tr('Plusieurs Steam ID Goldberg différents sont présents dans le jeu ; initialisation refusée.'))
         identity=dict(version=1,index=index,steamid=player_id(seeds.pop(),index))
-    changes={'user::general':dict(account_name=options['names'][index],account_steamid=identity['steamid'])}
+    general=dict(account_name=options['names'][index],account_steamid=identity['steamid'])
+    if options['language']!='keep':general['language']=options['language']
+    changes={'user::general':general}
     edits=[]
-    # Prepare every encoded edit before changing any config/identity. Other
-    # Goldberg files, language, ports and save paths are not rewritten.
+    # Prepare all edits before modifying files. Ports and save paths stay intact.
     for path,before,text,encoding,_ in sources:
         after=patch_ini(text,changes).encode(encoding)
         backup=safe_path(player/'l4d2-goldberg-before'/(hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'.ini'),(player,))
         edits.append((path,before,after,backup))
+        if options['language']!='keep':
+            whitelist=safe_path(child(path.parent,'supported_languages.txt'),allowed)
+            if whitelist.is_file():
+                original=whitelist.read_bytes()
+                languages,codec=decode(original)
+                if options['language'] not in [line.strip().casefold() for line in languages.splitlines()]:
+                    nl='\r\n' if '\r\n' in languages else '\n'
+                    updated=languages.rstrip('\r\n')+nl+options['language']+nl
+                    backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(whitelist)).hexdigest()[:16]+'-supported_languages.txt'),(player,))
+                    edits.append((whitelist,original,updated.encode(codec),backup))
+    edits.extend(game_edits(directory,player,payload,allowed))
     for path,before,after,backup in edits:
         if before!=after and not backup.exists():
             write_bytes(backup,before)
@@ -214,7 +310,10 @@ def install_hook(base, rom, player):
         raise ValueError(tr('Identifiant ou numéro de joueur Goldberg invalide pour Left 4 Dead 2.'))
     payload=player/'l4d2-goldberg-launch.json'
     result=player/f'l4d2-result-{uuid.uuid4().hex}.json'
-    atomic_write(payload,json.dumps(dict(player=str(player),index=index,settings=settings,result=str(result)),ensure_ascii=False))
+    width=int(os.environ.get('PARTYDECK_PLAYER_WIDTH','0'))
+    height=int(os.environ.get('PARTYDECK_PLAYER_HEIGHT','0'))
+    dimensions(dict(width=width,height=height))
+    atomic_write(payload,json.dumps(dict(player=str(player),index=index,settings=settings,result=str(result),width=width,height=height),ensure_ascii=False))
     binary=shutil.which('batocera-wine')
     if not binary:
         raise RuntimeError(tr('batocera-wine introuvable.'))

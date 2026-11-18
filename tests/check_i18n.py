@@ -20,6 +20,13 @@ for locale in ('fr','fr_FR','fr-FR','FR_ca.UTF-8','fr_BE@euro',"'fr_FR'"):
 for locale in ('en_US','de_DE','es_ES','zh_CN','C.UTF-8','','frr_FR','france'):
     assert lang.locale_language(locale)=='en'
 
+for selected,labels in (('fr',('Langue du jeu','Activer la manette en jeu','Français','Conserver')),
+                        ('en',('Game language','Enable gamepad in game','French','Keep current'))):
+    lang.set_language(selected)
+    assert [title for _,title,_ in fields(2,'l4d2-goldberg')]==list(labels[:2])
+    assert label_value('l4d2.language','french')==labels[2]
+    assert label_value('l4d2.language','keep')==labels[3]
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);conf=root/'batocera.conf';es=root/'es_settings.cfg'
     env={'LANG':'fr_FR.UTF-8'}

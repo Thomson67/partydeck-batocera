@@ -17,7 +17,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2
+from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2, LANGUAGES as L4D2_LANGUAGES
 from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
                                   VOLUME_FIELDS as SM64_VOLUME_FIELDS)
@@ -72,6 +72,9 @@ def fields(tab, adapter='standard'):
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg'])]
     if adapter == 'l4d2-goldberg':
+        if tab==2:
+            return [('l4d2.language',tr('Langue du jeu'),list(L4D2_LANGUAGES)),
+                    ('l4d2.gamepad',tr('Activer la manette en jeu'),[True,False])]
         return [(f'l4d2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
     if adapter == 'sm64coopdx':
         if tab == 1:
@@ -147,6 +150,8 @@ def label_value(key, value):
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg'}.get(value, value)
+    if key == 'l4d2.language':
+        return tr(L4D2_LANGUAGES[value])
     if key == 'sm64coopdx.language':
         return tr(LANGUAGE_LABELS[value])
     if key == 'sm64coopdx.msaa':
@@ -512,7 +517,7 @@ class App:
 
     def available_tabs(self):
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
-            return (0,1)
+            return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
             return (0,1,2,3,4)
         if self.model.data and self.model.data.get('adapter') == 'borderlands2':
@@ -1036,7 +1041,7 @@ class App:
                 if self.model.data.get('adapter') == 'sm64coopdx':
                     title = tr(('Session','Graphismes','Gameplay','Options','Son')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
-                    title = tr(('Session','Joueurs')[i])
+                    title = tr(('Session','Joueurs','Options')[i])
                 else:
                     title = tr('Image') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
                 self.box((416+position*tab_width, 248, tab_width-13, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
@@ -1052,7 +1057,8 @@ class App:
                 if self.model.data['adapter'] == 'sm64coopdx':
                     subtitle = tr('SM64CoopDX · configuration commune · réglages privés pour chaque joueur')
                 if self.model.data['adapter'] == 'l4d2-goldberg':
-                    subtitle = tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables')
+                    subtitle = (tr('Sans bordure et résolution automatiques · langue : fichiers du jeu requis') if self.tab==2
+                                else tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables'))
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
             rows = self.current_fields()
             offset = max(0, min(self.row, len(rows)-1) - 6)

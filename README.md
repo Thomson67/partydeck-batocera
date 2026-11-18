@@ -467,13 +467,42 @@ racine contient une autre valeur. Les fichiers sont lus sans être réécrits.
 Un AppID effectif explicitement différent reste refusé ; des terminateurs de
 texte Windows après le nombre sont acceptés.
 
-Seules les clés `account_name` et `account_steamid` sont modifiées dans les
-`configs.user.ini` privés. La langue, les chemins de sauvegarde, le port
-`listen_port`, les autres fichiers Goldberg (`configs.main.ini`, `.app.ini`,
-`.overlay.ini`, langues, interfaces et statistiques) et la ROM solo ne sont pas
-réécrits. La première version de chaque INI privé est conservée dans
-`l4d2-goldberg-before`. Aucun émulateur ou fichier de configuration fourni par
-l'utilisateur n'est publié ou téléchargé par cet adaptateur.
+L'onglet **Options** / **Options** ajoute :
+
+- **Langue du jeu** / **Game language** : conserver la langue existante (par
+  défaut), ou choisir une langue. Le choix est appliqué à tous les joueurs dans
+  `configs.user.ini`. Si `supported_languages.txt` existe, la langue choisie est
+  ajoutée à cette liste privée pour éviter le repli silencieux vers l'anglais.
+  Les fichiers de traduction/doublage doivent déjà être présents dans le jeu ;
+  le configurateur ne télécharge pas de ressources linguistiques.
+- **Activer la manette en jeu** / **Enable gamepad in game** : activé par défaut.
+  Applique `joystick` et active la visée manette (`+jlook`) sans effacer les
+  commandes clavier ni remplacer les scripts de contrôles fournis par le jeu.
+
+Le **mode fenêtré sans bordure et la résolution de chaque joueur sont imposés
+à chaque lancement**, sans option à régler : `left4dead2/cfg/video.txt` reçoit
+`setting.fullscreen=0`, `setting.nowindowborder=1` et les dimensions de sa portion
+(horizontal, vertical ou grille). La surface interne Gamescope utilise les
+mêmes dimensions. Un bloc géré dans `autoexec.cfg` applique aussi
+`mat_setvideomode largeur hauteur 1`, après les commandes existantes. Le bloc
+manette est conservé dans `config.cfg` et `autoexec.cfg`. Les autres réglages
+vidéo, raccourcis, scripts de démarrage et commandes réseau restent présents.
+Les paramètres sont réappliqués lorsqu'on change la disposition ou le nombre
+de joueurs ; un fichier vidéo invalide est conservé et signalé.
+
+**English:** The Options tab adds game language (keep current by default) and
+gamepad activation (enabled by default). Language assets must already be
+installed. Each launch forces borderless windowed rendering at the player's
+viewport resolution, including Gamescope's internal size. Existing quality
+settings, keyboard binds, startup scripts and networking commands are preserved.
+Only private player copies are updated; the solo installation is unchanged.
+
+Les chemins de sauvegarde, le port `listen_port`, les autres fichiers Goldberg
+(`configs.main.ini`, `.app.ini`, `.overlay.ini`, interfaces et statistiques) et
+la ROM solo ne sont pas réécrits. Les premières versions privées sont conservées
+dans `l4d2-goldberg-before` (identité) et `l4d2-settings-before` (options).
+Aucun émulateur ou fichier de configuration fourni par l'utilisateur n'est
+publié ou téléchargé par cet adaptateur.
 
 Le premier lancement exige un Steam ID individuel valide et identique dans
 les copies locales du jeu. Si les sources sont contradictoires, si la configuration

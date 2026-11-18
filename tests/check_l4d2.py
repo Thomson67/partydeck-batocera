@@ -35,6 +35,20 @@ for name in ('','A\nB','A#B','A;B','é'*32):
     try:l4d2.validate(dict(names=[name,'B','C','D']));raise AssertionError('invalid name accepted')
     except ValueError:pass
 
+assert l4d2.validate(dict(names=['A','B','C','D']))['language']=='keep'
+assert l4d2.validate(dict(names=['A','B','C','D']))['gamepad'] is True
+for changes in (dict(language='bogus'),dict(language=[]),dict(gamepad=1)):
+    try:l4d2.validate(dict(l4d2.defaults(),**changes));raise AssertionError('invalid options accepted')
+    except ValueError:pass
+for size in ((0,540),(1920,0),(True,540),(1920,'540'),(20000,1)):
+    try:l4d2.dimensions(dict(width=size[0],height=size[1]));raise AssertionError('invalid size accepted')
+    except ValueError:pass
+# Comments, duplicated keys and malformed quotes are handled without guessing.
+text='"VideoConfig" { "setting.defaultres" "1" "setting.defaultres" "2" "note" "{keep}" }'
+assert l4d2.patch_video(text,960,1080).count('"setting.defaultres" "960"')==2
+try:l4d2.patch_video('"VideoConfig" { "broken }',960,540);raise AssertionError('bad quote accepted')
+except ValueError:pass
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);base=root/'system';base.mkdir();windows=root/'windows';windows.mkdir()
     rom=windows/'Left 4 Dead 2.wsquashfs';rom.write_bytes(b'SOLO ROM')
@@ -50,6 +64,7 @@ with tempfile.TemporaryDirectory() as folder:
         user_configs=[]
         other_files=[]
         game.mkdir(parents=True)
+        (game/'left4dead2/cfg').mkdir(parents=True)
         root_appid=game/'steam_appid.txt';root_appid.write_bytes(b'999\n')
         other_files.append((root_appid,b'999\n'))  # Goldberg's local 550 takes precedence.
         for rel in ('steam_settings','BIN/x64/STEAM_SETTINGS'):
@@ -62,7 +77,7 @@ with tempfile.TemporaryDirectory() as folder:
                 path=settings/filename;path.write_bytes(data);other_files.append((path,data))
         global_ini=prefix/'drive_c/users/root/AppData/Roaming/GSE Saves/settings/configs.user.ini'
         global_ini.parent.mkdir(parents=True);global_ini.write_bytes(b'GLOBAL IDENTITY')
-        payload=dict(player=str(player),index=index,settings=profile['l4d2'])
+        payload=dict(player=str(player),index=index,settings=profile['l4d2'],width=1920,height=540)
         l4d2.apply_config(game,prefix,payload,private_binds=())
         identity=player/'l4d2-goldberg-identity.json'
         data=json.loads(identity.read_text());ids.append(data['steamid'])
@@ -84,6 +99,51 @@ with tempfile.TemporaryDirectory() as folder:
             assert 'account_name='+payload['settings']['names'][index] in got
         assert all(path.read_bytes()==ORIGINAL for path in backups)
     assert ids[0]==SEED and len(set(ids))==4
+    # Source settings preserve quality, user binds and host commands. Changing
+    # layout/language/controller is idempotent; it never regenerates identities.
+    cfg=game/'left4dead2/cfg'
+    video=cfg/'video.txt'
+    source_video='"VideoConfig"\r\n{\r\n "setting.defaultres" "1280" // old\r\n "setting.fullscreen" "1"\r\n "setting.mat_antialias" "8"\r\n}\r\n'
+    video.write_bytes(source_video.encode())
+    config=cfg/'config.cfg';config.write_bytes(b'bind "w" "+forward"\r\njoystick "0"\r\n')
+    auto=cfg/'autoexec.cfg';auto.write_text('sv_lan 1\n// custom host command\n')
+    payload['settings']=dict(names=['One','Two','Three','Four'],language='french',gamepad=True)
+    payload.update(width=960,height=1080)
+    identity_before=(player/'l4d2-goldberg-identity.json').read_bytes()
+    l4d2.apply_config(game,prefix,payload,private_binds=())
+    assert (player/'l4d2-goldberg-identity.json').read_bytes()==identity_before
+    assert '"setting.mat_antialias" "8"' in video.read_text()
+    assert '"setting.defaultres" "960"' in video.read_text()
+    assert '"setting.fullscreen" "0"' in video.read_text()
+    assert '"setting.nowindowborder"\t"1"' in video.read_text()
+    assert 'bind "w" "+forward"' in config.read_text()
+    assert 'sv_lan 1\n// custom host command' in auto.read_text()
+    assert 'mat_setvideomode 960 1080 1' in auto.read_text() and 'joystick "1"' in auto.read_text()
+    for user in user_configs:
+        assert 'language=french' in user.read_text()
+        assert (user.parent/'supported_languages.txt').read_text().splitlines()==['english','french']
+    snapshots={p:p.read_bytes() for p in (video,config,auto,*user_configs)}
+    l4d2.apply_config(game,prefix,payload,private_binds=())
+    assert all(p.read_bytes()==data for p,data in snapshots.items())
+    payload['settings'].update(language='english',gamepad=False)
+    payload.update(width=1920,height=540)
+    l4d2.apply_config(game,prefix,payload,private_binds=())
+    assert 'joystick "0"' in auto.read_text() and '+jlook' not in auto.read_text()
+    assert auto.read_text().count(l4d2.BEGIN)==1 and 'mat_setvideomode 1920 540 1' in auto.read_text()
+    assert all('language=english' in user.read_text() for user in user_configs)
+    assert (player/'l4d2-goldberg-identity.json').read_bytes()==identity_before
+    # Malformed or external Source configs stop before any Goldberg edit.
+    snapshots=[user.read_bytes() for user in user_configs]
+    payload['settings']['language']='french'
+    video.write_text('broken "VideoConfig"')
+    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('bad video config accepted')
+    except ValueError:pass
+    assert [user.read_bytes() for user in user_configs]==snapshots
+    video.unlink();outside=root/'solo-video.txt';outside.write_text(source_video);video.symlink_to(outside)
+    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('external video config accepted')
+    except ValueError:pass
+    assert outside.read_bytes()==source_video.encode() and [user.read_bytes() for user in user_configs]==snapshots
+    video.unlink();video.write_text(source_video)
     # Zero/missing local AppIDs fall back to the root; numeric prefixes tolerate
     # Windows text terminators as std::stoul does, without rewriting the file.
     local_appid=user_configs[0].parent/'steam_appid.txt'
@@ -119,7 +179,8 @@ with tempfile.TemporaryDirectory() as folder:
     player=base/'hook/j1';prefix=player/'prefix';game=prefix/'drive_c/game'
     settings=game/'steam_settings';settings.mkdir(parents=True)
     (settings/'configs.user.ini').write_bytes(ORIGINAL)
-    payload=dict(player=str(player),index=0,settings=profile['l4d2'])
+    (game/'left4dead2/cfg').mkdir(parents=True)
+    payload=dict(player=str(player),index=0,settings=profile['l4d2'],width=1920,height=540)
     payload_file=player/'payload.json';payload_file.write_text(json.dumps(payload))
     source='#!/bin/bash\nset -e\n'
     for name in ('play_wine','play_pc','play_squashfs'):
@@ -130,7 +191,8 @@ with tempfile.TemporaryDirectory() as folder:
     script=player/'test.sh';script.write_text(instrument_native(source,[sys.executable,str(Path(l4d2.__file__)),str(payload_file)],prefix_argument=True))
     subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),check=True,capture_output=True)
     native=player/'native';native.write_text(source)
-    with patch.object(l4d2.shutil,'which',return_value=str(native)),patch.object(l4d2.subprocess,'run') as run:
+    with patch.dict(os.environ,PARTYDECK_PLAYER_WIDTH='1920',PARTYDECK_PLAYER_HEIGHT='540'),\
+         patch.object(l4d2.shutil,'which',return_value=str(native)),patch.object(l4d2.subprocess,'run') as run:
         result=l4d2.install_hook(base,rom,player)
         assert run.call_args_list[-1].args[0]==['mount','--bind',str(player/'batocera-wine-l4d2'),str(native)]
         assert native.read_text()==source
@@ -175,7 +237,7 @@ with tempfile.TemporaryDirectory() as folder:
              patch.object(runner.subprocess,'run',return_value=Mock(returncode=native_code)):
             assert runner.run_wine(rom,rom,player,root/'private-saves')==expected
         assert not result.exists()
-    app=App(base,rom,windowed=True);assert app.available_tabs()==(0,1)
+    app=App(base,rom,windowed=True);assert app.available_tabs()==(0,1,2)
     app.action('next');app.row=0;app.action('ok');assert app.keyboard is not None
     app.keyboard['value']='Joueur test';app.keyboard_action('save')
     with patch('partydeck_couch.subprocess.run',return_value=Mock(returncode=0)):assert app.save()
@@ -183,7 +245,8 @@ with tempfile.TemporaryDirectory() as folder:
     saved=json.loads(profile_path(base,rom).read_text())
     assert all(key not in saved for key in ('anchor','borderlands2','sm64coopdx'))
     for lang in ('fr','en'):
-        set_language(lang);app.tab=1;app.draw()
+        set_language(lang)
+        for tab in (1,2):app.tab=tab;app.draw()
     app.pg.quit()
 
-print('Left 4 Dead 2 : identités J1–J4 distinctes/persistantes, J1 conservé, fichiers privés, noms, AppID et réglages inchangés, hook et UI vérifiés.')
+print('Left 4 Dead 2 : identités J1–J4, langue, manette, sans bordure/résolution, fichiers privés, hook et UI vérifiés.')

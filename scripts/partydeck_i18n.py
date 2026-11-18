@@ -62,6 +62,13 @@ def get_language():
 
 
 EN = {
+    'Activer la manette en jeu':'Enable gamepad in game',
+    'Sans bordure et résolution automatiques · langue : fichiers du jeu requis':'Automatic borderless and resolution · language files must be installed',
+    'Réglages Left 4 Dead 2 invalides.':'Invalid Left 4 Dead 2 settings.',
+    'Dimensions de la fenêtre Left 4 Dead 2 indisponibles ou invalides.':'Left 4 Dead 2 window dimensions are missing or invalid.',
+    'Fichier video.txt Left 4 Dead 2 invalide ; fichier conservé.':'Invalid Left 4 Dead 2 video.txt; file retained.',
+    'Bloc Windows Party Left 4 Dead 2 incomplet ; fichier conservé.':'Incomplete Left 4 Dead 2 Windows Party block; file retained.',
+    'Dossier left4dead2 introuvable dans la vue privée du jeu.':'The left4dead2 folder was not found in the private game view.',
     'AppID Goldberg {p0} incompatible avec Left 4 Dead 2 : {p1}':'Goldberg AppID {p0} is incompatible with Left 4 Dead 2: {p1}',
     'Goldberg : AppID 550 confirmé dans {p0}.':'Goldberg: AppID 550 confirmed in {p0}.',
     'État Goldberg hors du dossier privé du joueur.':'Goldberg state is outside the player’s private directory.',
