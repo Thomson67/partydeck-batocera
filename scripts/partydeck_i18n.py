@@ -62,6 +62,10 @@ def get_language():
 
 
 EN = {
+    'État de fin Wine hors du dossier privé du joueur.':'Wine exit state is outside the player’s private directory.',
+    'J{p0} : fin Wine={p1}, Gamescope={p2}.':'Player {p0}: Wine exit={p1}, Gamescope={p2}.',
+    'Wine a terminé normalement ; incident Gamescope à la fermeture ({p0}), non transmis à EmulationStation.':'Wine exited normally; Gamescope shutdown failure ({p0}) was not forwarded to EmulationStation.',
+    'Fermeture de la session demandée (signal {p0}).':'Session shutdown requested (signal {p0}).',
     'Graphismes':'Graphics','Gameplay':'Gameplay','Options':'Options','Son':'Audio',
     'SM64CoopDX · profil commun':'SM64CoopDX · shared profile',
     'Distance d’affichage':'Draw distance','Caméra libre':'Free camera',

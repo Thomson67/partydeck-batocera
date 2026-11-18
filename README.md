@@ -426,6 +426,33 @@ Les tests locaux `tests/check_sm64coopdx.py` couvrent J1–J4, les sauvegardes,
 les redirections, UMU, la configuration commune et les réglages à la manette.
 Le lancement réel sur Batocera reste à valider avec ce nouveau profil.
 
+## Fermeture des sessions
+
+Sous Wayland, le lanceur suit séparément la fin de `batocera-wine` et celle de
+Gamescope. Dès qu'un joueur termine, les instances de cette session sont
+fermées ensemble : il n'est plus nécessaire de fermer les fenêtres Gamescope
+restées ouvertes après le jeu. Le lancement reste surveillé pendant le placement
+des fenêtres, pour détecter aussi un arrêt précoce.
+
+Chaque lancement utilise un état de fin Wine unique, supprimé après le nettoyage.
+Le journal distingue les codes Wine et Gamescope pour chaque joueur. Un incident
+Gamescope `SIGSEGV`/139/245 à la fermeture n'est traité comme une fermeture normale
+**que si Wine a déjà confirmé une sortie normale**. Une erreur Wine ou un crash
+Gamescope sans cette confirmation est conservé ; les signaux négatifs sont
+convertis en `128 + signal` plutôt qu'en codes de shell trompeurs comme 245.
+
+Sous Xorg, le lanceur continue d'attendre la fin des fenêtres comme auparavant.
+Une demande d'arrêt de la session par signal (dont les raccourcis de fermeture)
+déclenche le nettoyage et un retour normal. Les groupes de processus créés par
+la session sont arrêtés avec un délai de grâce commun de cinq secondes, puis
+arrêt forcé si nécessaire. Aucun `pkill` global de Wine ou Gamescope n'est utilisé.
+Les signaux et les états temporaires sont restaurés/nettoyés en fin de session.
+
+Vérification locale : `python3 tests/check_session_exit.py` simule un Wine terminé
+avec deux compositeurs encore actifs, vérifie les codes d'erreur, les groupes
+de processus isolés et la conservation du comportement Xorg. La correction
+du cas signalé sur Batocera v44 Wayland reste à valider sur la machine.
+
 ## Stockage et entretien automatique (version de test)
 
 Dans la bibliothèque du configurateur, descendez jusqu'au bouton **Stockage**,

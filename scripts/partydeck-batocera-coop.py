@@ -14,10 +14,12 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote_to_bytes
 
 from partydeck_storage import session as storage_session, settings as storage_settings
+from partydeck_i18n import tr
 
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
@@ -394,6 +396,24 @@ def mount_overlay(target, area):
 
 
 def run_wine(original, target, player, saves=None):
+    # Gamescope's SDL backend can stay alive after its primary Wine child exits.
+    # Report native completion independently of the compositor's lifetime/code.
+    status = 1
+    try:
+        status = _run_wine(original,target,player,saves)
+        return status
+    finally:
+        state = os.environ.get('PARTYDECK_EXIT_STATE')
+        if state:
+            from partydeck_profiles import atomic_write
+            import json
+            path = Path(state)
+            if path.parent.resolve() != player.resolve() or not re.fullmatch(r'session-[0-9a-f]{32}\.json',path.name):
+                raise ValueError(tr('État de fin Wine hors du dossier privé du joueur.'))
+            atomic_write(path,json.dumps(dict(version=1,wine_exit=status)))
+
+
+def _run_wine(original, target, player, saves=None):
     if original.suffix.lower() != ".wsquashfs":
         mount_overlay(target, (saves if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
@@ -418,7 +438,7 @@ def run_wine(original, target, player, saves=None):
 
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
-                 shared_keyboard_mouse=True, saves=None):
+                 shared_keyboard_mouse=True, saves=None, exit_state=None):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -444,33 +464,95 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         args.append(str(saves))
     # SDL writes this identifier to the outer X11 window's WM_CLASS. The
     # AppImage's launcher PID and the game's title can both differ.
-    return subprocess.Popen(args, env={**os.environ, "SDL_VIDEODRIVER": "x11",
+    environment = {**os.environ, "SDL_VIDEODRIVER": "x11",
                                        "SDL_VIDEO_X11_WMCLASS": window_class,
                                        "PARTYDECK_PLAYER_WIDTH": str(width),
-                                       "PARTYDECK_PLAYER_HEIGHT": str(height)},
-                            start_new_session=True)
+                                       "PARTYDECK_PLAYER_HEIGHT": str(height)}
+    environment.pop('PARTYDECK_EXIT_STATE',None)
+    if exit_state is not None:
+        environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
+    return subprocess.Popen(args,env=environment,start_new_session=True)
 
 
-def stop_players(processes):
-    for process in processes:
-        if process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+def stop_players(processes, timeout=5):
+    # Every compositor has its own process group. Never use a global process
+    # name or wineserver kill: solo games and unrelated sessions must survive.
+    active = [process for process in processes if process.poll() is None]
+    for process in active:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.monotonic()+timeout
     for process in processes:
         try:
-            process.wait(timeout=5)
+            process.wait(timeout=max(0,deadline-time.monotonic()))
         except subprocess.TimeoutExpired:
+            pass
+    # Allow descendants the same grace period if their leader exits first.
+    # Never signal a group belonging to a leader reaped earlier in the session:
+    # its PID could have been recycled by the time the last Xorg player quits.
+    groups = {process.pid for process in active}
+    while groups and time.monotonic() < deadline:
+        for group in list(groups):
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                os.killpg(group,0)
             except ProcessLookupError:
-                pass
-            process.wait()
+                groups.remove(group)
+        if groups:
+            time.sleep(min(.05,max(0,deadline-time.monotonic())))
+    for group in groups:
+        try:
+            os.killpg(group, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    for process in processes:
+        process.wait()
+
+
+class SessionStopped(Exception):
+    pass
 
 
 def handle_exit(signum, _frame):
-    raise SystemExit(128 + signum)
+    raise SessionStopped(signum)
+
+
+def read_wine_exit(path):
+    import json
+    try:
+        data = json.loads(path.read_text())
+        code = data.get('wine_exit') if isinstance(data,dict) and data.get('version')==1 else None
+        return code if type(code) is int and 0 <= code <= 255 else None
+    except (OSError,ValueError):
+        return None
+
+
+def exit_code(status):
+    # Passing -11 to SystemExit used to wrap it to 245 at the shell boundary.
+    return 128-status if status < 0 else status
+
+
+def session_result(processes, states, wayland):
+    statuses = [process.poll() for process in processes]
+    wine = [read_wine_exit(path) for path in states]
+    finished = [i for i,status in enumerate(statuses) if status is not None or (wayland and wine[i] is not None)]
+    if not finished or (not wayland and len(finished) != len(processes)):
+        return None
+    results = []
+    for index in finished:
+        status, native = statuses[index],wine[index]
+        print(tr('J{p0} : fin Wine={p1}, Gamescope={p2}.',p0=index+1,p1=native,p2=status),flush=True)
+        if native is not None:
+            results.append(native)
+        if status is not None and status != 0:
+            # Only a proven normal Wine exit permits treating this Wayland
+            # teardown failure as cleanup. Startup/in-game crashes still fail.
+            if wayland and native==0 and status in (-signal.SIGSEGV,139,245):
+                print(tr('Wine a terminé normalement ; incident Gamescope à la fermeture ({p0}), non transmis à EmulationStation.',p0=status),flush=True)
+            else:
+                results.append(exit_code(status))
+    return next((code for code in results if code),0)
 
 
 def run_session(app, base, original, target, count, split, input_mode, party=False):
@@ -511,24 +593,29 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     print("Vérification Bubblewrap Wine OK.", flush=True)
     game_id = hashlib.sha256(os.fsencode(original)).hexdigest()[:16]
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
-    processes = []
+    processes, states = [], []
+    wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
-    for signum in SIGNALS:
-        signal.signal(signum, handle_exit)
+    handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     try:
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
             player = base / ("party" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
             player.mkdir(parents=True, exist_ok=True)
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
+            state = player/f'session-{uuid.uuid4().hex}.json'
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
-                                          shared_keyboard_mouse=shared_keyboard_mouse, saves=saves))
+                                          shared_keyboard_mouse=shared_keyboard_mouse, saves=saves,exit_state=state))
+            states.append(state)
         pending = dict(enumerate(processes))
         seen_windows = {}
         next_attempt = dict.fromkeys(pending, 0)
         deadline = time.monotonic() + 120
         while pending and time.monotonic() < deadline:
+            result = session_result(processes,states,wayland)
+            if result is not None:
+                return result
             for index, process in list(pending.items()):
                 status = process.poll()
                 if status is not None:
@@ -557,12 +644,24 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 print(f"Placement J{index + 1} non confirmé : {seen_windows[index]}", flush=True)
             else:
                 print(f"Fenêtre J{index + 1} non repérée : {window_classes[index]}", flush=True)
-        statuses = [process.wait() for process in processes]
-        return next((status for status in statuses if status), 0)
+        while True:
+            result = session_result(processes,states,wayland)
+            if result is not None:
+                return result
+            time.sleep(0.1)
+    except SessionStopped as stopped:
+        print(tr('Fermeture de la session demandée (signal {p0}).',p0=stopped.args[0]),flush=True)
+        return 0
     finally:
         for signum in SIGNALS:
             signal.signal(signum, signal.SIG_IGN)
-        stop_players(processes)
+        try:
+            stop_players(processes)
+        finally:
+            for path in states:
+                path.unlink(missing_ok=True)
+            for signum,handler in handlers.items():
+                signal.signal(signum,handler)
 
 
 def main():

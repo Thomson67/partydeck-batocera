@@ -90,6 +90,8 @@ for split, second_position, inputs, shared, party in [
         classes = [f"partydeck-coop-{os.getpid()}-j1", f"partydeck-coop-{os.getpid()}-j2"]
         windows = mock(coop, "top_window", side_effect={classes[0]:"810", classes[1]:"811"}.get)
         place = mock(coop, "place_window", return_value=True)
+        for process in processes:
+            process.poll.side_effect = lambda: 0 if place.call_count==2 else None
         output = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
         assert coop.run_session(base, base, game, game, "auto", split, "auto", party=party) == 0
         assert [call.args[0] for call in windows.call_args_list] == classes
