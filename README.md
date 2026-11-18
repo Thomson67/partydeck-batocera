@@ -460,8 +460,12 @@ avant le lancement de Wine. Il recherche les `steam_settings` existants à la
 racine du dossier de lancement et dans les emplacements `bin`, `x64`, `x86`,
 `win64`, `win32` et `left4dead2`, jusqu'à trois niveaux et sans parcourir les
 répertoires de ressources. Les copies 32/64 bits trouvées reçoivent la même
-identité pour ce joueur. Les fichiers `steam_appid.txt` trouvés doivent indiquer
-**550**, qui reste commun à tous les joueurs.
+identité pour ce joueur. La validation prend d'abord l'AppID de
+`steam_settings/steam_appid.txt`, puis seulement à défaut celui du dossier de
+lancement/de la DLL. Un AppID local **550** reste prioritaire même si un fichier
+racine contient une autre valeur. Les fichiers sont lus sans être réécrits.
+Un AppID effectif explicitement différent reste refusé ; des terminateurs de
+texte Windows après le nombre sont acceptés.
 
 Seules les clés `account_name` et `account_steamid` sont modifiées dans les
 `configs.user.ini` privés. La langue, les chemins de sauvegarde, le port
@@ -477,6 +481,12 @@ est absente ou si l'identité persistante est invalide, le lancement est refusé
 une explication, sans régénération silencieuse. Des identifiants initiaux partagés
 entre plusieurs PC restent à gérer séparément : ce profil sépare les 1–4 joueurs
 d'une même installation locale.
+
+Le résultat du hook est suivi indépendamment du code retourné par
+`batocera-wine` : certaines versions peuvent échouer dans le hook puis retourner
+zéro après leur attente de wineserver. Un état temporaire propre à chaque
+lancement garde cet échec visible et est nettoyé après utilisation. Un hook non
+exécuté ou non terminé ne vaut jamais une application réussie du profil.
 
 Cette étape traite l'identité des joueurs. L'hébergement et la connexion au
 serveur restent à effectuer dans le jeu ; le profil n'ajoute pas encore

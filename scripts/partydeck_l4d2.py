@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import uuid
 
 from partydeck_borderlands2 import child, decode, patch_ini, write_bytes, PRIVATE_BINDS
 
@@ -70,9 +71,6 @@ def value(text, section, key):
 def config_files(directory, allowed):
     """Look beside the known Windows DLL locations, never recurse into assets."""
     directory = safe_path(directory,allowed)
-    root_appid=child(directory,'steam_appid.txt')
-    if root_appid.is_file() and safe_path(root_appid,allowed).read_text(encoding='utf-8-sig').strip()!='550':
-        raise ValueError(tr('Configuration Goldberg destinée à un autre jeu : {p0}',p0=root_appid))
     queue,visited,files = [(directory,0)],set(),[]
     roots={'bin','x64','x86','win64','win32','left4dead2'}
     while queue:
@@ -87,10 +85,22 @@ def config_files(directory, allowed):
             target=child(settings,'configs.user.ini')
             if target.is_file():
                 target=safe_path(target,allowed)
-                # AppID identifies the game; it must never be individualized.
-                for appid in (child(settings,'steam_appid.txt'),child(folder,'steam_appid.txt')):
-                    if appid.is_file() and safe_path(appid,allowed).read_text(encoding='utf-8-sig').strip()!='550':
-                        raise ValueError(tr('Configuration Goldberg destinée à un autre jeu : {p0}',p0=appid))
+                # Goldberg reads steam_settings before falling back to the
+                # working/executable directory. A leftover root AppID must not
+                # override a valid local AppID. Do not rewrite any of them.
+                for parent in dict.fromkeys((settings,directory,folder)):
+                    appid=child(parent,'steam_appid.txt')
+                    if not appid.is_file():
+                        continue
+                    text=safe_path(appid,allowed).read_text(encoding='utf-8-sig')
+                    match=re.match(r'\s*(\d+)',text)
+                    number=int(match[1]) if match else 0
+                    if not number:
+                        continue
+                    if number!=550:
+                        raise ValueError(tr('AppID Goldberg {p0} incompatible avec Left 4 Dead 2 : {p1}',p0=number,p1=appid))
+                    print(tr('Goldberg : AppID 550 confirmé dans {p0}.',p0=appid),flush=True)
+                    break
                 files.append(target)
         if depth<3:
             for name in sorted(roots):
@@ -156,6 +166,40 @@ def apply_config(directory, prefix, payload, private_binds=PRIVATE_BINDS):
              p0=index+1,p1=identity['steamid'],p2=len(edits)),flush=True)
 
 
+def result_path(payload):
+    path=Path(payload['result'])
+    if path.parent.resolve()!=Path(payload['player']).resolve() or not re.fullmatch(r'l4d2-result-[0-9a-f]{32}\.json',path.name):
+        raise ValueError(tr('État Goldberg hors du dossier privé du joueur.'))
+    return path
+
+
+def apply_launch(directory, prefix, payload):
+    # Pending is a failure unless this exact hook invocation completes. Native
+    # batocera-wine can otherwise swallow a failed hook while waiting for Wine.
+    result=result_path(payload) if payload.get('result') else None
+    if result is not None:
+        write_bytes(result,b'{"version":1,"code":1}\n')
+    apply_config(directory,prefix,payload)
+    if result is not None:
+        write_bytes(result,b'{"version":1,"code":0}\n')
+
+
+def finish_launch(path, native_status):
+    try:
+        try:
+            data=json.loads(path.read_text())
+        except (OSError,ValueError):
+            raise RuntimeError(tr('Résultat du profil Goldberg absent ou invalide : {p0}',p0=path)) from None
+        if not isinstance(data,dict) or data.get('version')!=1 or type(data.get('code')) is not int or data['code'] not in (0,1):
+            raise RuntimeError(tr('Résultat du profil Goldberg absent ou invalide : {p0}',p0=path))
+        if data['code']:
+            print(tr('Profil Goldberg non appliqué ; échec conservé malgré le code natif {p0}.',p0=native_status),flush=True)
+            return data['code']
+        return native_status
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def install_hook(base, rom, player):
     from partydeck_anchor import instrument_native
     from partydeck_profiles import profile_path,read_profile,atomic_write
@@ -169,7 +213,8 @@ def install_hook(base, rom, player):
     if index not in range(4):
         raise ValueError(tr('Identifiant ou numéro de joueur Goldberg invalide pour Left 4 Dead 2.'))
     payload=player/'l4d2-goldberg-launch.json'
-    atomic_write(payload,json.dumps(dict(player=str(player),index=index,settings=settings),ensure_ascii=False))
+    result=player/f'l4d2-result-{uuid.uuid4().hex}.json'
+    atomic_write(payload,json.dumps(dict(player=str(player),index=index,settings=settings,result=str(result)),ensure_ascii=False))
     binary=shutil.which('batocera-wine')
     if not binary:
         raise RuntimeError(tr('batocera-wine introuvable.'))
@@ -178,7 +223,13 @@ def install_hook(base, rom, player):
     hook=[sys.executable,str(base/'partydeck_l4d2.py'),str(payload)]
     atomic_write(replacement,instrument_native(binary.read_text(),hook,prefix_argument=True),0o755)
     subprocess.run(['bash','-n',str(replacement)],check=True)
-    subprocess.run(['mount','--bind',str(replacement),str(binary)],check=True)
+    atomic_write(result,'{"version":1,"code":1}\n')
+    try:
+        subprocess.run(['mount','--bind',str(replacement),str(binary)],check=True)
+    except Exception:
+        result.unlink(missing_ok=True)
+        raise
+    return result
 
 
 if __name__=='__main__':
@@ -186,7 +237,7 @@ if __name__=='__main__':
         payload=json.loads(Path(sys.argv[1]).read_text())
         if os.environ.get('PARTYDECK_PRIVATE_PLAYER')!=payload['player']:
             raise ValueError(tr('Le profil Left 4 Dead 2 doit être appliqué dans la session Wine privée du joueur.'))
-        apply_config(Path(sys.argv[2]),Path(sys.argv[3]),payload)
+        apply_launch(Path(sys.argv[2]),Path(sys.argv[3]),payload)
     except (OSError,ValueError,KeyError,TypeError) as error:
         print(f'Windows Party / Left 4 Dead 2 : {error}',file=sys.stderr)
         raise SystemExit(1)

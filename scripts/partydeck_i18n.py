@@ -62,6 +62,11 @@ def get_language():
 
 
 EN = {
+    'AppID Goldberg {p0} incompatible avec Left 4 Dead 2 : {p1}':'Goldberg AppID {p0} is incompatible with Left 4 Dead 2: {p1}',
+    'Goldberg : AppID 550 confirmé dans {p0}.':'Goldberg: AppID 550 confirmed in {p0}.',
+    'État Goldberg hors du dossier privé du joueur.':'Goldberg state is outside the player’s private directory.',
+    'Résultat du profil Goldberg absent ou invalide : {p0}':'Goldberg profile result is missing or invalid: {p0}',
+    'Profil Goldberg non appliqué ; échec conservé malgré le code natif {p0}.':'Goldberg profile was not applied; preserving the failure despite native exit code {p0}.',
     'Left 4 Dead 2 · profil commun':'Left 4 Dead 2 · shared profile',
     'Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables':'Left 4 Dead 2 · distinct persistent Steam IDs · customizable names',
     'Left 4 Dead 2 : quatre noms différents, non vides, de 63 octets UTF-8 maximum, sans caractères de contrôle ni ; #.':'Left 4 Dead 2: four different, non-empty names, up to 63 UTF-8 bytes, without control characters or ; #.',

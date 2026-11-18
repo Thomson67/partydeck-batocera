@@ -49,6 +49,9 @@ with tempfile.TemporaryDirectory() as folder:
         player=base/'party'/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
         user_configs=[]
         other_files=[]
+        game.mkdir(parents=True)
+        root_appid=game/'steam_appid.txt';root_appid.write_bytes(b'999\n')
+        other_files.append((root_appid,b'999\n'))  # Goldberg's local 550 takes precedence.
         for rel in ('steam_settings','BIN/x64/STEAM_SETTINGS'):
             settings=game/rel;settings.mkdir(parents=True)
             user=settings/'configs.user.ini';user.write_bytes(ORIGINAL);user_configs.append(user)
@@ -81,6 +84,14 @@ with tempfile.TemporaryDirectory() as folder:
             assert 'account_name='+payload['settings']['names'][index] in got
         assert all(path.read_bytes()==ORIGINAL for path in backups)
     assert ids[0]==SEED and len(set(ids))==4
+    # Zero/missing local AppIDs fall back to the root; numeric prefixes tolerate
+    # Windows text terminators as std::stoul does, without rewriting the file.
+    local_appid=user_configs[0].parent/'steam_appid.txt'
+    local_appid.write_bytes(b'550\x00\r\n')
+    assert user_configs[0] in l4d2.config_files(game,(prefix,player))
+    local_appid.write_text('0');root_appid.write_text('550')
+    assert user_configs[0] in l4d2.config_files(game,(prefix,player))
+    local_appid.write_text('550')
     # Wrong AppIDs and out-of-view configs fail before modifying the identity/files.
     first=user_configs[0];before=first.read_bytes();identity_before=identity.read_bytes()
     appid=first.parent/'steam_appid.txt';appid.write_text('999')
@@ -120,12 +131,50 @@ with tempfile.TemporaryDirectory() as folder:
     subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),check=True,capture_output=True)
     native=player/'native';native.write_text(source)
     with patch.object(l4d2.shutil,'which',return_value=str(native)),patch.object(l4d2.subprocess,'run') as run:
-        l4d2.install_hook(base,rom,player)
+        result=l4d2.install_hook(base,rom,player)
         assert run.call_args_list[-1].args[0]==['mount','--bind',str(player/'batocera-wine-l4d2'),str(native)]
         assert native.read_text()==source
+        assert json.loads(result.read_text())['code']==1
+        assert Path(json.loads((player/'l4d2-goldberg-launch.json').read_text())['result'])==result
     rejected=subprocess.run([sys.executable,str(Path(l4d2.__file__)),str(payload_file),str(game),str(prefix)],
                             env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER='wrong'),capture_output=True)
     assert rejected.returncode==1
+    # Reproduce Batocera's swallowed hook error: bad config, no game command,
+    # then a successful wineserver wait makes the native launcher return zero.
+    payload['result']=str(result);payload_file.write_text(json.dumps(payload))
+    bad=ORIGINAL.replace(SEED.encode(),b'0')
+    (settings/'configs.user.ini').write_bytes(bad)
+    swallowed=source.replace('set -e\n','')+'\ntrue\n'
+    script.write_text(instrument_native(swallowed,[sys.executable,str(Path(l4d2.__file__)),str(payload_file)],prefix_argument=True))
+    done=subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),capture_output=True,text=True)
+    assert done.returncode==0 and 'Steam ID Goldberg' in done.stderr
+    assert json.loads(result.read_text())['code']==1
+    assert l4d2.finish_launch(result,0)==1 and not result.exists()
+    (settings/'configs.user.ini').write_bytes(ORIGINAL)
+    (game/'steam_appid.txt').write_text('999');(settings/'steam_appid.txt').write_text('550')
+    done=subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),capture_output=True,text=True)
+    assert done.returncode==0 and json.loads(result.read_text())['code']==0
+    assert l4d2.finish_launch(result,0)==0 and not result.exists()
+    bad_result=root/('l4d2-result-'+'a'*32+'.json')
+    try:
+        l4d2.apply_launch(game,prefix,dict(payload,result=str(bad_result)))
+        raise AssertionError('external result path accepted')
+    except ValueError:pass
+    assert not bad_result.exists()
+    for contents in (None,'bad JSON','{"version":1,"code":true}'):
+        if contents is not None:result.write_text(contents)
+        try:l4d2.finish_launch(result,0);raise AssertionError('missing/bad result treated as success')
+        except RuntimeError:pass
+        assert not result.exists()
+    # The actual parent runner also honors the hook result rather than native 0.
+    spec=importlib.util.spec_from_file_location('l4d2_runner',Path(l4d2.__file__).parent/'partydeck-batocera-coop.py')
+    runner=importlib.util.module_from_spec(spec);sys.modules[spec.name]=runner;spec.loader.exec_module(runner)
+    for hook_code,native_code,expected in ((1,0,1),(0,0,0),(0,9,9),(0,-11,139)):
+        result.write_text(json.dumps(dict(version=1,code=hook_code)))
+        with patch.object(runner,'UMU_HOME',root/'missing-umu'),patch.object(l4d2,'install_hook',return_value=result),\
+             patch.object(runner.subprocess,'run',return_value=Mock(returncode=native_code)):
+            assert runner.run_wine(rom,rom,player,root/'private-saves')==expected
+        assert not result.exists()
     app=App(base,rom,windowed=True);assert app.available_tabs()==(0,1)
     app.action('next');app.row=0;app.action('ok');assert app.keyboard is not None
     app.keyboard['value']='Joueur test';app.keyboard_action('save')

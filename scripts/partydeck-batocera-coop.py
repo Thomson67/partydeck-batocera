@@ -414,6 +414,7 @@ def run_wine(original, target, player, saves=None):
 
 
 def _run_wine(original, target, player, saves=None):
+    goldberg_result=None
     if original.suffix.lower() != ".wsquashfs":
         mount_overlay(target, (saves if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
@@ -431,10 +432,16 @@ def _run_wine(original, target, player, saves=None):
         install_bl2(Path(__file__).resolve().parent, original, player)
         from partydeck_sm64coopdx import install_hook as install_sm64
         install_sm64(Path(__file__).resolve().parent, original, player)
-        from partydeck_l4d2 import install_hook as install_l4d2
-        install_l4d2(Path(__file__).resolve().parent, original, player)
+        from partydeck_l4d2 import install_hook as install_l4d2, finish_launch as finish_l4d2
+        goldberg_result=install_l4d2(Path(__file__).resolve().parent, original, player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
-    status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
+    try:
+        status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
+        if goldberg_result is not None:
+            status=finish_l4d2(goldberg_result,status)
+    finally:
+        if goldberg_result is not None:
+            goldberg_result.unlink(missing_ok=True)
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)
     return 128 - status if status < 0 else status
 
