@@ -3,6 +3,7 @@
 from partydeck_i18n import tr, choice_label
 import hashlib
 import fcntl
+import copy
 import html
 import json
 import os
@@ -12,6 +13,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
 MARKER = "# Entrée gérée par PartyDeck Wine"
@@ -131,6 +135,138 @@ def remove_profile(base, rom, roms=None):
             if previous is not None:
                 atomic_write(entry,previous,0o755)
             raise
+
+
+# Metadata is shared by reference; local play history and user flags stay local.
+MEDIA_FIELDS = {'image','video','thumbnail','marquee','fanart','titleshot','manual',
+                'magazine','map','bezel','cartridge','boxart','boxback','wheel','mix'}
+SCRAPE_FIELDS = MEDIA_FIELDS | {'name','desc','rating','releasedate','developer',
+    'publisher','genre','genres','family','players','lang','region','arcadesystemname'}
+
+
+def absolute_path(value, folder):
+    return Path(os.path.abspath(folder/Path(value).expanduser()))
+
+
+def source_scrape(rom, cache):
+    """Match exact paths first, then a unique symlink alias; never guess titles."""
+    rom=Path(os.path.abspath(rom))
+    windows=Path('/userdata/roms/windows')
+    for folder in rom.parents:
+        path=folder/'gamelist.xml'
+        if path not in cache:
+            if path.is_file():
+                root=ET.parse(path).getroot()
+                if root.tag!='gameList':raise ValueError(str(path))
+                cache[path]=[(absolute_path(game.findtext('path'),folder),game)
+                    for game in root.findall('game') if game.findtext('path')]
+            else:cache[path]=[]
+        candidates=cache[path]
+        exact=[game for target,game in candidates if target==rom]
+        matches=exact or [game for target,game in candidates if target.resolve()==rom.resolve()]
+        if len(matches)==1:return folder,matches[0]
+        if len(matches)>1:return None
+        if folder==windows:break
+    return None
+
+
+def sync_scrapes(pairs, roms):
+    """Update only generated entries, atomically, including live ES when available."""
+    pairs=list(pairs)
+    if not pairs:return 0
+    roms.mkdir(parents=True,exist_ok=True)
+    path=roms/'gamelist.xml'
+    if path.is_symlink():raise ValueError(str(path))
+    with (roms/'.partydeck-metadata.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        before=path.read_bytes() if path.exists() else None
+        root=ET.fromstring(before) if before is not None else ET.Element('gameList')
+        if root.tag!='gameList':raise ValueError(str(path))
+        cache={};changed=[]
+        for original,entry in pairs:
+            if entry.parent.absolute()!=roms.absolute() or entry.is_symlink():continue
+            found=source_scrape(original,cache)
+            if found is None:continue
+            folder,source=found
+            matches=[g for g in root.findall('game')
+                     if g.findtext('path') and absolute_path(g.findtext('path'),roms)==entry.absolute()]
+            if len(matches)>1:continue
+            game=matches[0] if matches else ET.Element('game')
+            previous=ET.tostring(game)
+            if not matches:
+                ET.SubElement(game,'path').text='./'+entry.name
+                root.append(game)
+            # Keep Party flags, counts, last played, per-entry emulator settings,
+            # and any unknown/custom metadata. Never copy the Windows ROM path.
+            for field in SCRAPE_FIELDS:
+                value=source.find(field)
+                if value is None or not value.text or not value.text.strip():continue
+                value=copy.deepcopy(value)
+                if field in MEDIA_FIELDS:
+                    text=value.text.strip()
+                    if not (text.startswith(':') or '://' in text):
+                        value.text=str(absolute_path(text,folder))
+                for old in list(game.findall(field)):game.remove(old)
+                game.append(value)
+            # Ignore child ordering when checking for an actual metadata change.
+            def contents(node):
+                children=copy.deepcopy(list(node))
+                for child in children:
+                    for part in child.iter():part.tail=None
+                return sorted(ET.tostring(child) for child in children)
+            if contents(ET.fromstring(previous))!=contents(game):changed.append(game)
+        if not changed:return 0
+        backup=roms/'gamelist.xml.partydeck-before'
+        if before is not None and not backup.exists():
+            if backup.is_symlink():raise ValueError(str(backup))
+            atomic_write(backup,before.decode('utf-8'))
+        partial=ET.Element('gameList')
+        for game in changed:
+            node=copy.deepcopy(game)
+            # ES merges known fields. Omit volatile local state so its current
+            # in-memory counts/favorites win over an older on-disk snapshot.
+            for field in ('playcount','lastplayed','gametime','favorite','hidden',
+                          'kidgame','completed','emulator','core','ratio'):
+                for old in list(node.findall(field)):node.remove(old)
+            partial.append(node)
+        # ES's native import updates its in-memory metadata and saves it, avoiding
+        # stale metadata being written back at exit. No reload during gameplay.
+        if roms.absolute()==PARTY_ROMS:
+            request=Request('http://127.0.0.1:1234/addgames/windows-party',
+                data=ET.tostring(partial,encoding='utf-8'),
+                headers={'Content-Type':'application/xml'},method='POST')
+            try:
+                with urlopen(request,timeout=2) as response:
+                    live=response.status in (200,201)
+                if live:return len(changed)
+            except (OSError,URLError):pass
+        ET.indent(root,space='  ')
+        atomic_write(path,ET.tostring(root,encoding='unicode')+'\n',0o644)
+        return len(changed)
+
+
+def inherit_scrapes(pairs, roms):
+    """Missing/bad source metadata must never block adding or launching a game."""
+    try:
+        count=sync_scrapes(pairs,roms)
+        if count:print(tr('Scraps Windows repris pour {p0} jeu(x), sans copier les médias.',p0=count),flush=True)
+        return count
+    except (OSError,ValueError,ET.ParseError) as error:
+        print(tr('Reprise des scraps différée : {p0}',p0=error),file=sys.stderr)
+        return 0
+
+
+def sync_library_scrapes(base, roms=PARTY_ROMS):
+    pairs=[]
+    for entry in sorted(roms.glob('*.sh')):
+        if entry.is_symlink():continue
+        lines=entry.read_text().splitlines()
+        if len(lines)!=3 or lines[1]!=MARKER:continue
+        try:command=shlex.split(lines[2])
+        except ValueError:continue
+        if len(command)==4 and command[:3]==['exec',str(base/'partydeck-test'),'profil']:
+            pairs.append((Path(command[3]),entry))
+    return inherit_scrapes(pairs,roms)
 
 
 def yad(arguments):
@@ -303,6 +439,7 @@ def install_menu(base, roms=PARTY_ROMS):
             read_profile(base, rom)
         atomic_write(entry, f"#!/bin/bash\n{MARKER}\nexec " +
                      shlex.join([str(base / "partydeck-test"), "profil", str(rom)]) + "\n", 0o755)
+    sync_library_scrapes(base,roms)
     menu = roms / "Configurer Windows Party.sh"
     marker = "# Configuration gérée par Windows Party"
     if menu.exists() and marker not in menu.read_text().splitlines()[:2]:
@@ -337,6 +474,7 @@ def choose_rom():
 
 
 def configure(base, rom=None):
+    sync_library_scrapes(base)
     if os.environ.get("PARTYDECK_UI") != "legacy":
         from partydeck_couch import configure as couch_configure
         couch_configure(base, rom)

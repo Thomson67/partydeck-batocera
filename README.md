@@ -432,6 +432,44 @@ Les tests locaux `tests/check_sm64coopdx.py` couvrent J1–J4, les sauvegardes,
 les redirections, UMU, la configuration commune et les réglages à la manette.
 Le lancement réel sur Batocera reste à valider avec ce nouveau profil.
 
+## Scraps des jeux Windows d'origine
+
+Les entrées Windows Party reprennent automatiquement les informations du jeu
+correspondant dans le `gamelist.xml` de Windows : titre, description, note,
+date, studio, éditeur, genre et médias (image, boîte, logo, vidéo, fond, manuel,
+et autres médias Batocera). La correspondance utilise le chemin de la ROM,
+avec prise en charge des liens symboliques et des sous-dossiers, sans déduction
+approximative sur le titre. Les formats `.wine`, `.pc` et `.wsquashfs` sont couverts.
+
+Les chemins de médias relatifs sont convertis en références absolues vers les
+fichiers Windows existants. **Aucune image ni vidéo n'est dupliquée.** Les
+favoris, compteurs, dernière partie et paramètres propres à Windows Party
+restent séparés de ceux du jeu solo. La ROM et le `gamelist.xml` Windows ne sont
+jamais modifiés. Les références restent présentes si un stockage réseau est
+temporairement déconnecté ; ses médias redeviennent disponibles avec le montage.
+
+La synchronisation s'effectue à l'ajout/enregistrement d'un jeu, à la mise à
+jour de Windows Party (pour les jeux déjà ajoutés) et à l'ouverture du
+configurateur (pour reprendre un nouveau scrap fait dans Windows). Le menu de
+configuration et les entrées personnelles ne sont pas remplacés. En l'absence
+de scrap d'origine, l'entrée reste disponible sans média.
+
+Lorsque l'API locale EmulationStation est disponible, l'import natif met aussi
+à jour les métadonnées en mémoire. Sinon le `gamelist.xml` Windows Party est
+mis à jour atomiquement ; actualisez alors les listes de jeux ou redémarrez
+EmulationStation. Sa première version est sauvegardée dans
+`gamelist.xml.partydeck-before`. Un XML invalide ou un lien utilisateur sur le
+fichier de destination est conservé et signalé, sans bloquer le lancement.
+
+**English:** Windows Party inherits each original Windows game's scraped
+metadata and media references, matching ROM paths rather than approximate
+titles. Media files are reused without duplication; Party favorites and play
+history stay separate. Synchronization runs when adding/saving a game, updating
+the installation, and opening the configurator. The native local ES API imports
+changes live when available, with an atomic gamelist update as fallback.
+Refresh game lists or restart ES if changes are not yet visible. The Windows
+ROM, metadata and media files remain unchanged.
+
 ## Profil Left 4 Dead 2 / Goldberg (version de test)
 
 Pour une installation déjà fonctionnelle avec Goldberg/gbe_fork et les fichiers

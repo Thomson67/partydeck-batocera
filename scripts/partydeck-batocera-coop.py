@@ -283,6 +283,9 @@ def write_port(port_dir, launcher, original, count, split, input_mode, mode="coo
             staged.replace(port)
         finally:
             staged.unlink(missing_ok=True)
+    if mode=="party":
+        from partydeck_profiles import inherit_scrapes
+        inherit_scrapes([(original,port)],port_dir)
     return port
 
 

@@ -62,6 +62,9 @@ def get_language():
 
 
 EN = {
+    'Scraps Windows repris pour {p0} jeu(x), sans copier les médias.':'Windows scraped metadata reused for {p0} game(s), without copying media.',
+    'Reprise des scraps différée : {p0}':'Scraped metadata synchronization deferred: {p0}',
+
     'Lanceur batocera-wine non reconnu ({p0}) : langue Wine non appliquée.':'Unrecognized batocera-wine launcher ({p0}): Wine language was not applied.',
     'Left 4 Dead 2 : langue Wine native {p0}.':'Left 4 Dead 2: native Wine language {p0}.',
 
