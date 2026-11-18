@@ -122,7 +122,9 @@ mappings `es_input.cfg` de Batocera. Branchement/débranchement et répétition 
 stick/croix directionnelle sont pris en charge. La navigation reprend les principes
 manette/clavier virtuel de [RGSX](https://github.com/RetroGameSets/RGSX), avec une
 implémentation originale dédiée à Windows Party. Les tests locaux utilisent SDL
-en mode simulé ; DualSense/8BitDo et affichage Xorg/Wayland restent à valider en réel.
+en mode simulé. Le fonctionnement du configurateur a également été confirmé par
+l'utilisateur sur **Batocera v43 sous Xorg**. Cette validation sur machine complète
+les tests locaux ; elle ne couvre pas toutes les combinaisons de manettes.
 
 L'ancienne interface Yad reste accessible explicitement pour dépannage :
 
