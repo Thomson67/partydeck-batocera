@@ -232,6 +232,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
     [[ -f $source_dir/partydeck_borderlands2.py ]] || die 'Module Borderlands 2 absent du paquet.'
+    [[ -f $source_dir/partydeck_sm64coopdx.py && -f $source_dir/../templates/sm64coopdx-common.txt ]] || die 'Profil SM64CoopDX absent du paquet.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py && -f $source_dir/partydeck_theme.py && -f $source_dir/../assets/windows-party.png && -f $source_dir/../templates/soh-common.json ]] ||
@@ -322,6 +323,8 @@ if [[ ${1:-verifier} == installer ]]; then
     cp -- "$source_dir/partydeck_couch.py" "$staging/partydeck_couch.py"
     cp -- "$source_dir/partydeck_borderlands2.py" "$staging/partydeck_borderlands2.py"
     mv -fT -- "$staging/partydeck_borderlands2.py" "$base/partydeck_borderlands2.py"
+    cp -- "$source_dir/partydeck_sm64coopdx.py" "$staging/partydeck_sm64coopdx.py"
+    mv -fT -- "$staging/partydeck_sm64coopdx.py" "$base/partydeck_sm64coopdx.py"
     cp -- "$source_dir/partydeck_storage.py" "$staging/partydeck_storage.py"
     mv -fT -- "$staging/partydeck_storage.py" "$base/partydeck_storage.py"
     cp -- "$source_dir/partydeck_catalog.py" "$staging/partydeck_catalog.py"
@@ -333,6 +336,10 @@ if [[ ${1:-verifier} == installer ]]; then
     if [[ ! -e $base/templates/soh-common.json && ! -L $base/templates/soh-common.json ]]; then
         cp -- "$source_dir/../templates/soh-common.json" "$base/templates/soh-common.json"
         chmod 0600 "$base/templates/soh-common.json"
+    fi
+    if [[ ! -e $base/templates/sm64coopdx-common.txt && ! -L $base/templates/sm64coopdx-common.txt ]]; then
+        cp -- "$source_dir/../templates/sm64coopdx-common.txt" "$base/templates/sm64coopdx-common.txt"
+        chmod 0600 "$base/templates/sm64coopdx-common.txt"
     fi
     mv -fT -- "$staging/partydeck_theme.py" "$base/partydeck_theme.py"
     mv -fT -- "$staging/partydeck_anchor.py" "$base/partydeck_anchor.py"

@@ -20,7 +20,8 @@ class CommonGame:
 
 
 COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
-          CommonGame('borderlands2', 'Borderlands 2 · profil commun', 'borderlands2'))
+          CommonGame('borderlands2', 'Borderlands 2 · profil commun', 'borderlands2'),
+          CommonGame('sm64coopdx', 'SM64CoopDX · profil commun', 'sm64coopdx'))
 
 
 def is_rom(path):
@@ -36,9 +37,10 @@ def matches_soh(path):
 
 def recipe_for(rom, adapter=None):
     from partydeck_borderlands2 import matches as matches_bl2
+    from partydeck_sm64coopdx import matches as matches_sm64
     if adapter is not None:
         return next((r for r in COMMON if r.adapter == adapter), None)
-    return COMMON[0] if matches_soh(rom) else COMMON[1] if matches_bl2(rom) else None
+    return COMMON[0] if matches_soh(rom) else COMMON[1] if matches_bl2(rom) else COMMON[2] if matches_sm64(rom) else None
 
 
 def unlinked(base):

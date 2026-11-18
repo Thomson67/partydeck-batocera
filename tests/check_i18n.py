@@ -74,10 +74,18 @@ with tempfile.TemporaryDirectory() as folder:
     assert label_value('anchor.locations',1)=='Team only'
     assert label_value('anchor.graphics.texture_filter',0)=='N64 three-point'
     assert label_value('anchor.names.0','Enregistrer')=='Enregistrer'
+    assert fields(2,'sm64coopdx')[0][1]=='Free camera'
+    assert fields(3,'sm64coopdx')[0][1]=='Game language'
+    assert label_value('sm64coopdx.language','French')=='French'
+    assert label_value('sm64coopdx.texture_filtering',2)=='N64 three-point'
+    assert label_value('sm64coopdx.coop_draw_distance',6)=='Infinite'
+    assert label_value('sm64coopdx.names.0','Joueur français')=='Joueur français'
     assert human(1024**3)=='1.0 GiB'
     assert 'shared profile' in COMMON[0].stem
     # Create French-named user data before switching the configurator to English.
     lang.set_language('fr')
+    assert fields(2,'sm64coopdx')[0][1]=='Caméra libre'
+    assert label_value('sm64coopdx.language','French')=='Français'
     assert fields(2,'borderlands2')[0][1]=='J1 · Nom'
     rom=root/'Enregistrer.wsquashfs';rom.touch()
     data=defaults(rom);data.update(adapter='soh-anchor',anchor=anchor_defaults())

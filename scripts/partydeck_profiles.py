@@ -29,6 +29,9 @@ def defaults(rom):
     from partydeck_borderlands2 import matches, defaults as bl2_defaults
     if matches(rom):
         data.update(adapter='borderlands2',borderlands2=bl2_defaults())
+    from partydeck_sm64coopdx import matches as matches_sm64, defaults as sm64_defaults
+    if matches_sm64(rom):
+        data.update(adapter='sm64coopdx',sm64coopdx=sm64_defaults())
     return data
 
 
@@ -42,7 +45,7 @@ def validate(data, rom):
         raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError(tr("Option clavier comme joueur invalide."))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2"):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx"):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
@@ -50,6 +53,9 @@ def validate(data, rom):
     if data.get('adapter') == 'borderlands2':
         from partydeck_borderlands2 import validate as validate_bl2
         data['borderlands2'] = validate_bl2(data.get('borderlands2'))
+    if data.get('adapter') == 'sm64coopdx':
+        from partydeck_sm64coopdx import validate as validate_sm64
+        data['sm64coopdx'] = validate_sm64(data.get('sm64coopdx'))
     return data
 
 

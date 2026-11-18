@@ -114,6 +114,9 @@ et d'association manuelle. Les noms « Borderlands 2 », « Borderlands_2 » ou
 « Borderlands II » sont reconnus. Les jeux personnels figurent avant les profils
 communs encore sans fichier associé.
 
+Le profil **SM64CoopDX** reconnaît aussi `sm64coopdx`, `SM64 Coop DX` et
+`Super Mario 64 Coop Deluxe`, avec association manuelle possible pour un autre nom.
+
 Dans **Choisir un jeu**, **LB/RB** parcourt la liste par pages de neuf entrées.
 **HK + Start** quitte le configurateur : le Hotkey de `es_input.cfg` est utilisé
 (`hotkey` ou `hotkeyenable`) ; sans mapping, le bouton Guide + Start SDL sert de
@@ -354,6 +357,74 @@ reste à confirmer avec la version du jeu et son fournisseur de profil en ligne.
 Le configurateur ne modifie pas ces champs Willow : pour l'installation fournie,
 le nom configuré est `UserName=CODEX` dans `steam_emu.ini`. L'option Joueurs
 décrite plus haut cible cette clé, et non `Name=Player`.
+
+## Profil SM64CoopDX (version de test)
+
+Le catalogue propose **SM64CoopDX · profil commun**, avec les mêmes choix
+de détection, de sélection manuelle et de dissociation que les autres profils.
+Les jeux restent dans `/userdata/roms/windows`, en `.wine`, `.pc` ou `.wsquashfs`.
+Pour un jeu déjà enregistré avec le profil Standard, choisissez **Session →
+Profil du jeu → SM64CoopDX**, puis enregistrez.
+
+La base commune est le fichier fourni par l'utilisateur, installé dans
+`/userdata/system/partydeck-test/templates/sm64coopdx-common.txt`.
+Elle est **réappliquée à chaque lancement** pour tous les joueurs, avec uniquement
+les variantes du configurateur et la résolution de la portion d'écran du joueur.
+Les autres réglages sont accessibles en jeu pour la session et reviennent à la
+base au lancement suivant. Le modèle local est conservé lors des mises à jour.
+
+| Onglet | Réglages |
+| --- | --- |
+| Graphismes | VSync ; MSAA désactivé/2×/4×/8×/16× ; filtre au plus proche/linéaire/trois points ; distance 0,5×/1×/1,5×/3×/10×/100×/infinie |
+| Gameplay | Caméra libre ; sensibilités caméra X et Y de 1 à 100 ; inversion caméra X et Y |
+| Options | Langue du jeu ; noms différents pour J1 à J4 avec clavier virtuel |
+| Son | Musique uniquement pour J1 ; volumes général, musique, bruitages et ambiance |
+
+Les valeurs initiales reprennent la base : VSync activée, MSAA 8×, filtre trois
+points, distance infinie, caméra libre, sensibilités 20/20, inversions X/Y activées
+et langue French. Les noms initiaux sont Joueur1…Joueur4 (Player1…Player4 dans
+un configurateur anglais). Les noms déjà enregistrés ne sont jamais traduits.
+Les noms doivent être distincts, sans espaces (utilisez `_`), de 63 octets UTF-8
+maximum : le lecteur de configuration du jeu s'arrête au premier espace.
+Le MSAA dépend aussi des possibilités du moteur graphique et du matériel.
+
+Les langues proposées sont celles du jeu v1.5.1 : français, anglais, allemand,
+italien, espagnol, portugais, néerlandais, polonais, tchèque, russe et japonais.
+Le choix écrit la clé `language` du jeu, indépendamment de la langue FR/EN de
+l'interface Windows Party. Les fichiers de langue correspondants doivent être
+présents dans l'installation du jeu.
+
+La musique est coupée par défaut pour J2 à J4 (`music_volume 0`) sans modifier
+leurs bruitages ou leur ambiance. Désactiver **Musique uniquement pour J1** applique
+le volume musical commun à tous. Les curseurs affichent 0–100 %, convertis vers
+l'échelle native 0–127. Par défaut, le volume général reste exactement à 80/127
+(environ 63 %) ; les trois autres volumes restent à 127/127. Valider un curseur
+réutilise sa valeur de base ; gauche/droite la modifie par pas de 5 %.
+
+L'application intervient après le montage natif du jeu et avant Wine, dans les
+vues privées existantes. Les emplacements standards pris en charge sont le
+`sm64config.txt` portable dans le dossier de lancement (et les sous-dossiers
+immédiats où il existe déjà), ainsi que `AppData/Roaming/sm64coopdx`, l'ancien
+`sm64ex-coop` et leurs alias `Application Data`. Les préfixes UMU privés réutilisés
+reçoivent aussi les réglages. Un `--savepath` ou `--configfile` personnalisé hors
+de ces emplacements nécessite une adaptation ; le configurateur n'invente pas
+de chemin. Les anciens fichiers privés sont sauvegardés une seule fois dans
+`sm64coopdx-before`. Les fichiers de progression ne sont pas remplacés.
+
+Les entrées répétées `enable-mod:`, `dynos-pack:` et `save-name:` ainsi que les
+raccourcis sont repris de la base. Aucun mod ou pack de textures n'est fourni
+ou téléchargé : ceux qu'elle active doivent déjà être installés dans le jeu.
+Les réglages de réseau de la base restent disponibles en jeu ; ce profil
+n'automatise pas encore le choix Héberger/Rejoindre.
+
+Référence des clés et plages :
+[configfile.c v1.5.1](https://github.com/coop-deluxe/sm64coopdx/blob/v1.5.1/src/pc/configfile.c),
+[affichage](https://github.com/coop-deluxe/sm64coopdx/blob/v1.5.1/src/pc/djui/djui_panel_display.c),
+[caméra](https://github.com/coop-deluxe/sm64coopdx/blob/v1.5.1/src/pc/djui/djui_panel_camera.c),
+[son](https://github.com/coop-deluxe/sm64coopdx/blob/v1.5.1/src/pc/djui/djui_panel_sound.c).
+Les tests locaux `tests/check_sm64coopdx.py` couvrent J1–J4, les sauvegardes,
+les redirections, UMU, la configuration commune et les réglages à la manette.
+Le lancement réel sur Batocera reste à valider avec ce nouveau profil.
 
 ## Stockage et entretien automatique (version de test)
 

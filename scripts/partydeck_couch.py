@@ -17,6 +17,9 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
+from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
+                                  LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
+                                  VOLUME_FIELDS as SM64_VOLUME_FIELDS)
 from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
                                snapshot as storage_snapshot, clean as clean_storage, prepare_launch, human)
 
@@ -66,7 +69,24 @@ def fields(tab, adapter='standard'):
                 ('input', tr('Attribution des contrôles'), ['auto', 'clavier-j1', 'clavier-j2']),
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2'])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx'])]
+    if adapter == 'sm64coopdx':
+        if tab == 1:
+            return [('sm64coopdx.vsync',tr('VSync'),[False,True]),
+                    ('sm64coopdx.msaa',tr('Anti-aliasing MSAA'),[0,2,4,8,16]),
+                    ('sm64coopdx.texture_filtering',tr('Filtre des textures'),[0,1,2]),
+                    ('sm64coopdx.coop_draw_distance',tr('Distance d’affichage'),list(range(7)))]
+        if tab == 2:
+            return [('sm64coopdx.free_camera',tr('Caméra libre'),[False,True]),
+                    ('sm64coopdx.sensitivity_x',tr('Sensibilité caméra · axe X'),list(range(1,101))),
+                    ('sm64coopdx.sensitivity_y',tr('Sensibilité caméra · axe Y'),list(range(1,101))),
+                    ('sm64coopdx.invert_x',tr('Inverser la caméra · axe X'),[False,True]),
+                    ('sm64coopdx.invert_y',tr('Inverser la caméra · axe Y'),[False,True])]
+        if tab == 3:
+            return [('sm64coopdx.language',tr('Langue du jeu'),list(SM64_LANGUAGES)),
+                    *[(f'sm64coopdx.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]]
+        return [('sm64coopdx.music_j1_only',tr('Musique uniquement pour J1'),[True,False]),
+                *[(f'sm64coopdx.volumes.{key}',tr(label)+' (%)',None) for key,label in SM64_VOLUME_FIELDS]]
     if adapter == 'borderlands2':
         if tab == 2:
             return [(f'borderlands2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
@@ -123,7 +143,15 @@ def label_value(key, value):
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
-        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2'}.get(value, value)
+        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX'}.get(value, value)
+    if key == 'sm64coopdx.language':
+        return tr(LANGUAGE_LABELS[value])
+    if key == 'sm64coopdx.msaa':
+        return tr('Désactivé') if value==0 else f'{value}×'
+    if key == 'sm64coopdx.texture_filtering':
+        return [tr('Au plus proche'),tr('Linéaire'),tr('Trois points N64')][value]
+    if key == 'sm64coopdx.coop_draw_distance':
+        return tr(DRAW_LABELS[value])
     if key == 'borderlands2.preset':
         return tr(PRESET_LABELS[value])
     if key == 'borderlands2.vsync':
@@ -146,7 +174,8 @@ class Model:
         self.base, self.rom = Path(base), rom
         self.windows = windows
         self.selected = rom
-        self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2)}
+        self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
+                         'sm64coopdx':discover(windows,matches_sm64)}
         self.common_for_rom = {}
         self.data = None
         self.saved = None
@@ -206,6 +235,7 @@ class Model:
         self.data.setdefault('keyboard_player', True)
         self.data.setdefault('anchor', anchor_defaults())
         self.data.setdefault('borderlands2', bl2_defaults())
+        self.data.setdefault('sm64coopdx', sm64_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
@@ -225,6 +255,8 @@ class Model:
             stored.pop('anchor', None)
         if stored.get('adapter') != 'borderlands2':
             stored.pop('borderlands2', None)
+        if stored.get('adapter') != 'sm64coopdx':
+            stored.pop('sm64coopdx', None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'partydeck-test'), 'ajouter', str(self.rom),
@@ -428,6 +460,14 @@ class App:
                                               if key in self.template_volumes and type(value) is int and 0 <= value <= 100})
             except (OSError, ValueError, AttributeError):
                 pass
+        self.sm64_template_volumes = dict(SM64_VOLUMES)
+        try:
+            for line in (Path(base)/'templates/sm64coopdx-common.txt').read_text().splitlines():
+                parts = line.split()
+                if len(parts)==2 and parts[0] in SM64_VOLUMES and parts[1].isdigit() and 0 <= int(parts[1]) <= 127:
+                    self.sm64_template_volumes[parts[0]] = round(int(parts[1])*100/127)
+        except OSError:
+            pass
         self.pads = Pads(pg)
         self.input_mode = self.pads.family if self.pads.devices else 'keyboard'
         self.library = 0
@@ -465,6 +505,8 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
+            return (0,1,2,3,4)
         if self.model.data and self.model.data.get('adapter') == 'borderlands2':
             return (0,1,2)
         return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
@@ -663,7 +705,8 @@ class App:
 
     def volume(self, key):
         value = get(self.model.data, key)
-        return self.template_volumes[key.rsplit('.', 1)[-1]] if value == '' else value
+        source = self.sm64_template_volumes if key.startswith('sm64coopdx.') else self.template_volumes
+        return source[key.rsplit('.', 1)[-1]] if value == '' else value
 
     def slider(self, key, x, y, selected):
         value = self.volume(key)
@@ -677,7 +720,7 @@ class App:
         draw.circle(self.canvas, (190,236,247) if selected else (136,164,192), (knob,y+20), 9, 2 if inherited else 0)
         self.text(f'{value} %', x+280, y+4, 20, (174,224,236), 95)
         if inherited:
-            self.text('JSON', x+365, y+8, 16, (129,153,182), 50)
+            self.text('BASE' if key.startswith('sm64coopdx.') else 'JSON', x+365, y+8, 16, (129,153,182), 50)
 
     def edit(self, title, value, callback):
         self.keyboard = dict(title=title, value=str(value), row=0, col=0, shift=False, done=callback)
@@ -921,7 +964,7 @@ class App:
                 if '.volumes.' in key:
                     if action == 'ok':
                         put(self.model.data, key, '')
-                        self.toast(tr('Volume repris depuis le JSON commun'))
+                        self.toast(tr('Volume repris depuis la configuration commune') if key.startswith('sm64coopdx.') else tr('Volume repris depuis le JSON commun'))
                     else:
                         put(self.model.data, key, max(0, min(100, self.volume(key) + (-5 if action == 'left' else 5))))
                 elif choices:
@@ -980,18 +1023,24 @@ class App:
             self.text(self.model.rom.stem, 416, 161, 28, width=950)
             self.text((tr('MODIFIÉ · non enregistré') if self.model.dirty() else tr('Profil prêt')) + '  ·  ' + self.model.rom.suffix,
                       418, 208, 16, (144, 160, 186))
+            tab_width = min(241,970//len(self.available_tabs()))
             for position, i in enumerate(self.available_tabs()):
-                title = tr('Image') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
-                self.box((416+position*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
+                if self.model.data.get('adapter') == 'sm64coopdx':
+                    title = tr(('Session','Graphismes','Gameplay','Options','Son')[i])
+                else:
+                    title = tr('Image') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
+                self.box((416+position*tab_width, 248, tab_width-13, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
                 if i == self.tab:
-                    self.pg.draw.line(self.canvas, (100,222,237), (430+position*241,291), (630+position*241,291), 3)
-                self.text(title, 434+position*241, 258, 20)
+                    self.pg.draw.line(self.canvas, (100,222,237), (430+position*tab_width,291), (416+(position+1)*tab_width-27,291), 3)
+                self.text(title, 434+position*tab_width, 258, 20,width=tab_width-40)
             if self.tab:
                 subtitle = (tr('Borderlands 2 · affichage automatique · VSync et PhysX indépendants') if self.model.data['adapter'] == 'borderlands2' else
                             tr('SoH / Anchor · réglages communs aux joueurs de cette session') if self.model.data['adapter'] == 'soh-anchor'
                             else tr('SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages'))
                 if self.model.data['adapter'] == 'borderlands2' and self.tab == 2:
                     subtitle = tr('Borderlands 2 · nom privé par joueur · vide : conserver le nom actuel')
+                if self.model.data['adapter'] == 'sm64coopdx':
+                    subtitle = tr('SM64CoopDX · configuration commune · réglages privés pour chaque joueur')
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
             rows = self.current_fields()
             offset = max(0, min(self.row, len(rows)-1) - 6)
@@ -1040,6 +1089,8 @@ class App:
         quit_hint = tr('Échap : retour / quitter') if self.input_mode == 'keyboard' else 'HK + ' + control_label('add', self.input_mode) + tr(' : quitter')
         subtitle = (tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok', self.input_mode) + tr(' : valeur JSON commun') if volume_selected and context == 'main'
                     else navigation + ' · ' + quit_hint)
+        if volume_selected and context == 'main' and self.model.data.get('adapter') == 'sm64coopdx':
+            subtitle = tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok',self.input_mode) + tr(' : valeur de la configuration commune')
         if context in ('confirm','missing','remove'):
             subtitle = ''
         elif context == 'browser':
