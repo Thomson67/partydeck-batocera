@@ -1,5 +1,6 @@
 """Remove local entries, detach common recipes, re-link and protect user files."""
 import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 os.environ['SDL_VIDEODRIVER']='dummy'
 from pathlib import Path
 import shlex

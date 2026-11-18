@@ -232,6 +232,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
     [[ -f $source_dir/partydeck_borderlands2.py ]] || die 'Module Borderlands 2 absent du paquet.'
+    [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py && -f $source_dir/partydeck_theme.py && -f $source_dir/../assets/windows-party.png && -f $source_dir/../templates/soh-common.json ]] ||
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
@@ -312,6 +313,8 @@ unset ARGV0
 if [[ ${1:-verifier} == installer ]]; then
     staging=$(mktemp -d "$base/.coop-XXXXXX")
     trap 'rm -rf -- "$staging"' EXIT
+    cp -- "$source_dir/partydeck_i18n.py" "$staging/partydeck_i18n.py"
+    mv -fT -- "$staging/partydeck_i18n.py" "$base/partydeck_i18n.py"
     cp -- "$source_helper" "$staging/partydeck-batocera-coop.py"
     cp -- "$source_dir/partydeck_profiles.py" "$staging/partydeck_profiles.py"
     cp -- "$source_dir/partydeck_anchor.py" "$staging/partydeck_anchor.py"

@@ -1,7 +1,8 @@
 """Real temporary files: eviction, protected data, locks and low disk refusal."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import json
 import importlib.util
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -153,6 +154,7 @@ with tempfile.TemporaryDirectory() as directory:
     launcher = root/'launcher.sh'
     launcher.write_text(script.read_text().replace("base='/userdata/system/partydeck-test'", f"base='{base}'"))
     (base/'partydeck_storage.py').write_text(Path(storage.__file__).read_text())
+    (base/'partydeck_i18n.py').write_text((Path(storage.__file__).parent/'partydeck_i18n.py').read_text())
     bin_dir = root/'bin'
     bin_dir.mkdir()
     batocera = bin_dir/'batocera-version'

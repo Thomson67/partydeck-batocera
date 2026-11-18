@@ -1,7 +1,8 @@
 """Profile migration, editor cancellation and normal direct-launch regression checks."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import importlib.util
 import json
-import os
 os.environ["PARTYDECK_UI"] = "legacy"
 from pathlib import Path
 import shlex

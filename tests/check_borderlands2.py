@@ -1,8 +1,9 @@
 """Private BL2 INI application, dimensions, presets, backups and launcher ordering."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import codecs
 import importlib.util
 import json
-import os
 from pathlib import Path
 import shlex
 import subprocess

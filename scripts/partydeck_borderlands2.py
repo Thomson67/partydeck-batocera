@@ -1,4 +1,5 @@
 """Borderlands 2: targeted INI edits inside a player's private Wine namespace."""
+from partydeck_i18n import tr
 import codecs
 import hashlib
 import json
@@ -31,11 +32,11 @@ def validate(options):
             or type(options.get('fit_resolution')) is not bool or options.get('preset') not in PRESETS
             or options.get('physx') not in ('keep', '0', '1', '2')
             or not isinstance(options.get('config'), str)):
-        raise ValueError('Réglages Borderlands 2 invalides.')
+        raise ValueError(tr('Réglages Borderlands 2 invalides.'))
     relative = PurePosixPath(options['config'])
     if options['config'] != 'auto' and (relative.is_absolute() or '..' in relative.parts
             or relative.suffix.lower() != '.ini' or '\\' in str(relative) or ':' in str(relative)):
-        raise ValueError('INI Borderlands 2 : auto ou chemin .ini relatif au préfixe, sans « .. ».')
+        raise ValueError(tr('INI Borderlands 2 : auto ou chemin .ini relatif au préfixe, sans « .. ».'))
     return options
 
 
@@ -86,7 +87,7 @@ def overrides(options, width, height):
         startup['StartupFullscreen'] = 'False'
     if options['fit_resolution']:
         if type(width) is not int or type(height) is not int or not (64 <= width <= 32768 and 64 <= height <= 32768):
-            raise ValueError('Dimensions de la fenêtre Borderlands 2 indisponibles.')
+            raise ValueError(tr('Dimensions de la fenêtre Borderlands 2 indisponibles.'))
         values.update(ResX=width, ResY=height)
         startup.update(StartupResolutionX=width, StartupResolutionY=height)
     preset = options['preset']
@@ -119,7 +120,7 @@ def overrides(options, width, height):
 def safe_path(path, allowed):
     resolved = path.resolve()
     if not any(resolved.is_relative_to(root) for root in allowed):
-        raise ValueError(f'INI Borderlands 2 hors de la vue privée : {path}')
+        raise ValueError(tr('INI Borderlands 2 hors de la vue privée : {p0}', p0=path))
     return resolved
 
 
@@ -128,7 +129,7 @@ def child(directory, name):
     if directory.is_dir():
         entries = [p for p in directory.iterdir() if p.name.casefold() == name.casefold()]
         if len(entries) > 1:
-            raise ValueError(f'Chemin INI ambigu : {directory}/{name}')
+            raise ValueError(tr('Chemin INI ambigu : {p0}/{p1}', p0=directory, p1=name))
         if entries:
             return entries[0]
     return directory / name
@@ -146,7 +147,7 @@ def targets(prefix, options, allowed):
     candidates = [p for p in users.iterdir() if p.name.casefold() not in excluded
                   and p.is_dir()] if users.is_dir() else []
     if not candidates:
-        raise ValueError('Préfixe Borderlands 2 sans utilisateur Wine. Lancez d’abord le jeu une fois en solo.')
+        raise ValueError(tr('Préfixe Borderlands 2 sans utilisateur Wine. Lancez d’abord le jeu une fois en solo.'))
     existing, fallbacks = [], []
     for user in sorted(candidates):
         safe_path(user, allowed)
@@ -244,7 +245,7 @@ def install_hook(base, rom, player):
     atomic_write(payload,json.dumps(dict(settings=options,player=str(player),width=width,height=height)))
     binary = shutil.which('batocera-wine')
     if not binary:
-        raise RuntimeError('batocera-wine introuvable.')
+        raise RuntimeError(tr('batocera-wine introuvable.'))
     binary = Path(binary).resolve()
     hook = [sys.executable,str(base/'partydeck_borderlands2.py'),str(payload)]
     replacement = player/'batocera-wine-borderlands2'
@@ -257,7 +258,7 @@ if __name__ == '__main__':
     try:
         payload = json.loads(Path(sys.argv[1]).read_text())
         if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != payload['player']:
-            raise ValueError('Le profil Borderlands 2 doit être appliqué dans la session Wine privée du joueur.')
+            raise ValueError(tr('Le profil Borderlands 2 doit être appliqué dans la session Wine privée du joueur.'))
         # Arguments: payload, current game directory, native Wine prefix.
         apply_config(Path(sys.argv[3]),payload)
     except (OSError,ValueError,KeyError,TypeError) as error:

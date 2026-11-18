@@ -1,4 +1,5 @@
 """Windows Party's controller-first configurator. Original Pygame implementation."""
+from partydeck_i18n import tr, detect_language, set_language, get_language
 import copy
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -25,66 +26,68 @@ KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add'
 
 def control_label(action, mode):
     if mode == 'keyboard':
-        return KEY_LABELS[action]
+        return tr(KEY_LABELS[action])
     if action == 'tabs':
         return 'L1/R1' if mode == 'ps' else 'LB/RB'
     if action == 'add':
         return 'OPTIONS' if mode == 'ps' else 'START'
-    return ({'ok':'Croix', 'back':'Cercle', 'save':'Carré', 'search':'Triangle'} if mode == 'ps'
+    return ({'ok':tr('Croix'), 'back':tr('Cercle'), 'save':tr('Carré'), 'search':tr('Triangle')} if mode == 'ps'
             else {'ok':'A', 'back':'B', 'save':'X', 'search':'Y'})[action]
 
 
 def context_hints(context, mode, has_tabs=True):
     if context == 'remove':
-        return [('ok','Confirmer'), ('back','Annuler')]
+        return [('ok',tr('Confirmer')), ('back',tr('Annuler'))]
     if context == 'storage-error':
-        return [('back','Fermer')]
+        return [('back',tr('Fermer'))]
     if context == 'storage':
-        return [('ok','Choisir'), ('back','Retour'), ('tabs','Jeux par taille')]
+        return [('ok',tr('Choisir')), ('back',tr('Retour')), ('tabs',tr('Jeux par taille'))]
     if context == 'confirm':
-        return [('ok','Enregistrer'), ('search','Abandonner'), ('back','Annuler')]
+        return [('ok',tr('Enregistrer')), ('search',tr('Abandonner')), ('back',tr('Annuler'))]
     if context == 'missing':
-        return [('ok','Choisir le jeu'), ('back','Annuler')]
+        return [('ok',tr('Choisir le jeu')), ('back',tr('Annuler'))]
     if context == 'keyboard':
-        return [('ok','Valider'), ('back','Annuler')] if mode == 'keyboard' else [('ok','Saisir'), ('save','Valider'), ('back','Annuler')]
+        return [('ok',tr('Valider')), ('back',tr('Annuler'))] if mode == 'keyboard' else [('ok',tr('Saisir')), ('save',tr('Valider')), ('back',tr('Annuler'))]
     if context == 'browser':
-        return [('ok','Choisir'), ('back','Annuler'), ('tabs','Parcourir')]
-    return [('ok','Choisir'), ('back','Retour'), ('save','Enregistrer'), ('search','Rechercher'),
-            *([('tabs','Onglets')] if has_tabs else []), ('add','Ajouter')]
+        return [('ok',tr('Choisir')), ('back',tr('Annuler')), ('tabs',tr('Parcourir'))]
+    return [('ok',tr('Choisir')), ('back',tr('Retour')), ('save',tr('Enregistrer')), ('search',tr('Rechercher')),
+            *([('tabs',tr('Onglets'))] if has_tabs else []), ('add',tr('Ajouter'))]
 KEYS = [list('azertyuiop'), list('qsdfghjklm'), list('wxcvbn0123'),
         list('456789 .-_'), list('@:/\\!?éèàç'), list('[]()#&+=$%'),
         list("'\";<>^~{}|"), ['Maj', 'Espace', 'Effacer', 'Vider', 'Valider']]
+EN_KEYS = [list('qwertyuiop'), list('asdfghjkl'), list('zxcvbnm012'),
+           list('3456789 .-_'), *KEYS[4:]]
 
 
 def fields(tab, adapter='standard'):
     if tab == 0:
-        return [('players', 'Joueurs', ['auto', '1', '2', '3', '4']),
-                ('split', 'Partage de l’écran', ['horizontal', 'vertical']),
-                ('input', 'Attribution des contrôles', ['auto', 'clavier-j1', 'clavier-j2']),
-                ('keyboard_player', 'Clavier/souris utilisable comme joueur', [True, False]),
-                ('configure_before_launch', 'Configurer avant chaque lancement', [False, True]),
-                ('adapter', 'Profil du jeu', ['standard', 'soh-anchor', 'borderlands2'])]
+        return [('players', tr('Joueurs'), ['auto', '1', '2', '3', '4']),
+                ('split', tr('Partage de l’écran'), ['horizontal', 'vertical']),
+                ('input', tr('Attribution des contrôles'), ['auto', 'clavier-j1', 'clavier-j2']),
+                ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
+                ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2'])]
     if adapter == 'borderlands2':
-        return [('borderlands2.windowed_fullscreen','Forcer le plein écran fenêtré',[True,False]),
-                ('borderlands2.fit_resolution','Résolution adaptée au partage',[True,False]),
-                ('borderlands2.preset','Préréglage graphique',list(PRESETS)),
-                ('borderlands2.physx','Qualité PhysX',['keep','0','1','2']),
-                ('borderlands2.config','Fichier INI (auto ou relatif au préfixe)',None)]
+        return [('borderlands2.windowed_fullscreen',tr('Forcer le plein écran fenêtré'),[True,False]),
+                ('borderlands2.fit_resolution',tr('Résolution adaptée au partage'),[True,False]),
+                ('borderlands2.preset',tr('Préréglage graphique'),list(PRESETS)),
+                ('borderlands2.physx',tr('Qualité PhysX'),['keep','0','1','2']),
+                ('borderlands2.config',tr('Fichier INI (auto ou relatif au préfixe)'),None)]
     if tab == 1:
-        return [('anchor.enabled', 'Connexion automatique Anchor', [False, True]),
-                ('anchor.room', 'Room ID commun', None), ('anchor.host', 'Serveur', None),
-                ('anchor.port', 'Port', None), ('anchor.config', 'Chemin du JSON SoH', None),
-                ('anchor.pvp', 'PvP', [0, 1, 2]), ('anchor.locations', 'Positions visibles', [0, 1, 2]),
-                ('anchor.teleport', 'Téléportation', [0, 1, 2]), ('anchor.sync', 'Objets et progression partagés', [False, True])]
+        return [('anchor.enabled', tr('Connexion automatique Anchor'), [False, True]),
+                ('anchor.room', tr('Room ID commun'), None), ('anchor.host', tr('Serveur'), None),
+                ('anchor.port', tr('Port'), None), ('anchor.config', tr('Chemin du JSON SoH'), None),
+                ('anchor.pvp', tr('PvP'), [0, 1, 2]), ('anchor.locations', tr('Positions visibles'), [0, 1, 2]),
+                ('anchor.teleport', tr('Téléportation'), [0, 1, 2]), ('anchor.sync', tr('Objets et progression partagés'), [False, True])]
     if tab == 2:
-        return [(f'anchor.{key}.{i}', f'J{i+1} · {label}', None)
-                for i in range(4) for key, label in [('names', 'Nom'), ('teams', 'Équipe')]]
-    return [('anchor.graphics.internal_resolution', 'Résolution interne', [.5, .75, 1., 1.25, 1.5, 1.75, 2.]),
-            ('anchor.graphics.msaa', 'Anti-aliasing MSAA', list(range(1, 9))),
-            ('anchor.graphics.vsync', 'VSync', [False, True]),
-            ('anchor.graphics.texture_filter', 'Filtre des textures', [0, 1, 2]),
-            ('anchor.graphics.music_j1_only', 'Musique uniquement pour J1', [False, True]),
-            *[(f'anchor.graphics.volumes.{key}', label + ' (%)', None) for key, label in VOLUME_FIELDS]]
+        return [(f'anchor.{key}.{i}', tr('J{p0} · {p1}', p0=i + 1, p1=label), None)
+                for i in range(4) for key, label in [('names', tr('Nom')), ('teams', tr('Équipe'))]]
+    return [('anchor.graphics.internal_resolution', tr('Résolution interne'), [.5, .75, 1., 1.25, 1.5, 1.75, 2.]),
+            ('anchor.graphics.msaa', tr('Anti-aliasing MSAA'), list(range(1, 9))),
+            ('anchor.graphics.vsync', tr('VSync'), [False, True]),
+            ('anchor.graphics.texture_filter', tr('Filtre des textures'), [0, 1, 2]),
+            ('anchor.graphics.music_j1_only', tr('Musique uniquement pour J1'), [False, True]),
+            *[(f'anchor.graphics.volumes.{key}', tr(label) + ' (%)', None) for key, label in VOLUME_FIELDS]]
 
 
 def get(data, key):
@@ -111,21 +114,27 @@ def put(data, key, value):
 
 
 def label_value(key, value):
+    if key in ('players','input') and value == 'auto':
+        return tr('Automatique')
+    if key == 'split':
+        return tr('Horizontal') if value == 'horizontal' else tr('Vertical')
+    if key == 'input' and value in ('clavier-j1','clavier-j2'):
+        return tr('Clavier/souris · J1') if value == 'clavier-j1' else tr('Clavier/souris · J2')
     if type(value) is bool:
-        return 'Activé' if value else 'Désactivé'
+        return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2'}.get(value, value)
     if key == 'borderlands2.preset':
-        return PRESET_LABELS[value]
+        return tr(PRESET_LABELS[value])
     if key == 'borderlands2.physx':
-        return {'keep':'Conserver', '0':'Bas','1':'Moyen','2':'Élevé'}[value]
+        return {'keep':tr('Conserver'), '0':tr('Bas'),'1':tr('Moyen'),'2':tr('Élevé')}[value]
     if key in ('anchor.locations', 'anchor.teleport'):
-        return ['Personne', 'Même équipe', 'Tous'][value]
+        return [tr('Personne'), tr('Même équipe'), tr('Tous')][value]
     if key == 'anchor.pvp':
-        return ['Désactivé', 'Activé', 'Avec tirs alliés'][value]
+        return [tr('Désactivé'), tr('Activé'), tr('Avec tirs alliés')][value]
     if key.endswith('texture_filter'):
-        return ['Trois points N64', 'Linéaire', 'Aucun'][value]
-    return str(value) if value != '' else 'JSON commun'
+        return [tr('Trois points N64'), tr('Linéaire'), tr('Aucun')][value]
+    return str(value) if value != '' else tr('JSON commun')
 
 
 class Model:
@@ -166,9 +175,9 @@ class Model:
             if len(found) == 1 and recipe.id not in detached:
                 rom = found[0]
                 self.common_for_rom[rom] = recipe
-                if self.filter.casefold() in (rom.stem + recipe.name).casefold():
+                if self.filter.casefold() in (rom.stem + tr(recipe.name)).casefold():
                     self.rows.append(rom)
-            elif self.filter.casefold() in recipe.name.casefold():
+            elif self.filter.casefold() in tr(recipe.name).casefold():
                 self.rows.append(CommonGame(recipe.id, recipe.name, recipe.adapter, found))
         self.rows.sort(key=lambda p: (isinstance(p,CommonGame),
                       str(next(i for i,r in enumerate(COMMON) if r.id==p.id)) if isinstance(p,CommonGame) else p.stem.casefold()))
@@ -238,7 +247,7 @@ class Model:
             validate(self.data,rom)
             for path in (self.base/'catalog.json',self.base/'detached-profiles'/f'{recipe.id}.json'):
                 if path.is_symlink():
-                    raise ValueError('Métadonnées de catalogue liées à un autre emplacement ; dissociation refusée.')
+                    raise ValueError(tr('Métadonnées de catalogue liées à un autre emplacement ; dissociation refusée.'))
                 changes.append((path,path.read_bytes() if path.exists() else None))
             stored = copy.deepcopy(self.data)
             stored.pop('rom')
@@ -384,13 +393,15 @@ class Pads:
 
 class App:
     def __init__(self, base, rom=None, windowed=False):
+        set_language(detect_language())
+        self.keys = KEYS if get_language() == 'fr' else EN_KEYS
         import pygame as pg
         self.pg = pg
         pg.display.init()
         pg.font.init()
         pg.joystick.init()
         self.screen = pg.display.set_mode((1280, 800) if windowed else (0, 0), 0 if windowed else pg.FULLSCREEN)
-        pg.display.set_caption('Windows Party · Configurateur')
+        pg.display.set_caption(tr('Windows Party · Configurateur'))
         pg.mouse.set_visible(False)
         self.canvas = pg.Surface((1440, 900))
         self.panels = {}
@@ -525,7 +536,7 @@ class App:
 
     def storage_job(self, task='scan'):
         if self.storage_future is not None:
-            self.toast('Analyse / nettoyage en cours…')
+            self.toast(tr('Analyse / nettoyage en cours…'))
             return
         if self.storage_pool is None:
             self.storage_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='party-storage')
@@ -553,7 +564,7 @@ class App:
             elif task == 'scan':
                 self.storage_result = result
             else:
-                self.toast(f"{human(result['freed'])} libérés · {len(result['errors'])} erreurs · sauvegardes conservées")
+                self.toast(tr('{p0} libérés · {p1} erreurs · sauvegardes conservées', p0=human(result['freed']), p1=len(result['errors'])))
                 self.storage_job()
         except (OSError, ValueError, RuntimeError) as error:
             self.launch_pending = False
@@ -598,7 +609,7 @@ class App:
                 elif action == 'ok':
                     def entered(text):
                         apply(int(text))
-                    self.edit('Valeur en Mio (0 = ' + ('seuil désactivé' if key == 'reserve_mib' else 'aucune rétention') + ')', value, entered)
+                    self.edit(tr('Valeur en Mio (0 = ') + (tr('seuil désactivé') if key == 'reserve_mib' else tr('aucune rétention')) + ')', value, entered)
                 else:
                     step = {'cache_mib':256, 'logs_mib':32, 'reserve_mib':512}[key]
                     apply(max(0, min(1048576, value + (-step if action == 'left' else step))))
@@ -606,44 +617,44 @@ class App:
                 self.toast(str(error))
 
     def draw_storage(self):
-        self.text('STOCKAGE WINDOWS PARTY', 416, 161, 28, width=960)
+        self.text(tr('STOCKAGE WINDOWS PARTY'), 416, 161, 28, width=960)
         result = self.storage_result
         if result:
-            self.text('Occupé : ' + human(result['total']) + ' · hors jeux Windows d’origine', 418, 204, 20, width=960)
-            self.text(' · '.join(human(d['free']) + ' libres sur ' + d['path'] for d in result['disks']),
+            self.text(tr('Occupé : ') + human(result['total']) + tr(' · hors jeux Windows d’origine'), 418, 204, 20, width=960)
+            self.text(' · '.join(human(d['free']) + tr(' libres sur ') + d['path'] for d in result['disks']),
                       418, 237, 16, (159,213,227), 955)
             c = result['categories']
-            self.text(f"Persistant {human(c['persistent'])} · Runtime {human(c['runtime'])} · Installation {human(c['installation'])}",
+            self.text(tr('Persistant {p0} · Runtime {p1} · Installation {p2}', p0=human(c['persistent']), p1=human(c['runtime']), p2=human(c['installation'])),
                       418, 266, 16, width=955)
-            self.text(f"Caches {human(c['cache'])} · Journaux {human(c['logs'])}", 418, 290, 16, width=955)
+            self.text(tr('Caches {p0} · Journaux {p1}', p0=human(c['cache']), p1=human(c['logs'])), 418, 290, 16, width=955)
         else:
-            self.text('Analyse du disque en cours…', 418, 221, 20, width=955)
-        rows = [('auto_clean','Entretien automatique'), ('cache_mib','Caches cumulés (Mio)'),
-                ('logs_mib','Journaux cumulés (Mio)'), ('reserve_mib','Espace libre avant lancement (Mio)'),
-                ('diagnostic','Diagnostic Proton détaillé')]
+            self.text(tr('Analyse du disque en cours…'), 418, 221, 20, width=955)
+        rows = [('auto_clean',tr('Entretien automatique')), ('cache_mib',tr('Caches cumulés (Mio)')),
+                ('logs_mib',tr('Journaux cumulés (Mio)')), ('reserve_mib',tr('Espace libre avant lancement (Mio)')),
+                ('diagnostic',tr('Diagnostic Proton détaillé'))]
         for index, (key, title) in enumerate(rows):
             y = 331+index*38
             focused = self.storage_row == index
             self.box((410,y-5,986,35), (38,64,86) if focused else (25,33,50), (90,210,229) if focused else None)
             self.text(title,430,y,20,width=640)
             value = self.storage_config[key]
-            self.text('‹ ' + (('Activé' if value else 'Désactivé') if type(value) is bool else str(value)) + ' ›',
+            self.text('‹ ' + ((tr('Activé') if value else tr('Désactivé')) if type(value) is bool else str(value)) + ' ›',
                       1130,y,20,(144,223,234),240)
-        for index, title in enumerate(('NETTOYER', 'VIDER LES CACHES', 'ACTUALISER')):
+        for index, title in enumerate((tr('NETTOYER'), tr('VIDER LES CACHES'), tr('ACTUALISER'))):
             focused = self.storage_row == index+5
             self.box((416+index*327,533,314,40),(35,75,92), (134,236,238) if focused else None)
             self.text(title,430+index*327,543,16,width=290)
-        self.text('Sauvegardes, préfixes et réglages conservés. Limites appliquées hors jeu.',418,588,16,width=960)
+        self.text(tr('Sauvegardes, préfixes et réglages conservés. Limites appliquées hors jeu.'),418,588,16,width=960)
         if self.storage_future is not None:
-            self.text('Analyse en cours…' if self.storage_task == 'scan' else 'Nettoyage en cours…',418,614,16,(141,220,234),950)
+            self.text(tr('Analyse en cours…') if self.storage_task == 'scan' else tr('Nettoyage en cours…'),418,614,16,(141,220,234),950)
         else:
-            self.text('JEUX PAR TAILLE · progression et réglages inclus dans « persistant »',418,614,16,width=950)
+            self.text(tr('JEUX PAR TAILLE · progression et réglages inclus dans « persistant »'),418,614,16,width=950)
         if result:
             for index, game in enumerate(result['games'][self.storage_page*3:self.storage_page*3+3]):
                 y = 648+index*45
                 self.text(game['name'],430,y,20,width=730)
                 self.text(human(game['total']),1200,y,20,width=180)
-                self.text(f"Persistant {human(game['persistent'])} · Runtime {human(game['runtime'])} · Caches {human(game['cache'])} · Logs {human(game['logs'])}",
+                self.text(tr('Persistant {p0} · Runtime {p1} · Caches {p2} · Logs {p3}', p0=human(game['persistent']), p1=human(game['runtime']), p2=human(game['cache']), p3=human(game['logs'])),
                           430,y+25,16,(148,169,191),945)
 
     def volume(self, key):
@@ -688,12 +699,12 @@ class App:
             self.finish_text()
             return
         if action in ('up', 'down'):
-            k['row'] = (k['row'] + (1 if action == 'down' else -1)) % len(KEYS)
-            k['col'] = min(k['col'], len(KEYS[k['row']]) - 1)
+            k['row'] = (k['row'] + (1 if action == 'down' else -1)) % len(self.keys)
+            k['col'] = min(k['col'], len(self.keys[k['row']]) - 1)
         if action in ('left', 'right'):
-            k['col'] = (k['col'] + (1 if action == 'right' else -1)) % len(KEYS[k['row']])
+            k['col'] = (k['col'] + (1 if action == 'right' else -1)) % len(self.keys[k['row']])
         if action == 'ok':
-            key = KEYS[k['row']][k['col']]
+            key = self.keys[k['row']][k['col']]
             if key == 'Valider':
                 self.finish_text()
             elif key == 'Maj':
@@ -708,7 +719,7 @@ class App:
     def switch(self, callback):
         if self.model.data and self.model.dirty():
             self.pending = callback
-            self.modal = 'Modifications non enregistrées. Enregistrer avant de continuer ?'
+            self.modal = tr('Modifications non enregistrées. Enregistrer avant de continuer ?')
         else:
             callback()
 
@@ -717,15 +728,15 @@ class App:
             if self.model.data:
                 self.model.save()
                 self.library = self.model.rows.index(self.model.rom) if self.model.rom in self.model.rows else 0
-                self.toast('Profil enregistré · prêt pour le prochain lancement')
+                self.toast(tr('Profil enregistré · prêt pour le prochain lancement'))
                 return True
         except (ValueError, OSError, subprocess.CalledProcessError) as error:
-            self.toast('Enregistrement impossible : ' + str(error))
+            self.toast(tr('Enregistrement impossible : ') + str(error))
         return False
 
     def launch(self):
         if self.storage_future is not None:
-            self.toast('Attendez la fin de l’analyse / du nettoyage.')
+            self.toast(tr('Attendez la fin de l’analyse / du nettoyage.'))
             return
         if self.save():
             self.launch_pending = True
@@ -743,7 +754,7 @@ class App:
             self.removal = None
             if self.single:
                 self.accepted,self.running = False,False
-            self.toast('Jeu retiré / dissocié. ROM et sauvegardes conservées. Actualisez les listes EmulationStation.')
+            self.toast(tr('Jeu retiré / dissocié. ROM et sauvegardes conservées. Actualisez les listes EmulationStation.'))
         except (OSError,ValueError,RuntimeError) as error:
             self.toast(str(error))
 
@@ -751,7 +762,7 @@ class App:
         try:
             children = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.casefold()))
         except OSError as error:
-            self.toast('Dossier inaccessible : ' + str(error))
+            self.toast(tr('Dossier inaccessible : ') + str(error))
             return
         self.browser = directory
         self.browser_rows = [directory.parent] + [p for p in children if p.is_dir() or p.suffix.lower() == '.wsquashfs']
@@ -759,7 +770,7 @@ class App:
 
     def select_game(self, rom):
         if not is_rom(rom):
-            self.toast('Choisissez un dossier .wine/.pc ou un fichier .wsquashfs existant.')
+            self.toast(tr('Choisissez un dossier .wine/.pc ou un fichier .wsquashfs existant.'))
             return
         self.model.select(rom, self.pending_common)
         self.pending_common = None
@@ -770,13 +781,13 @@ class App:
             self.launch_pending = False
             if action == 'back':
                 self.poll_storage()
-                self.toast('Lancement annulé.')
+                self.toast(tr('Lancement annulé.'))
                 return
         self.poll_storage()
         if self.launch_pending and action != 'quit':
             if action == 'back':
                 self.launch_pending = False
-                self.toast('Lancement annulé.')
+                self.toast(tr('Lancement annulé.'))
             return
         if action == 'quit':
             self.launch_pending = False
@@ -805,7 +816,7 @@ class App:
                 self.browse(self.model.windows)
             elif action == 'back':
                 self.missing = None
-                self.toast('Vous devez disposer du jeu avant d’utiliser ce profil commun.')
+                self.toast(tr('Vous devez disposer du jeu avant d’utiliser ce profil commun.'))
             return
         if self.keyboard:
             self.keyboard_action(action)
@@ -830,7 +841,7 @@ class App:
                 self.row = 0
                 if self.pending_common is not None:
                     self.pending_common = None
-                    self.toast('Ajout annulé : vous devez d’abord disposer du jeu.')
+                    self.toast(tr('Ajout annulé : vous devez d’abord disposer du jeu.'))
             elif action in ('prev', 'next'):
                 self.row = max(0, min(len(self.browser_rows)-1, self.row + (-9 if action == 'prev' else 9)))
             elif action in ('up', 'down'):
@@ -879,7 +890,7 @@ class App:
                         if recipe:
                             self.missing = recipe
                         else:
-                            self.toast('Jeu introuvable : vous devez d’abord disposer du jeu. Start permet de choisir un autre jeu.')
+                            self.toast(tr('Jeu introuvable : vous devez d’abord disposer du jeu. Start permet de choisir un autre jeu.'))
                     else:
                         self.pane, self.row = 'settings', 0
         elif self.model.data:
@@ -901,12 +912,12 @@ class App:
                 key, title, choices = rows[self.row]
                 value = get(self.model.data, key)
                 if key == 'input' and not self.model.data.get('keyboard_player', True):
-                    self.toast('Clavier/souris réservé aux menus ; joueurs attribués aux manettes.')
+                    self.toast(tr('Clavier/souris réservé aux menus ; joueurs attribués aux manettes.'))
                     return
                 if '.volumes.' in key:
                     if action == 'ok':
                         put(self.model.data, key, '')
-                        self.toast('Volume repris depuis le JSON commun')
+                        self.toast(tr('Volume repris depuis le JSON commun'))
                     else:
                         put(self.model.data, key, max(0, min(100, self.volume(key) + (-5 if action == 'left' else 5))))
                 elif choices:
@@ -914,14 +925,14 @@ class App:
                     put(self.model.data, key, choices[(index + (-1 if action == 'left' else 1)) % len(choices)])
                     if key == 'keyboard_player' and not self.model.data[key]:
                         self.model.data['input'] = 'auto'
-                        self.toast('Joueurs sur manettes ; clavier/souris disponible dans la fenêtre active pour les menus.')
+                        self.toast(tr('Joueurs sur manettes ; clavier/souris disponible dans la fenêtre active pour les menus.'))
                 elif action == 'ok':
                     def update(text):
                         result = int(text) if (key == 'anchor.port' or ('.volumes.' in key and text.strip())) else text
                         if '.volumes.' in key and text.strip() and not 0 <= result <= 100:
-                            raise ValueError('Volume : de 0 à 100 %, ou vide pour le JSON commun.')
+                            raise ValueError(tr('Volume : de 0 à 100 %, ou vide pour le JSON commun.'))
                         if key == 'anchor.port' and not 1024 < result < 65535:
-                            raise ValueError('Port : de 1025 à 65534.')
+                            raise ValueError(tr('Port : de 1025 à 65534.'))
                         put(self.model.data, key, result)
                     self.edit(title, value, update)
 
@@ -937,17 +948,17 @@ class App:
         self.canvas.blit(self.background, (0,0))
         self.box((24, 22, 1392, 100), (23, 29, 46))
         self.text('WINDOWS PARTY', 52, 37, 36)
-        self.text('Votre bibliothèque · vos règles · votre partie', 54, 84, 16, (152, 167, 191))
+        self.text(tr('Votre bibliothèque · vos règles · votre partie'), 54, 84, 16, (152, 167, 191))
         if self.logo is not None:
             factor = min(260/self.logo.get_width(), 76/self.logo.get_height())
             self.canvas.blit(self.pg.transform.smoothscale(self.logo,
                              (int(self.logo.get_width()*factor), int(self.logo.get_height()*factor))), (1110, 35))
         else:
-            self.text('CONFIGURATEUR', 1100, 60, 20, (117, 213, 230), 280)
+            self.text(tr('CONFIGURATEUR'), 1100, 60, 20, (117, 213, 230), 280)
         self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open else None)
-        self.text('BIBLIOTHÈQUE', 46, 163, 20, (122, 209, 229))
+        self.text(tr('BIBLIOTHÈQUE'), 46, 163, 20, (122, 209, 229))
         start_label = control_label('add', self.input_mode)
-        self.text(f'{len(self.model.rows)} jeux · {start_label} : ajouter', 46, 201, 16, (160, 174, 199))
+        self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 201, 16, (160, 174, 199))
         offset = max(0, min(self.library, len(self.model.rows)-1) - 8)
         for i, rom in enumerate(self.model.rows[offset:offset+10], offset):
             y = 246 + (i-offset)*50
@@ -957,24 +968,24 @@ class App:
             self.text(rom.stem, 50, y, 20, width=284)
         self.box((38,750,312,36), (35,75,94) if self.library == len(self.model.rows) else (29,39,55),
                  (72,202,222) if self.library == len(self.model.rows) else None)
-        self.text('STOCKAGE',50,758,16,width=284)
+        self.text(tr('STOCKAGE'),50,758,16,width=284)
         self.box((386, 142, 1030, 652), (20, 25, 40), (76,197,219) if self.storage_open else None)
         if self.storage_open:
             self.draw_storage()
         elif self.model.data:
             self.text(self.model.rom.stem, 416, 161, 28, width=950)
-            self.text(('MODIFIÉ · non enregistré' if self.model.dirty() else 'Profil prêt') + '  ·  ' + self.model.rom.suffix,
+            self.text((tr('MODIFIÉ · non enregistré') if self.model.dirty() else tr('Profil prêt')) + '  ·  ' + self.model.rom.suffix,
                       418, 208, 16, (144, 160, 186))
             for position, i in enumerate(self.available_tabs()):
-                title = 'Image' if i == 1 and self.model.data.get('adapter') == 'borderlands2' else TABS[i]
+                title = tr('Image') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
                 self.box((416+position*241, 248, 228, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
                 if i == self.tab:
                     self.pg.draw.line(self.canvas, (100,222,237), (430+position*241,291), (630+position*241,291), 3)
                 self.text(title, 434+position*241, 258, 20)
             if self.tab:
-                subtitle = ('Borderlands 2 · réglages communs · PhysX indépendant du préréglage' if self.model.data['adapter'] == 'borderlands2' else
-                            'SoH / Anchor · réglages communs aux joueurs de cette session' if self.model.data['adapter'] == 'soh-anchor'
-                            else 'SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages')
+                subtitle = (tr('Borderlands 2 · réglages communs · PhysX indépendant du préréglage') if self.model.data['adapter'] == 'borderlands2' else
+                            tr('SoH / Anchor · réglages communs aux joueurs de cette session') if self.model.data['adapter'] == 'soh-anchor'
+                            else tr('SoH / Anchor · activer ce profil dans Session pour appliquer ces réglages'))
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
             rows = self.current_fields()
             offset = max(0, min(self.row, len(rows)-1) - 6)
@@ -989,7 +1000,7 @@ class App:
                 else:
                     value = label_value(key, get(self.model.data, key))
                     if key == 'input' and not self.model.data.get('keyboard_player', True):
-                        value = 'Manettes uniquement'
+                        value = tr('Manettes uniquement')
                     if choices:
                         self.text('‹ ' + value + ' ›', 958, y+5, 20, (144, 223, 234), 416)
                     else:
@@ -997,20 +1008,20 @@ class App:
                         self.box((946, y-1, 433, 42), (34, 47, 65),
                                  (99, 203, 219) if focused else (63, 83, 107))
                         self.text(value, 961, y+6, 20, (221, 236, 243), 400)
-            remove_label = 'DISSOCIER LE JEU' if recipe_for(self.model.rom,self.model.data.get('adapter')) else 'RETIRER LE JEU'
-            for i, label in enumerate(('LANCER LA PARTIE', 'ENREGISTRER', remove_label)):
+            remove_label = tr('DISSOCIER LE JEU') if recipe_for(self.model.rom,self.model.data.get('adapter')) else tr('RETIRER LE JEU')
+            for i, label in enumerate((tr('LANCER LA PARTIE'), tr('ENREGISTRER'), remove_label)):
                 active = self.pane == 'settings' and self.row == len(rows)+i
                 self.box((416+i*327, 750, 314, 36), (35,93,108) if i == 0 else (39,46,66),
                          (134,236,238) if active else None)
                 self.text(label, 430+i*327, 757, 16, width=290)
         else:
             if isinstance(self.model.selected, CommonGame):
-                self.text(self.model.selected.name, 430, 365, 28, width=900)
-                self.text('Profil prêt · le jeu doit être présent sur votre Batocera.', 430, 420, 20, width=900)
-                self.text('Choisissez le jeu pour préparer votre session.', 430, 470, 20, width=900)
+                self.text(tr(self.model.selected.name), 430, 365, 28, width=900)
+                self.text(tr('Profil prêt · le jeu doit être présent sur votre Batocera.'), 430, 420, 20, width=900)
+                self.text(tr('Choisissez le jeu pour préparer votre session.'), 430, 470, 20, width=900)
             else:
-                self.text('Préparez votre première partie', 430, 365, 36, width=900)
-                self.text(start_label + ' : choisir un jeu .wine, .pc ou .wsquashfs', 430, 430, 24, width=900)
+                self.text(tr('Préparez votre première partie'), 430, 365, 36, width=900)
+                self.text(start_label + tr(' : choisir un jeu .wine, .pc ou .wsquashfs'), 430, 430, 24, width=900)
         self.box((24,805,1392,80), (20,27,43))
         context = self.help_context()
         hints = context_hints(context, self.input_mode, len(self.available_tabs()) > 1)
@@ -1019,23 +1030,23 @@ class App:
             self.hint(action, label, 45+i*spacing, 815, width=spacing-12)
         volume_selected = (self.model.data and self.browser is None and self.pane == 'settings'
                            and self.row < len(self.current_fields()) and '.volumes.' in self.current_fields()[self.row][0])
-        navigation = 'Flèches : naviguer' if self.input_mode == 'keyboard' else 'Croix directionnelle / stick : naviguer'
-        quit_hint = 'Échap : retour / quitter' if self.input_mode == 'keyboard' else 'HK + ' + control_label('add', self.input_mode) + ' : quitter'
-        subtitle = ('Gauche / droite : volume par pas de 5 % · ' + control_label('ok', self.input_mode) + ' : valeur JSON commun' if volume_selected and context == 'main'
+        navigation = tr('Flèches : naviguer') if self.input_mode == 'keyboard' else tr('Croix directionnelle / stick : naviguer')
+        quit_hint = tr('Échap : retour / quitter') if self.input_mode == 'keyboard' else 'HK + ' + control_label('add', self.input_mode) + tr(' : quitter')
+        subtitle = (tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok', self.input_mode) + tr(' : valeur JSON commun') if volume_selected and context == 'main'
                     else navigation + ' · ' + quit_hint)
         if context in ('confirm','missing','remove'):
             subtitle = ''
         elif context == 'browser':
             subtitle = navigation
         elif context == 'storage':
-            subtitle = 'Gauche / droite : ajuster · ' + control_label('ok', self.input_mode) + ' : saisir / exécuter · réglages enregistrés automatiquement'
+            subtitle = tr('Gauche / droite : ajuster · ') + control_label('ok', self.input_mode) + tr(' : saisir / exécuter · réglages enregistrés automatiquement')
         if context == 'keyboard':
-            subtitle = 'Saisie directe au clavier · Retour arrière : effacer' if self.input_mode == 'keyboard' else 'Maj, espace, effacement et caractères spéciaux sur le clavier virtuel'
+            subtitle = tr('Saisie directe au clavier · Retour arrière : effacer') if self.input_mode == 'keyboard' else tr('Maj, espace, effacement et caractères spéciaux sur le clavier virtuel')
         self.text(subtitle,
                   45,858,16,(151,171,195),1320)
         if self.browser is not None:
             self.box((160, 150, 1120, 640), (25, 34, 52), (91, 207, 228))
-            self.text('CHOISIR UN JEU', 195, 175, 28)
+            self.text(tr('CHOISIR UN JEU'), 195, 175, 28)
             self.text(self.browser, 195, 225, 16, width=1040)
             self.text(f'{self.row+1} / {len(self.browser_rows)}', 195, 250, 16, width=1040)
             offset = max(0, self.row-8)
@@ -1043,41 +1054,41 @@ class App:
                 y = 278+(i-offset)*50
                 if i == self.row:
                     self.box((180, y-4, 1080, 45), (39, 80, 103))
-                self.text('.. / retour au dossier parent' if i == 0 else path.name + (' /' if path.is_dir() else ''), 200, y, 20, width=1030)
+                self.text(tr('.. / retour au dossier parent') if i == 0 else path.name + (' /' if path.is_dir() else ''), 200, y, 20, width=1030)
         if self.keyboard:
             k = self.keyboard
             self.box((200, 180, 1040, 600), (25, 34, 52), (91, 207, 228))
             self.text(k['title'], 230, 198, 28, width=980)
             self.box((224, 250, 992, 60), (12, 19, 33))
             self.text(k['value'][-55:] + '│', 240, 263, 24, width=950)
-            for r, keys in enumerate(KEYS):
+            for r, keys in enumerate(self.keys):
                 cell = 970 // len(keys)
-                row_height = 360 // len(KEYS)
+                row_height = 360 // len(self.keys)
                 for c, key in enumerate(keys):
                     rect = (235+c*cell, 334+r*row_height, cell-7, row_height-6)
                     self.box(rect, (47, 118, 144) if (r,c) == (k['row'],k['col']) else (38, 47, 66))
-                    self.text(key.upper() if k['shift'] and len(key)==1 else key, rect[0]+9, rect[1]+14, 20, width=cell-17)
+                    self.text(key.upper() if k['shift'] and len(key)==1 else tr(key), rect[0]+9, rect[1]+14, 20, width=cell-17)
         if self.modal:
             self.box((230, 340, 980, 210), (36, 45, 65), (100, 213, 230))
             self.text(self.modal, 255, 368, 24, width=920)
         if self.missing is not None:
             self.box((210,310,1020,250), (36,45,65), (100,213,230))
-            self.text('Plusieurs versions détectées' if len(self.missing.matches)>1 else 'Choisir le fichier du jeu' if self.missing.matches else 'Jeu non détecté dans Windows', 240,340,28,width=950)
-            self.text('Vous devez disposer du jeu pour utiliser ce profil commun.',240,395,20,width=950)
+            self.text(tr('Plusieurs versions détectées') if len(self.missing.matches)>1 else tr('Choisir le fichier du jeu') if self.missing.matches else tr('Jeu non détecté dans Windows'), 240,340,28,width=950)
+            self.text(tr('Vous devez disposer du jeu pour utiliser ce profil commun.'),240,395,20,width=950)
         if self.removal:
             self.box((190,295,1060,305), (36,45,65), (244,164,128))
-            self.text('DISSOCIER CE JEU ?' if self.removal['common'] else 'RETIRER CE JEU DE WINDOWS PARTY ?',220,325,28,width=1000)
+            self.text(tr('DISSOCIER CE JEU ?') if self.removal['common'] else tr('RETIRER CE JEU DE WINDOWS PARTY ?'),220,325,28,width=1000)
             self.text(self.removal['name'],220,380,24,width=1000)
-            self.text('Le profil commun et vos options resteront disponibles.' if self.removal['common'] else 'Le lanceur et ses options Windows Party seront retirés.',220,445,20,width=1000)
-            self.text('Le jeu d’origine et toutes ses sauvegardes seront conservés.',220,495,20,width=1000)
+            self.text(tr('Le profil commun et vos options resteront disponibles.') if self.removal['common'] else tr('Le lanceur et ses options Windows Party seront retirés.'),220,445,20,width=1000)
+            self.text(tr('Le jeu d’origine et toutes ses sauvegardes seront conservés.'),220,495,20,width=1000)
         if self.launch_pending:
             self.box((230,340,980,210), (36,45,65), (100,213,230))
-            self.text('PRÉPARATION DE LA PARTIE',255,368,28,width=920)
-            self.text('Vérification de l’espace libre et entretien du stockage…',255,425,20,width=920)
-            self.text(control_label('back',self.input_mode) + ' : annuler',255,480,16,width=920)
+            self.text(tr('PRÉPARATION DE LA PARTIE'),255,368,28,width=920)
+            self.text(tr('Vérification de l’espace libre et entretien du stockage…'),255,425,20,width=920)
+            self.text(control_label('back',self.input_mode) + tr(' : annuler'),255,480,16,width=920)
         if self.launch_error:
             self.box((190,280,1060,360), (36,45,65), (244,164,128))
-            self.text('LANCEMENT INTERROMPU',220,308,28,width=1000)
+            self.text(tr('LANCEMENT INTERROMPU'),220,308,28,width=1000)
             for index, line in enumerate(textwrap.wrap(self.launch_error, width=85)[:6]):
                 self.text(line,220,365+index*34,20,width=1000)
         if time.monotonic() < self.notice_until:
@@ -1138,5 +1149,5 @@ def configure(base, rom=None, single=False):
             os.execv(launcher, [launcher, 'party', str(app.model.rom), data['players'], data['split'], data['input']])
         return accepted
     except ImportError as error:
-        raise RuntimeError('Pygame 2 est requis pour le configurateur à la manette. '
-                           'Ancienne interface : PARTYDECK_UI=legacy partydeck-test configurer') from error
+        raise RuntimeError(tr('Pygame 2 est requis pour le configurateur à la manette. '
+                           'Ancienne interface : PARTYDECK_UI=legacy partydeck-test configurer')) from error

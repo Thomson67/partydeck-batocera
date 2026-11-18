@@ -1,4 +1,5 @@
 """Bound disposable Windows Party data; never infer that Wine data is disposable."""
+from partydeck_i18n import tr, get_language
 import argparse
 from contextlib import contextmanager
 import fcntl
@@ -23,14 +24,14 @@ def settings(base):
     if path.exists():
         data = json.loads(path.read_text())
         if not isinstance(data, dict):
-            raise ValueError('storage.json doit contenir un objet JSON.')
+            raise ValueError(tr('storage.json doit contenir un objet JSON.'))
         values.update({k: v for k, v in data.items() if k in DEFAULTS})
     for key, default in DEFAULTS.items():
         value = values[key]
         if type(value) is not type(default) or (type(value) is int and not 0 <= value <= 1048576):
-            raise ValueError(f'Réglage stockage invalide : {key}')
+            raise ValueError(tr('Réglage stockage invalide : {p0}', p0=key))
     if not values['log_keep'] or not values['log_file_mib']:
-        raise ValueError('Conserver au moins un journal et 1 Mio par journal.')
+        raise ValueError(tr('Conserver au moins un journal et 1 Mio par journal.'))
     return values
 
 
@@ -39,9 +40,9 @@ def save_settings(base, values):
     data = {k: values[k] for k in DEFAULTS}
     for key, default in DEFAULTS.items():
         if type(data[key]) is not type(default) or (type(default) is int and not 0 <= data[key] <= 1048576):
-            raise ValueError(f'Réglage stockage invalide : {key}')
+            raise ValueError(tr('Réglage stockage invalide : {p0}', p0=key))
     if not data['log_keep'] or not data['log_file_mib']:
-        raise ValueError('Conserver au moins un journal et 1 Mio par journal.')
+        raise ValueError(tr('Conserver au moins un journal et 1 Mio par journal.'))
     base = Path(base)
     base.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix='.storage-', dir=base)
@@ -55,9 +56,10 @@ def save_settings(base, values):
 
 
 def human(size):
-    for unit in ('o', 'Kio', 'Mio', 'Gio', 'Tio'):
-        if abs(size) < 1024 or unit == 'Tio':
-            return f'{size:.1f} {unit}' if unit != 'o' else f'{size} o'
+    units = ('o','Kio','Mio','Gio','Tio') if get_language() == 'fr' else ('B','KiB','MiB','GiB','TiB')
+    for index,unit in enumerate(units):
+        if abs(size) < 1024 or index == len(units)-1:
+            return f'{size:.1f} {unit}' if index else f'{size} {unit}'
         size /= 1024
 
 
@@ -72,7 +74,7 @@ def mounted_paths():
                 for line in Path('/proc/self/mountinfo').read_text().splitlines()}
     except OSError:
         # No cleanup if mount boundaries cannot be checked.
-        raise RuntimeError('Impossible de vérifier les montages ; nettoyage refusé.')
+        raise RuntimeError(tr('Impossible de vérifier les montages ; nettoyage refusé.'))
 
 
 def files(root, mounts=None):
@@ -142,7 +144,7 @@ def ensure_idle(base):
             compositor = bool(args) and Path(args[0]).name == 'gamescope-kbm'
             child = any(Path(arg).name == 'partydeck-batocera-coop.py' for arg in args) and any(arg in ('_wine', '_sandbox') for arg in args)
             if (compositor or child) and any(arg.startswith(prefix) for arg in args):
-                raise RuntimeError('Une instance Windows Party est encore active. Fermez-la avant de nettoyer ou relancer.')
+                raise RuntimeError(tr('Une instance Windows Party est encore active. Fermez-la avant de nettoyer ou relancer.'))
         except (OSError, ProcessLookupError):
             pass
 
@@ -178,7 +180,7 @@ def storage_lock(base):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError('Une session ou un nettoyage Windows Party est déjà en cours.') from None
+            raise RuntimeError(tr('Une session ou un nettoyage Windows Party est déjà en cours.')) from None
         yield
 
 
@@ -247,7 +249,7 @@ def clean(base, purge=False):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError('Fermez la session ou attendez la fin de l’installation avant de nettoyer.') from None
+            raise RuntimeError(tr('Fermez la session ou attendez la fin de l’installation avant de nettoyer.')) from None
         with storage_lock(base):
             return _clean(base, settings(base), purge)
 
@@ -259,7 +261,7 @@ def prepare_launch(base):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError('Une session ou une installation est déjà en cours.') from None
+            raise RuntimeError(tr('Une session ou une installation est déjà en cours.')) from None
         with storage_lock(base):
             preflight(base, SAVES, settings(base))
 
@@ -286,9 +288,8 @@ def preflight(base, saves, config):
             _clean(base, config, purge=True)
         lacking = [d for d in disks(base, saves) if d['free'] < reserve]
         if lacking:
-            detail = ', '.join(f"{d['path']} : {human(d['free'])} libres" for d in lacking)
-            raise RuntimeError(f'Espace insuffisant ({detail}). Seuil de lancement : {human(reserve)}. '
-                               'Libérez de l’espace ou ajustez Stockage. Aucune sauvegarde supprimée.')
+            detail = ', '.join(tr('{p0} : {p1} libres', p0=d['path'], p1=human(d['free'])) for d in lacking)
+            raise RuntimeError(tr('Espace insuffisant ({p0}). Seuil de lancement : {p1}. Libérez de l’espace ou ajustez Stockage. Aucune sauvegarde supprimée.', p0=detail, p1=human(reserve)))
 
 
 @contextmanager
@@ -302,9 +303,9 @@ def session(base, saves):
             if config['auto_clean']:
                 try:
                     result = _clean(base, config)
-                    print(f"Stockage : {human(result['freed'])} libérés ; {len(result['errors'])} erreurs de nettoyage.", flush=True)
+                    print(tr('Stockage : {p0} libérés ; {p1} erreurs de nettoyage.', p0=human(result['freed']), p1=len(result['errors'])), flush=True)
                 except (OSError, RuntimeError) as error:
-                    print(f'Nettoyage différé : {error}', flush=True)
+                    print(tr('Nettoyage différé : {p0}', p0=error), flush=True)
 
 
 def snapshot(base, saves=None):

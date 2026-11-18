@@ -1,5 +1,6 @@
 """Storage navigation, background work, persistent settings and launch refusal."""
 import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 os.environ['SDL_VIDEODRIVER'] = 'dummy'
 from pathlib import Path
 import sys

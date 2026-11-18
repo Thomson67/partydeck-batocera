@@ -1,4 +1,6 @@
 """Anchor field mapping, cancellation, private launch ordering and safety checks."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import json
 from pathlib import Path
 import shlex

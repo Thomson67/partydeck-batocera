@@ -1,4 +1,6 @@
 """Volume mix persistence and precedence of J1-only music on all four players."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import copy
 import json
 from pathlib import Path

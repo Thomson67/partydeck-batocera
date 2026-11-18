@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Persistent Windows Party profiles and their optional graphical editor."""
+from partydeck_i18n import tr, choice_label
 import hashlib
 import fcntl
 import html
@@ -38,11 +39,11 @@ def validate(data, rom):
             or data.get("split") not in ("horizontal", "vertical")
             or data.get("input") not in ("auto", "clavier-j1", "clavier-j2")
             or type(data.get("configure_before_launch")) is not bool):
-        raise ValueError(f"Profil Windows Party invalide pour {rom}")
+        raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
-        raise ValueError("Option clavier comme joueur invalide.")
+        raise ValueError(tr("Option clavier comme joueur invalide."))
     if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2"):
-        raise ValueError("Adaptateur Windows Party inconnu.")
+        raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
         validate_anchor(data.get("anchor"))
@@ -55,14 +56,14 @@ def validate(data, rom):
 def read_profile(base, rom):
     path = profile_path(base, rom)
     if path.is_symlink():
-        raise ValueError(f"Le profil est un lien symbolique : {path}")
+        raise ValueError(tr('Le profil est un lien symbolique : {p0}', p0=path))
     return validate(json.loads(path.read_text()), rom)
 
 
 def atomic_write(path, text, mode=0o600):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink():
-        raise ValueError(f"Le fichier est un lien symbolique : {path}")
+        raise ValueError(tr('Le fichier est un lien symbolique : {p0}', p0=path))
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
                                      prefix=".partydeck-", delete=False) as stream:
         temporary = Path(stream.name)
@@ -95,21 +96,21 @@ def remove_profile(base, rom, roms=None):
         try:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError('Attendez la fin de la session ou de l’installation avant de retirer ce jeu.') from None
+            raise RuntimeError(tr('Attendez la fin de la session ou de l’installation avant de retirer ce jeu.')) from None
         path = profile_path(base,rom)
         if path.exists() or path.is_symlink():
             read_profile(base,rom)
         digest = hashlib.sha256(os.fsencode(rom)).hexdigest()[:10]
         entry = roms/f'{rom.stem[:90]} [{digest}].sh'
         if entry.is_symlink():
-            raise ValueError('Le lanceur est un lien utilisateur ; retrait refusé.')
+            raise ValueError(tr('Le lanceur est un lien utilisateur ; retrait refusé.'))
         if entry.exists():
             lines = entry.read_text().splitlines()
             command = shlex.split(lines[2]) if len(lines) == 3 else []
             expected = ['exec',str(base/'partydeck-test'),'profil',str(rom)]
             legacy = len(command)==7 and command[:4] == ['exec',str(base/'partydeck-test'),'party',str(rom)]
             if len(lines)!=3 or lines[1]!=MARKER or (command!=expected and not legacy):
-                raise ValueError('Le lanceur a été personnalisé ; retrait automatique refusé.')
+                raise ValueError(tr('Le lanceur a été personnalisé ; retrait automatique refusé.'))
         previous = entry.read_text() if entry.exists() else None
         entry.unlink(missing_ok=True)
         try:
@@ -123,7 +124,7 @@ def remove_profile(base, rom, roms=None):
 def yad(arguments):
     binary = shutil.which("yad")
     if binary is None:
-        raise RuntimeError("Yad est requis pour l'éditeur graphique. Les profils JSON restent modifiables dans le dossier profiles.")
+        raise RuntimeError(tr("Yad est requis pour l'éditeur graphique. Les profils JSON restent modifiables dans le dossier profiles."))
     return subprocess.run([binary, "--title=Windows Party", "--center", "--on-top",
                            *arguments], text=True, stdout=subprocess.PIPE)
 
@@ -141,24 +142,27 @@ def edit_profile_legacy(base, rom):
     path = profile_path(base, rom)
     data = read_profile(base, rom) if path.exists() or path.is_symlink() else defaults(rom)
     def choices(key, values):
-        return "!".join([data[key], *(v for v in values if v != data[key])])
+        return "!".join(choice_label(key,v) for v in [data[key], *(v for v in values if v != data[key])])
     result = yad(["--form", "--width=620", "--separator=\x1f",
                   "--text=" + html.escape(rom.name),
-                  "--field=Joueurs:CB", choices("players", ["auto", "1", "2", "3", "4"]),
-                  "--field=Disposition:CB", choices("split", ["horizontal", "vertical"]),
-                  "--field=Entrées:CB", choices("input", ["auto", "clavier-j1", "clavier-j2"]),
-                  "--field=Afficher ces réglages avant chaque lancement:CHK",
+                  tr("--field=Joueurs:CB"), choices("players", ["auto", "1", "2", "3", "4"]),
+                  tr("--field=Disposition:CB"), choices("split", ["horizontal", "vertical"]),
+                  tr("--field=Entrées:CB"), choices("input", ["auto", "clavier-j1", "clavier-j2"]),
+                  tr("--field=Afficher ces réglages avant chaque lancement:CHK"),
                   str(data["configure_before_launch"]).upper(),
-                  "--button=Annuler:1", "--button=SoH / Anchor:2", "--button=Enregistrer:0"])
+                  tr("--button=Annuler:1"), "--button=SoH / Anchor:2", tr("--button=Enregistrer:0")])
     if result.returncode in {1, 252}:
         return False
     if result.returncode not in {0, 2}:
-        raise RuntimeError(f"Impossible d'ouvrir l'éditeur Yad (code {result.returncode}).")
+        raise RuntimeError(tr("Impossible d'ouvrir l'éditeur Yad (code {p0}).", p0=result.returncode))
     fields = result.stdout.rstrip("\n").split("\x1f")
     if len(fields) == 5 and not fields[-1]:
         fields.pop()
     if len(fields) != 4 or fields[3].upper() not in {"TRUE", "FALSE"}:
-        raise ValueError("Réponse de l'éditeur Windows Party invalide.")
+        raise ValueError(tr("Réponse de l'éditeur Windows Party invalide."))
+    for index,(key,raw) in enumerate((('players',['auto','1','2','3','4']),('split',['horizontal','vertical']),
+                                      ('input',['auto','clavier-j1','clavier-j2']))):
+        fields[index] = {choice_label(key,v):v for v in raw}.get(fields[index],fields[index])
     data.update(players=fields[0], split=fields[1], input=fields[2],
                 configure_before_launch=fields[3].upper() == "TRUE")
     if result.returncode == 2 and not edit_anchor(data):
@@ -171,38 +175,38 @@ def edit_anchor(data):
     from partydeck_anchor import defaults as anchor_defaults, validate as validate_anchor
     settings = dict(data.get("anchor") or anchor_defaults())
     labels = {
-        "pvp": ["Désactivé", "Activé", "Activé + tirs alliés"],
-        "locations": ["Personne", "Même équipe", "Tous"],
-        "teleport": ["Personne", "Même équipe", "Tous"],
+        "pvp": [tr("Désactivé"), tr("Activé"), tr("Activé + tirs alliés")],
+        "locations": [tr("Personne"), tr("Même équipe"), tr("Tous")],
+        "teleport": [tr("Personne"), tr("Même équipe"), tr("Tous")],
     }
     fields = ["--form", "--width=960", "--columns=2", "--separator=\x1f",
-              "--text=SoH / Anchor — règles communes et identité de chaque joueur.\n"
+              tr("--text=SoH / Anchor — règles communes et identité de chaque joueur.\n"
               "Les règles de salle dépendent des droits administrateur sur le serveur.\n"
-              "Le chemin JSON est relatif au dossier de lancement du jeu.",
-              "--field=Gérer ce jeu avec le profil Anchor:CHK", str(data.get("adapter") == "soh-anchor").upper(),
-              "--field=Connexion automatique:CHK", str(settings["enabled"]).upper(),
-              "--field=Room ID commun", settings["room"],
-              "--field=Serveur", settings["host"],
-              "--field=Port", str(settings["port"]),
-              "--field=Configuration SoH (chemin relatif)", settings["config"]]
-    for key, label in (("pvp", "PvP"), ("locations", "Afficher les positions"), ("teleport", "Autoriser la téléportation")):
+              "Le chemin JSON est relatif au dossier de lancement du jeu."),
+              tr("--field=Gérer ce jeu avec le profil Anchor:CHK"), str(data.get("adapter") == "soh-anchor").upper(),
+              tr("--field=Connexion automatique:CHK"), str(settings["enabled"]).upper(),
+              tr("--field=Room ID commun"), settings["room"],
+              tr("--field=Serveur"), settings["host"],
+              tr("--field=Port"), str(settings["port"]),
+              tr("--field=Configuration SoH (chemin relatif)"), settings["config"]]
+    for key, label in (("pvp", tr("PvP")), ("locations", tr("Afficher les positions")), ("teleport", tr("Autoriser la téléportation"))):
         values = labels[key]
         current = values[settings[key]]
         fields.extend([f"--field={label}:CB", "!".join([current, *(v for v in values if v != current)])])
-    fields.extend(["--field=Synchroniser objets et progression:CHK", str(settings["sync"]).upper()])
+    fields.extend([tr("--field=Synchroniser objets et progression:CHK"), str(settings["sync"]).upper()])
     for index in range(4):
-        fields.extend([f"--field=J{index + 1} — nom", settings["names"][index],
-                       f"--field=J{index + 1} — Team ID", settings["teams"][index]])
-    result = yad([*fields, "--button=Annuler:1", "--button=Graphismes / Audio:2", "--button=Enregistrer:0"])
+        fields.extend([tr('--field=J{p0} — nom', p0=index + 1), settings["names"][index],
+                       tr('--field=J{p0} — Team ID', p0=index + 1), settings["teams"][index]])
+    result = yad([*fields, tr("--button=Annuler:1"), tr("--button=Graphismes / Audio:2"), tr("--button=Enregistrer:0")])
     if result.returncode in {1, 252}:
         return False
     if result.returncode not in {0, 2}:
-        raise RuntimeError("Impossible d'ouvrir les paramètres Anchor.")
+        raise RuntimeError(tr("Impossible d'ouvrir les paramètres Anchor."))
     values = result.stdout.rstrip("\n").split("\x1f")
     if values and not values[-1]:
         values.pop()
     if len(values) != 18 or any(values[i].upper() not in {"TRUE", "FALSE"} for i in (0, 1, 9)):
-        raise ValueError("Réponse de l'éditeur Anchor invalide.")
+        raise ValueError(tr("Réponse de l'éditeur Anchor invalide."))
     settings.update(enabled=values[1].upper() == "TRUE", room=values[2], host=values[3],
                     port=int(values[4]), config=values[5], sync=values[9].upper() == "TRUE",
                     names=values[10::2], teams=values[11::2])
@@ -218,31 +222,31 @@ def edit_anchor(data):
 def edit_soh_graphics(settings):
     from partydeck_anchor import graphics_defaults, validate_graphics, VOLUME_FIELDS
     current = settings.get("graphics", graphics_defaults())
-    filters = ["Trois points (N64)", "Linéaire", "Aucun"]
+    filters = [tr("Trois points (N64)"), tr("Linéaire"), tr("Aucun")]
     selected = filters[current["texture_filter"]]
     arguments = ["--form", "--width=700", "--separator=\x1f",
-                  "--text=Réglages communs à tous les joueurs SoH.\n"
+                  tr("--text=Réglages communs à tous les joueurs SoH.\n"
                   "Résolution interne : multiplicateur de la fenêtre de chaque joueur.\n"
                   "La musique peut être réservée à J1 ; les bruitages restent actifs pour tous.\n"
                   "Volumes : de 0 à 100 %, ou vide pour conserver la valeur du JSON commun.\n"
-                  "SoH regroupe les voix et les bruitages dans le même volume.",
-                  "--field=Internal resolution (0.5 à 2.0)", str(current["internal_resolution"]),
-                  "--field=Anti-aliasing MSAA (1 = désactivé, 2 à 8)", str(current["msaa"]),
-                  "--field=VSync:CHK", str(current["vsync"]).upper(),
-                  "--field=Texture filter:CB", "!".join([selected, *(v for v in filters if v != selected)]),
-                  "--field=Musique uniquement pour J1:CHK", str(current["music_j1_only"]).upper()]
+                  "SoH regroupe les voix et les bruitages dans le même volume."),
+                  tr("--field=Résolution interne (0,5 à 2)"), str(current["internal_resolution"]),
+                  tr("--field=Anti-aliasing MSAA (1 = désactivé, 2 à 8)"), str(current["msaa"]),
+                  tr("--field=VSync:CHK"), str(current["vsync"]).upper(),
+                  tr("--field=Filtre des textures:CB"), "!".join([selected, *(v for v in filters if v != selected)]),
+                  tr("--field=Musique uniquement pour J1:CHK"), str(current["music_j1_only"]).upper()]
     for key, label in VOLUME_FIELDS:
-        arguments.extend([f"--field={label} (%)", str(current.get("volumes", {}).get(key, ""))])
-    result = yad([*arguments, "--button=Annuler:1", "--button=Enregistrer:0"])
+        arguments.extend([f"--field={tr(label)} (%)", str(current.get("volumes", {}).get(key, ""))])
+    result = yad([*arguments, tr("--button=Annuler:1"), tr("--button=Enregistrer:0")])
     if result.returncode in {1, 252}:
         return False
     if result.returncode:
-        raise RuntimeError("Impossible d'ouvrir les réglages graphiques SoH.")
+        raise RuntimeError(tr("Impossible d'ouvrir les réglages graphiques SoH."))
     values = result.stdout.rstrip("\n").split("\x1f")
     if values and not values[-1]:
         values.pop()
     if len(values) != 10 or any(values[i].upper() not in {"TRUE", "FALSE"} for i in (2, 4)):
-        raise ValueError("Réponse des réglages graphiques SoH invalide.")
+        raise ValueError(tr("Réponse des réglages graphiques SoH invalide."))
     options = dict(internal_resolution=float(values[0].replace(",", ".")),
                                                 msaa=int(values[1]), vsync=values[2].upper() == "TRUE",
                                                 texture_filter=filters.index(values[3]),
@@ -290,33 +294,33 @@ def install_menu(base, roms=PARTY_ROMS):
     menu = roms / "Configurer Windows Party.sh"
     marker = "# Configuration gérée par Windows Party"
     if menu.exists() and marker not in menu.read_text().splitlines()[:2]:
-        raise ValueError(f"Une entrée utilisateur existe déjà : {menu}")
+        raise ValueError(tr('Une entrée utilisateur existe déjà : {p0}', p0=menu))
     atomic_write(menu, f"#!/bin/bash\n{marker}\nexec " +
                  shlex.join([str(base / "partydeck-test"), "configurer"]) + "\n", 0o755)
 
 
 def choose_rom():
-    kind = yad(["--text=Choisissez le format du jeu Windows.",
-                "--button=Annuler:1", "--button=Dossier .wine ou .pc:2",
-                "--button=Archive .wsquashfs:0"])
+    kind = yad([tr("--text=Choisissez le format du jeu Windows."),
+                tr("--button=Annuler:1"), tr("--button=Dossier .wine ou .pc:2"),
+                tr("--button=Archive .wsquashfs:0")])
     if kind.returncode in {1, 252}:
         return None
     if kind.returncode not in {0, 2}:
-        raise RuntimeError("Le sélecteur de format n'a pas pu s'ouvrir.")
+        raise RuntimeError(tr("Le sélecteur de format n'a pas pu s'ouvrir."))
     options = ["--file-selection", "--filename=/userdata/roms/windows/"]
     if kind.returncode == 2:
         options.append("--directory")
     else:
-        options.append("--file-filter=Jeux Wine | *.wsquashfs *.WSQUASHFS")
+        options.append(tr("--file-filter=Jeux Wine | *.wsquashfs *.WSQUASHFS"))
     result = yad(options)
     if result.returncode in {1, 252}:
         return None
     if result.returncode:
-        raise RuntimeError("Le sélecteur de jeu n'a pas pu s'ouvrir.")
+        raise RuntimeError(tr("Le sélecteur de jeu n'a pas pu s'ouvrir."))
     rom = Path(result.stdout.rstrip("\n")).absolute()
     if (rom.suffix.lower() not in ROM_TYPES or not rom.exists()
             or (rom.suffix.lower() == ".wsquashfs") != rom.is_file()):
-        raise ValueError("Choisissez une archive .wsquashfs ou un dossier .wine ou .pc.")
+        raise ValueError(tr("Choisissez une archive .wsquashfs ou un dossier .wine ou .pc."))
     return rom
 
 
@@ -340,8 +344,8 @@ def configure_legacy(base, rom=None):
                 validate(data, source)
                 rows.extend([str(source), source.stem])
             result = yad(["--list", "--width=760", "--height=440", "--separator=\x1f",
-                          "--column=ROM", "--column=Jeu", "--hide-column=1", "--print-column=1",
-                          "--button=Fermer:1", "--button=Ajouter un jeu:2", "--button=Configurer:0",
+                          "--column=ROM", tr("--column=Jeu"), "--hide-column=1", "--print-column=1",
+                          tr("--button=Fermer:1"), tr("--button=Ajouter un jeu:2"), tr("--button=Configurer:0"),
                           *rows])
             if result.returncode in {1, 252}:
                 return 0
@@ -351,7 +355,7 @@ def configure_legacy(base, rom=None):
                 value = result.stdout.rstrip("\n").removesuffix("\x1f")
                 selected = Path(value) if value else None
             else:
-                raise RuntimeError("Le gestionnaire Windows Party n'a pas pu s'ouvrir.")
+                raise RuntimeError(tr("Le gestionnaire Windows Party n'a pas pu s'ouvrir."))
         else:
             selected = rom
         if selected is not None and edit_profile(base, selected):
@@ -373,7 +377,7 @@ def main():
         return configure(base, rom)
     if mode == "profil" and rom is not None:
         return launch_profile(base, rom)
-    raise ValueError("Commande de profil Windows Party invalide.")
+    raise ValueError(tr("Commande de profil Windows Party invalide."))
 
 
 if __name__ == "__main__":

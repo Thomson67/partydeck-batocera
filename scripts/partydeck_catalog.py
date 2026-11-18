@@ -1,4 +1,5 @@
 """Community configuration recipes, independent of the user's game files."""
+from partydeck_i18n import tr
 from dataclasses import dataclass
 import json
 import os
@@ -15,7 +16,7 @@ class CommonGame:
 
     @property
     def stem(self):
-        return self.name
+        return tr(self.name)
 
 
 COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
@@ -44,10 +45,10 @@ def unlinked(base):
     path = base/'catalog.json'
     data = json.loads(path.read_text()) if path.exists() else {}
     if not isinstance(data,dict):
-        raise ValueError('État du catalogue Windows Party invalide.')
+        raise ValueError(tr('État du catalogue Windows Party invalide.'))
     ids = data.get('unlinked',[])
     if not isinstance(ids,list) or any(i not in {r.id for r in COMMON} for i in ids):
-        raise ValueError('État du catalogue Windows Party invalide.')
+        raise ValueError(tr('État du catalogue Windows Party invalide.'))
     return set(ids)
 
 

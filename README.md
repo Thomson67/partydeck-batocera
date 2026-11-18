@@ -43,6 +43,51 @@ avec navigation entièrement à la manette et clavier virtuel intégré.
 
 ## Configurateur à la manette (version de test)
 
+### Langue automatique : français ou anglais
+
+Le configurateur suit la langue choisie dans Batocera : **français** pour `fr`
+et ses variantes (`fr_FR`, `fr_CA`, `fr_BE`, etc.), **anglais pour toutes les
+autres langues**. La sélection est relue à chaque ouverture ; fermez puis
+rouvrez le configurateur après un changement de langue.
+
+La priorité est `batocera-settings-get system.language`, puis la valeur
+`system.language` de `/userdata/system/batocera.conf` si l'utilitaire n'est pas
+disponible, puis le réglage Language d'EmulationStation. La locale du processus
+sert uniquement de dernier recours. Une session SSH en anglais ne remplace donc
+pas un choix français explicite dans Batocera, et inversement.
+
+Cela couvre les onglets, aides clavier/manette, dialogues, confirmations,
+stockage, messages du configurateur et **toutes les options des profils SoH /
+Anchor et Borderlands 2**, y compris leurs listes de choix. Le clavier virtuel
+utilise **AZERTY en français** et **QWERTY en anglais**, avec commandes traduites.
+L'ancienne interface Yad dispose également des libellés traduits.
+
+Les noms de fichiers, Room ID, noms de joueurs déjà enregistrés et autres valeurs
+personnelles ne sont pas traduits. Les identifiants des profils et des options
+restent les mêmes dans les fichiers JSON ; aucun changement des sauvegardes,
+des chemins ou de la langue du jeu n'est effectué. Les nouveaux noms de joueurs
+proposés sont `Joueur1…4` en français et `Player1…4` en anglais.
+
+Pour tester ponctuellement une langue, sans changer Batocera ni enregistrer une
+préférence supplémentaire :
+
+```bash
+PARTYDECK_LANGUAGE=en /userdata/system/partydeck-test/partydeck configurer
+PARTYDECK_LANGUAGE=fr /userdata/system/partydeck-test/partydeck configurer
+```
+
+**English:** The configurator automatically uses French when Batocera is set to
+French, and English for every other system language. All game-profile options,
+dialogs, gamepad hints and the on-screen keyboard are translated; your personal
+values and existing profiles stay unchanged.
+
+Tests locaux : `python3 tests/check_i18n.py` vérifie la priorité de la langue
+Batocera sur SSH, les variantes françaises, les replis anglais, l'affichage et
+les options des jeux, les commandes du clavier virtuel, l'éditeur Yad et la
+conservation des valeurs et identifiants des profils.
+
+### Bibliothèque et commandes
+
 La bibliothèque occupe la colonne de gauche. Le panneau de droite présente
 les onglets **Session**, **Réseau**, **Joueurs** et **Image & son**. Les profils
 existants sont réutilisés. Aucun dialogue de bureau n'est nécessaire pour ajouter

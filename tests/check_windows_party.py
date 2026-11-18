@@ -1,4 +1,6 @@
 """Regression checks for custom-system launchers and private player save paths."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import importlib.util
 import json
 from pathlib import Path

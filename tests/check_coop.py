@@ -1,7 +1,8 @@
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import contextlib
 import importlib.util
 import io
-import os
 from pathlib import Path
 import sys
 import tempfile

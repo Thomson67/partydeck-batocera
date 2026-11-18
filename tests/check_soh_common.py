@@ -1,4 +1,6 @@
 """Shared SoH base, player-only audio, graphics settings and logo installation."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import copy
 import json
 from pathlib import Path

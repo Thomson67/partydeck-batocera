@@ -1,7 +1,8 @@
 """Exercise controller actions, modal text entry, persistence and SDL rendering."""
+import os
+os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
 import copy
 import json
-import os
 os.environ['SDL_VIDEODRIVER'] = 'dummy'
 from pathlib import Path
 import subprocess
