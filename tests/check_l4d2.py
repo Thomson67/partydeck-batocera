@@ -58,6 +58,18 @@ for root_name in ('VideoConfig','video.cfg','video.txt'):
     assert result.endswith('\x00\x1a') and '/* comment */' in result
     assert l4d2.patch_video(result,960,1080)==result
 
+native_locale='#!/bin/bash\ngetWine_var() { printf \'%s\' "${TEST_AUTORUN_LANG:-}"; }\n'
+for name in ('play_wine','play_pc','play_squashfs'):
+    native_locale+=name+'() {\n WINE_LANG=$(getWine_var "${WINEPOINT}" "LANG" "")\n LC_ALL=${WINE_LANG} '+shlex.quote(sys.executable)+' -c \'import os; print(os.environ["LC_ALL"])\'\n}\n'
+native_locale+='play_wine\nplay_pc\nplay_squashfs\n'
+assert l4d2.instrument_locale(native_locale,'keep')==native_locale
+for language in ('french','english','keep'):
+    done=subprocess.run(['bash','-c',l4d2.instrument_locale(native_locale,language)],
+        env=dict(os.environ,TEST_AUTORUN_LANG='de_DE.UTF-8'),text=True,capture_output=True,check=True)
+    assert done.stdout.splitlines()==[l4d2.WINE_LOCALES.get(language,'de_DE.UTF-8')]*3
+try:l4d2.instrument_locale(native_locale.replace('WINE_LANG=$(', 'OTHER=$('),'french');raise AssertionError('missing native locale hook accepted')
+except RuntimeError:pass
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);base=root/'system';base.mkdir();windows=root/'windows';windows.mkdir()
     rom=windows/'Left 4 Dead 2.wsquashfs';rom.write_bytes(b'SOLO ROM')
@@ -144,8 +156,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert (player/'l4d2-goldberg-identity.json').read_bytes()==identity_before
     batch=game/'start.bat'
     original_batch=b'@echo off\r\nstart /wait left4dead2.exe -novid +sv_lan 1\r\n'
-    assert batch.read_bytes().endswith(original_batch)
-    assert b"/d english /f" in batch.read_bytes()
+    assert batch.read_bytes()==original_batch
     # Replacing the private language preamble preserves the original batch,
     # including the exact body and line endings; missing batches
     # no longer prevent a native launch from selecting its own entrypoint.
@@ -154,10 +165,9 @@ with tempfile.TemporaryDirectory() as folder:
         batch.write_bytes(old.encode()+original_batch)
         payload['settings']['language']=language
         l4d2.apply_config(game,prefix,payload,private_binds=())
-        expected=original_batch if language=='keep' else l4d2.language_batch(original_batch.decode(),language).encode()
+        expected=original_batch
         assert batch.read_bytes()==expected
         assert batch.read_bytes().endswith(original_batch)
-        if language!='keep':assert ('/d '+language+' /f').encode() in batch.read_bytes()
         l4d2.apply_config(game,prefix,payload,private_binds=())
         assert batch.read_bytes()==expected
     batch.unlink()
@@ -223,20 +233,22 @@ with tempfile.TemporaryDirectory() as folder:
     (game/'left4dead2/cfg').mkdir(parents=True)
     payload=dict(player=str(player),index=0,settings=profile['l4d2'],width=1920,height=540)
     payload_file=player/'payload.json';payload_file.write_text(json.dumps(payload))
-    source='#!/bin/bash\nset -e\n'
+    source='#!/bin/bash\nset -e\ngetWine_var() { printf \'%s\' "${TEST_AUTORUN_LANG:-}"; }\n'
     for name in ('play_wine','play_pc','play_squashfs'):
-        source+=name+'() {\n if [[ -n "${WINE_LANG:-}" ]]; then\n'
+        source+=name+'() {\n WINE_LANG=$(getWine_var "${WINEPOINT}" "LANG" "")\n if [[ -n "${WINE_LANG:-}" ]]; then\n'
         source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q account_name=Alice steam_settings/configs.user.ini)\n else\n'
         source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q account_name=Alice steam_settings/configs.user.ini)\n fi\n}\n'
     source+=f'WINEPOINT={shlex.quote(str(prefix))}\nWINE_DIR=drive_c/game\nplay_wine\nplay_pc\nplay_squashfs\n'
     script=player/'test.sh';script.write_text(instrument_native(source,[sys.executable,str(Path(l4d2.__file__)),str(payload_file)],prefix_argument=True))
     subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),check=True,capture_output=True)
     native=player/'native';native.write_text(source)
+    profile['l4d2']['language']='french';save_profile(base,rom,profile)
     with patch.dict(os.environ,PARTYDECK_PLAYER_WIDTH='1920',PARTYDECK_PLAYER_HEIGHT='540'),\
          patch.object(l4d2.shutil,'which',return_value=str(native)),patch.object(l4d2.subprocess,'run') as run:
         result=l4d2.install_hook(base,rom,player)
         assert run.call_args_list[-1].args[0]==['mount','--bind',str(player/'batocera-wine-l4d2'),str(native)]
         assert native.read_text()==source
+        assert (player/'batocera-wine-l4d2').read_text().count('WINE_LANG=fr_FR.UTF-8')==3
         assert json.loads(result.read_text())['code']==1
         assert Path(json.loads((player/'l4d2-goldberg-launch.json').read_text())['result'])==result
     rejected=subprocess.run([sys.executable,str(Path(l4d2.__file__)),str(payload_file),str(game),str(prefix)],

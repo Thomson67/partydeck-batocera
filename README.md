@@ -473,14 +473,14 @@ L'onglet **Options** / **Options** ajoute :
   défaut), ou choisir une langue. Le choix est appliqué à tous les joueurs dans
   `configs.user.ini`. Si `supported_languages.txt` existe, la langue choisie est
   ajoutée à cette liste privée pour éviter le repli silencieux vers l'anglais.
-  Le batch privé `start.bat` définit aussi `HKCU\Software\Valve\Steam` →
-  `Language` avant les commandes d'origine : ce réglage Windows/Steam vise la
-  langue des textes Source, distincte du seul réglage Goldberg. La commande
-  `reg add` s'exécute dans la même session Wine que le jeu, y compris avec UMU.
-  Le bloc est remplacé à chaque changement et retiré si l'on choisit
-  « Conserver » (la valeur actuelle reste). Un batch absent est signalé sans
-  bloquer le lancement : seul le réglage Goldberg est alors appliqué.
-  L'effet du réglage Windows/Steam sur les textes reste à valider en jeu.
+  Le choix règle aussi la langue **native Wine**, comme `LANG=fr_FR.UTF-8`
+  dans `autorun.cmd` (méthode validée en solo pour L4D2). Le lanceur privé
+  applique la valeur `WINE_LANG` avant le démarrage natif, qui passe ensuite
+  `LC_ALL` à Wine, pour les trois formats. La lecture de `autorun.cmd` ayant
+  déjà eu lieu au moment du hook de configuration, modifier ce fichier depuis
+  le hook serait trop tardif. La ROM solo et son `autorun.cmd` restent intacts.
+  « Conserver » respecte le réglage d'origine du jeu. L'ancien ajout de registre
+  dans le batch est retiré automatiquement ; aucune commande n'y est ajoutée.
   Les fichiers de traduction/doublage doivent déjà être présents dans le jeu ;
   le configurateur ne télécharge pas de ressources linguistiques.
 - **Activer la manette en jeu** / **Enable gamepad in game** : activé par défaut.
@@ -504,11 +504,13 @@ résolution via `autoexec.cfg` et Gamescope reste active.
 
 **English:** The Options tab adds game language (keep current by default) and
 gamepad activation (enabled by default). Language assets must already be
-installed. The private startup batch also sets Steam's Windows registry UI
-language inside the game's actual Wine session. Original batch commands are
-preserved. Keep current removes the preamble and keeps the existing registry
-value. A missing batch skips this override with a warning, without blocking
-startup. The effect on Source UI text still needs in-game validation. Each launch forces borderless windowed rendering at the player's
+installed. The selected language also uses Batocera's native Wine locale path,
+equivalent to LANG=fr_FR.UTF-8 in autorun.cmd. The private launcher sets WINE_LANG
+before native startup, which passes LC_ALL to Wine in all three formats. Keep
+current honors the original autorun setting. The original ROM/autorun file is
+unchanged, and the retired registry batch preamble is removed automatically.
+The native locale method has been validated in solo; Party sessions still need
+in-game validation. Each launch forces borderless windowed rendering at the player's
 viewport resolution, including Gamescope's internal size. Existing quality
 settings, keyboard binds, startup scripts and networking commands are preserved.
 An unrecognized video format is retained without blocking game startup; the

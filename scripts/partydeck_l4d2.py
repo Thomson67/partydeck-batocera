@@ -22,6 +22,9 @@ LANGUAGES = dict(zip(('keep','french','english','german','italian','spanish','po
                      'dutch','polish','czech','russian','japanese'),
                     ('Conserver','Français','Anglais','Allemand','Italien','Espagnol','Portugais',
                      'Néerlandais','Polonais','Tchèque','Russe','Japonais')))
+WINE_LOCALES = dict(zip(tuple(LANGUAGES)[1:],('fr_FR.UTF-8','en_US.UTF-8','de_DE.UTF-8',
+    'it_IT.UTF-8','es_ES.UTF-8','pt_PT.UTF-8','nl_NL.UTF-8','pl_PL.UTF-8',
+    'cs_CZ.UTF-8','ru_RU.UTF-8','ja_JP.UTF-8')))
 BEGIN = '// Windows Party begin'
 END = '// Windows Party end'
 
@@ -186,11 +189,7 @@ def managed_cfg(text, commands):
 
 
 def language_batch(text, language):
-    """Set Steam UI language in the game's actual private Wine session.
-
-    Replace only our exact preamble; retain the original commands and encoding.
-    Keep current removes the preamble without deleting a registry value.
-    """
+    """Remove the retired registry preamble, preserving the batch body."""
     begin='@rem Windows Party language begin'
     end='@rem Windows Party language end'
     if begin in text or end in text:
@@ -201,12 +200,7 @@ def language_batch(text, language):
         text,count=expected.subn('',text,count=1)
         if count!=1 or begin in text or end in text:
             raise ValueError(tr('Bloc de langue Left 4 Dead 2 incomplet ; fichier conservé.'))
-    if language=='keep':return text
-    if language not in LANGUAGES:
-        raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
-    nl='\r\n' if '\r\n' in text else '\n'
-    command='@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d '+language+' /f >nul'
-    return begin+nl+command+nl+end+nl+text
+    return text
 
 
 def game_edits(directory, player, payload, allowed):
@@ -246,8 +240,6 @@ def game_edits(directory, player, payload, allowed):
         after=before if cleaned==text else cleaned.encode(encoding)
         backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(batch)).hexdigest()[:16]+'-start.bat'),(player,))
         edits.append((batch,before,after,backup))
-    elif options['language']!='keep':
-        print(tr('Left 4 Dead 2 : start.bat absent ; forçage de langue Windows/Steam ignoré, lancement poursuivi.'),flush=True)
     return edits
 
 
@@ -353,6 +345,25 @@ def finish_launch(path, native_status):
         path.unlink(missing_ok=True)
 
 
+def instrument_locale(source, language):
+    """Use Batocera's native LANG -> WINE_LANG -> LC_ALL launch path.
+
+    autorun.cmd has already been parsed by the time the game config hook runs.
+    Set its derived value in the private launcher, before native Wine setup.
+    """
+    if language=='keep':return source
+    locale=WINE_LOCALES[language]
+    parts=re.split(r'(?m)^(?=\w+\(\) \{)',source)
+    pattern=re.compile(r'(?m)^([ \t]*)WINE_LANG=\$\(getWine_var [^\r\n]+\)[ \t]*$')
+    for name in ('play_wine','play_pc','play_squashfs'):
+        indices=[i for i,body in enumerate(parts) if body.startswith(name+'() {')]
+        if len(indices)!=1 or len(pattern.findall(parts[indices[0]]))!=1:
+            raise RuntimeError(tr('Lanceur batocera-wine non reconnu ({p0}) : langue Wine non appliquée.',p0=name))
+        i=indices[0]
+        parts[i]=pattern.sub(lambda m:m[1]+'WINE_LANG='+locale,parts[i])
+    return ''.join(parts)
+
+
 def install_hook(base, rom, player):
     from partydeck_anchor import instrument_native
     from partydeck_profiles import profile_path,read_profile,atomic_write
@@ -377,7 +388,10 @@ def install_hook(base, rom, player):
     binary=Path(binary).resolve()
     replacement=player/'batocera-wine-l4d2'
     hook=[sys.executable,str(base/'partydeck_l4d2.py'),str(payload)]
-    atomic_write(replacement,instrument_native(binary.read_text(),hook,prefix_argument=True),0o755)
+    source=instrument_locale(binary.read_text(),settings['language'])
+    atomic_write(replacement,instrument_native(source,hook,prefix_argument=True),0o755)
+    if settings['language']!='keep':
+        print(tr('Left 4 Dead 2 : langue Wine native {p0}.',p0=WINE_LOCALES[settings['language']]),flush=True)
     subprocess.run(['bash','-n',str(replacement)],check=True)
     atomic_write(result,'{"version":1,"code":1}\n')
     try:
