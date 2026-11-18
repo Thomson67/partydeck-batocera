@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory() as folder:
     windows = root/'windows'; windows.mkdir()
     base = root/'install'
     model = Model(base, windows=windows)
-    assert len(model.rows) == 3 and isinstance(model.rows[0], CommonGame)
+    assert len(model.rows) == 4 and isinstance(model.rows[0], CommonGame)
     model.select(model.rows[0]); assert model.rom is None and model.data is None
     assert not (base/'profiles').exists()
     assert not matches_soh(Path('Ocarina of Time 3D.wsquashfs'))

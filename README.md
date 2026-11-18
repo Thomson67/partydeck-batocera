@@ -116,6 +116,8 @@ communs encore sans fichier associé.
 
 Le profil **SM64CoopDX** reconnaît aussi `sm64coopdx`, `SM64 Coop DX` et
 `Super Mario 64 Coop Deluxe`, avec association manuelle possible pour un autre nom.
+**Left 4 Dead 2 / Goldberg** reconnaît `Left 4 Dead 2`, `Left4Dead2`,
+`Left_4_Dead_II` et `L4D2`, avec les mêmes possibilités d'association manuelle.
 
 Dans **Choisir un jeu**, **LB/RB** (ou **L1/R1**) parcourt la liste par pages de
 neuf entrées. Maintenir le bouton fait défiler les pages en continu après
@@ -429,6 +431,64 @@ Référence des clés et plages :
 Les tests locaux `tests/check_sm64coopdx.py` couvrent J1–J4, les sauvegardes,
 les redirections, UMU, la configuration commune et les réglages à la manette.
 Le lancement réel sur Batocera reste à valider avec ce nouveau profil.
+
+## Profil Left 4 Dead 2 / Goldberg (version de test)
+
+Pour une installation déjà fonctionnelle avec Goldberg/gbe_fork et les fichiers
+modernes `steam_settings/configs.user.ini`, sélectionnez **Session → Profil du jeu
+→ Left 4 Dead 2 / Goldberg**, puis enregistrez. Les nouveaux jeux reconnus par
+leur titre choisissent ce profil automatiquement. Le catalogue propose aussi
+**Left 4 Dead 2 · profil commun** en cas de titre personnalisé ou de jeu absent.
+Les formats `.wine`, `.pc` et `.wsquashfs` utilisent le lanceur Wine natif habituel.
+
+Le profil corrige le partage involontaire de `[user::general] account_steamid`
+entre les instances :
+
+- J1 conserve l'identifiant initial de l'installation.
+- J2, J3 et J4 reçoivent des Steam ID locaux distincts, obtenus par décalage de
+  l'AccountID initial (+1/+2/+3, avec retour dans la plage valide si nécessaire).
+- Chaque joueur conserve ensuite son choix dans
+  `<dossier de travail du joueur>/l4d2-goldberg-identity.json`. Un changement de
+  nom ou un relancement ne recalcule pas ce Steam ID. Conservez ces petits
+  fichiers d'identité ; le nettoyage automatique des caches ne les supprime pas.
+- L'onglet **Joueurs** permet de saisir les quatre noms avec le clavier virtuel.
+  Les noms par défaut sont Joueur1…Joueur4 ou Player1…Player4 selon la langue de
+  l'interface à la création du profil. Les valeurs enregistrées ne sont pas traduites.
+
+L'adaptateur intervient dans la vue privée du joueur après le montage natif,
+avant le lancement de Wine. Il recherche les `steam_settings` existants à la
+racine du dossier de lancement et dans les emplacements `bin`, `x64`, `x86`,
+`win64`, `win32` et `left4dead2`, jusqu'à trois niveaux et sans parcourir les
+répertoires de ressources. Les copies 32/64 bits trouvées reçoivent la même
+identité pour ce joueur. Les fichiers `steam_appid.txt` trouvés doivent indiquer
+**550**, qui reste commun à tous les joueurs.
+
+Seules les clés `account_name` et `account_steamid` sont modifiées dans les
+`configs.user.ini` privés. La langue, les chemins de sauvegarde, le port
+`listen_port`, les autres fichiers Goldberg (`configs.main.ini`, `.app.ini`,
+`.overlay.ini`, langues, interfaces et statistiques) et la ROM solo ne sont pas
+réécrits. La première version de chaque INI privé est conservée dans
+`l4d2-goldberg-before`. Aucun émulateur ou fichier de configuration fourni par
+l'utilisateur n'est publié ou téléchargé par cet adaptateur.
+
+Le premier lancement exige un Steam ID individuel valide et identique dans
+les copies locales du jeu. Si les sources sont contradictoires, si la configuration
+est absente ou si l'identité persistante est invalide, le lancement est refusé avec
+une explication, sans régénération silencieuse. Des identifiants initiaux partagés
+entre plusieurs PC restent à gérer séparément : ce profil sépare les 1–4 joueurs
+d'une même installation locale.
+
+Cette étape traite l'identité des joueurs. L'hébergement et la connexion au
+serveur restent à effectuer dans le jeu ; le profil n'ajoute pas encore
+d'automatisation du serveur. Il faut encore vérifier en jeu la connexion après suppression du
+conflit de Steam ID. La modification d'identité peut aussi changer l'accès aux
+données liées à ce compte pour J2–J4 ; J1 garde son identité initiale.
+
+Référence :
+[Goldberg configs.user.EXAMPLE.ini](https://github.com/Detanup01/gbe_fork/blob/dev/post_build/steam_settings.EXAMPLE/configs.user.EXAMPLE.ini).
+Tests : `python3 tests/check_l4d2.py` vérifie les quatre identités, leur stabilité,
+les copies de configuration 32/64 bits, l'application avant Wine, les sauvegardes d'INI, les refus de
+chemins externes et le configurateur FR/EN.
 
 ## Fermeture des sessions
 

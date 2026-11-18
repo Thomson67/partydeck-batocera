@@ -76,6 +76,8 @@ with tempfile.TemporaryDirectory() as folder:
     assert label_value('anchor.graphics.texture_filter',0)=='N64 three-point'
     assert label_value('anchor.names.0','Enregistrer')=='Enregistrer'
     assert fields(2,'sm64coopdx')[0][1]=='Free camera'
+    assert fields(1,'l4d2-goldberg')[0][1]=='Player 1 · Name'
+    assert label_value('l4d2.names.0','Joueur français')=='Joueur français'
     assert fields(3,'sm64coopdx')[0][1]=='Game language'
     assert label_value('sm64coopdx.language','French')=='French'
     assert label_value('sm64coopdx.texture_filtering',2)=='N64 three-point'
@@ -87,6 +89,7 @@ with tempfile.TemporaryDirectory() as folder:
     lang.set_language('fr')
     assert ('tabs','Pages · maintenir') in context_hints('browser','xbox')
     assert fields(2,'sm64coopdx')[0][1]=='Caméra libre'
+    assert fields(1,'l4d2-goldberg')[0][1]=='J1 · Nom'
     assert label_value('sm64coopdx.language','French')=='Français'
     assert fields(2,'borderlands2')[0][1]=='J1 · Nom'
     rom=root/'Enregistrer.wsquashfs';rom.touch()

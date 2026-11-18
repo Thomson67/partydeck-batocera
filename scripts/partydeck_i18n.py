@@ -62,6 +62,18 @@ def get_language():
 
 
 EN = {
+    'Left 4 Dead 2 · profil commun':'Left 4 Dead 2 · shared profile',
+    'Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables':'Left 4 Dead 2 · distinct persistent Steam IDs · customizable names',
+    'Left 4 Dead 2 : quatre noms différents, non vides, de 63 octets UTF-8 maximum, sans caractères de contrôle ni ; #.':'Left 4 Dead 2: four different, non-empty names, up to 63 UTF-8 bytes, without control characters or ; #.',
+    'Identifiant ou numéro de joueur Goldberg invalide pour Left 4 Dead 2.':'Invalid Goldberg identity or player number for Left 4 Dead 2.',
+    'Configuration Goldberg hors de la vue privée : {p0}':'Goldberg configuration is outside the private view: {p0}',
+    'Configuration Goldberg destinée à un autre jeu : {p0}':'Goldberg configuration is for a different game: {p0}',
+    'Left 4 Dead 2 : steam_settings/configs.user.ini Goldberg introuvable dans la vue privée du jeu.':'Left 4 Dead 2: Goldberg steam_settings/configs.user.ini was not found in the private game view.',
+    'Steam ID Goldberg absent ou invalide : {p0}':'Missing or invalid Goldberg Steam ID: {p0}',
+    'Identité Goldberg privée invalide ; fichier conservé : {p0}':'Invalid private Goldberg identity; file retained: {p0}',
+    'Plusieurs Steam ID Goldberg différents sont présents dans le jeu ; initialisation refusée.':'Multiple different Goldberg Steam IDs were found in the game; initialization refused.',
+    'Left 4 Dead 2 J{p0} : identité Goldberg privée {p1} · {p2} configuration(s).':'Left 4 Dead 2 player {p0}: private Goldberg identity {p1} · {p2} configuration(s).',
+    'Le profil Left 4 Dead 2 doit être appliqué dans la session Wine privée du joueur.':'The Left 4 Dead 2 profile must be applied in the player’s private Wine session.',
     'Pages · maintenir':'Pages · hold',
     'État de fin Wine hors du dossier privé du joueur.':'Wine exit state is outside the player’s private directory.',
     'J{p0} : fin Wine={p1}, Gamescope={p2}.':'Player {p0}: Wine exit={p1}, Gamescope={p2}.',

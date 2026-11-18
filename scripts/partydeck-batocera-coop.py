@@ -431,6 +431,8 @@ def _run_wine(original, target, player, saves=None):
         install_bl2(Path(__file__).resolve().parent, original, player)
         from partydeck_sm64coopdx import install_hook as install_sm64
         install_sm64(Path(__file__).resolve().parent, original, player)
+        from partydeck_l4d2 import install_hook as install_l4d2
+        install_l4d2(Path(__file__).resolve().parent, original, player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)

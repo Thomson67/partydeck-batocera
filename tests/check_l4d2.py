@@ -1,0 +1,140 @@
+"""Persistent private Goldberg IDs, minimal edits and L4D2 controller profile."""
+import os
+os.environ['PARTYDECK_LANGUAGE']='fr'
+os.environ['SDL_VIDEODRIVER']='dummy'
+import importlib.util
+import json
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+import tempfile
+from unittest.mock import patch,Mock
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
+import partydeck_l4d2 as l4d2
+from partydeck_profiles import defaults,save_profile,read_profile,profile_path
+from partydeck_catalog import discover,recipe_for,COMMON
+from partydeck_couch import App,Model,fields
+from partydeck_anchor import instrument_native
+from partydeck_i18n import set_language
+
+SEED=str(l4d2.STEAM64_BASE+2000)
+ORIGINAL=('# private example\r\n[user::general]\r\naccount_name=Player\r\n'
+          'language=french\r\naccount_steamid='+SEED+'\r\n[user::saves]\r\nlocal_save_path=./saves\r\n').encode()
+
+for name in ('Left 4 Dead 2','Left4Dead2','L4D2','Left_4_Dead_II [runner]'):
+    for suffix in ('.wine','.pc','.wsquashfs'):assert l4d2.matches(Path(name+suffix))
+assert not l4d2.matches(Path('Left 4 Dead.wine'))
+assert not l4d2.matches(Path('Left 4 Dead 20.pc'))
+assert len({l4d2.player_id(SEED,i) for i in range(4)})==4
+assert l4d2.player_id(SEED,0)==SEED
+for seed in (str(l4d2.STEAM64_BASE+1),str(l4d2.STEAM64_BASE+l4d2.ACCOUNT_MAX)):
+    assert all(l4d2.valid_id(l4d2.player_id(seed,i)) for i in range(4))
+    assert len({l4d2.player_id(seed,i) for i in range(4)})==4
+for name in ('','A\nB','A#B','A;B','é'*32):
+    try:l4d2.validate(dict(names=[name,'B','C','D']));raise AssertionError('invalid name accepted')
+    except ValueError:pass
+
+with tempfile.TemporaryDirectory() as folder:
+    root=Path(folder);base=root/'system';base.mkdir();windows=root/'windows';windows.mkdir()
+    rom=windows/'Left 4 Dead 2.wsquashfs';rom.write_bytes(b'SOLO ROM')
+    profile=defaults(rom);assert profile['adapter']=='l4d2-goldberg'
+    profile['l4d2']['names']=['Alice','Benoît','Charlie','David']
+    save_profile(base,rom,profile)
+    assert recipe_for(rom)==COMMON[3] and discover(windows,l4d2.matches)==(rom,)
+    model=Model(base,rom,windows);assert model.data['adapter']=='l4d2-goldberg'
+    assert [key for key,_,_ in fields(1,'l4d2-goldberg')]==[f'l4d2.names.{i}' for i in range(4)]
+    ids=[]
+    for index in range(4):
+        player=base/'party'/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
+        user_configs=[]
+        other_files=[]
+        for rel in ('steam_settings','BIN/x64/STEAM_SETTINGS'):
+            settings=game/rel;settings.mkdir(parents=True)
+            user=settings/'configs.user.ini';user.write_bytes(ORIGINAL);user_configs.append(user)
+            for filename,data in (('steam_appid.txt',b'550'),('configs.main.ini',b'[main::connectivity]\nlisten_port=47584\n'),
+                                  ('supported_languages.txt',b'english'),('configs.app.ini',b'# untouched\n'),
+                                  ('configs.overlay.ini',b'[overlay::general]\nenable_experimental_overlay=1\n'),
+                                  ('stats.txt',b'stat int 42\n'),('steam_interfaces.txt',b'SteamFriends017\n')):
+                path=settings/filename;path.write_bytes(data);other_files.append((path,data))
+        global_ini=prefix/'drive_c/users/root/AppData/Roaming/GSE Saves/settings/configs.user.ini'
+        global_ini.parent.mkdir(parents=True);global_ini.write_bytes(b'GLOBAL IDENTITY')
+        payload=dict(player=str(player),index=index,settings=profile['l4d2'])
+        l4d2.apply_config(game,prefix,payload,private_binds=())
+        identity=player/'l4d2-goldberg-identity.json'
+        data=json.loads(identity.read_text());ids.append(data['steamid'])
+        expected=ORIGINAL.replace(b'account_name=Player',('account_name='+profile['l4d2']['names'][index]).encode())
+        expected=expected.replace(('account_steamid='+SEED).encode(),('account_steamid='+data['steamid']).encode())
+        assert all(user.read_bytes()==expected for user in user_configs)
+        assert global_ini.read_bytes()==b'GLOBAL IDENTITY' and rom.read_bytes()==b'SOLO ROM'
+        assert all(path.read_bytes()==original for path,original in other_files)
+        backups=list((player/'l4d2-goldberg-before').glob('*.ini'))
+        assert len(backups)==2 and all(path.read_bytes()==ORIGINAL for path in backups)
+        # Reapplying/renaming after a partial update never increments the ID again.
+        user_configs[1].write_bytes(ORIGINAL)
+        before_identity=identity.read_bytes()
+        payload['settings']=dict(names=['One','Two','Three','Four'])
+        l4d2.apply_config(game,prefix,payload,private_binds=())
+        assert identity.read_bytes()==before_identity
+        for user in user_configs:
+            got=user.read_text();assert 'account_steamid='+data['steamid'] in got
+            assert 'account_name='+payload['settings']['names'][index] in got
+        assert all(path.read_bytes()==ORIGINAL for path in backups)
+    assert ids[0]==SEED and len(set(ids))==4
+    # Wrong AppIDs and out-of-view configs fail before modifying the identity/files.
+    first=user_configs[0];before=first.read_bytes();identity_before=identity.read_bytes()
+    appid=first.parent/'steam_appid.txt';appid.write_text('999')
+    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('wrong app accepted')
+    except ValueError:pass
+    assert first.read_bytes()==before and identity.read_bytes()==identity_before
+    appid.write_text('550')
+    outside=root/'solo.ini';outside.write_bytes(ORIGINAL)
+    first.unlink();first.symlink_to(outside)
+    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('external config accepted')
+    except ValueError:pass
+    assert outside.read_bytes()==ORIGINAL and identity.read_bytes()==identity_before
+    first.unlink();first.write_bytes(before)
+    identity.write_text('invalid JSON')
+    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('corrupt identity regenerated')
+    except ValueError:pass
+    assert identity.read_text()=='invalid JSON' and first.read_bytes()==before
+    # No first-run partial edits if DLL copies disagree on their source identity.
+    identity.unlink();user_configs[1].write_bytes(ORIGINAL.replace(SEED.encode(),str(l4d2.STEAM64_BASE+9999).encode()))
+    snapshots=[path.read_bytes() for path in user_configs]
+    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('ambiguous seed accepted')
+    except ValueError:pass
+    assert not identity.exists() and [p.read_bytes() for p in user_configs]==snapshots
+    # Native launcher hook runs after mounting the game and before Wine in all formats.
+    player=base/'hook/j1';prefix=player/'prefix';game=prefix/'drive_c/game'
+    settings=game/'steam_settings';settings.mkdir(parents=True)
+    (settings/'configs.user.ini').write_bytes(ORIGINAL)
+    payload=dict(player=str(player),index=0,settings=profile['l4d2'])
+    payload_file=player/'payload.json';payload_file.write_text(json.dumps(payload))
+    source='#!/bin/bash\nset -e\n'
+    for name in ('play_wine','play_pc','play_squashfs'):
+        source+=name+'() {\n if [[ -n "${WINE_LANG:-}" ]]; then\n'
+        source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q account_name=Alice steam_settings/configs.user.ini)\n else\n'
+        source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q account_name=Alice steam_settings/configs.user.ini)\n fi\n}\n'
+    source+=f'WINEPOINT={shlex.quote(str(prefix))}\nWINE_DIR=drive_c/game\nplay_wine\nplay_pc\nplay_squashfs\n'
+    script=player/'test.sh';script.write_text(instrument_native(source,[sys.executable,str(Path(l4d2.__file__)),str(payload_file)],prefix_argument=True))
+    subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),check=True,capture_output=True)
+    native=player/'native';native.write_text(source)
+    with patch.object(l4d2.shutil,'which',return_value=str(native)),patch.object(l4d2.subprocess,'run') as run:
+        l4d2.install_hook(base,rom,player)
+        assert run.call_args_list[-1].args[0]==['mount','--bind',str(player/'batocera-wine-l4d2'),str(native)]
+        assert native.read_text()==source
+    rejected=subprocess.run([sys.executable,str(Path(l4d2.__file__)),str(payload_file),str(game),str(prefix)],
+                            env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER='wrong'),capture_output=True)
+    assert rejected.returncode==1
+    app=App(base,rom,windowed=True);assert app.available_tabs()==(0,1)
+    app.action('next');app.row=0;app.action('ok');assert app.keyboard is not None
+    app.keyboard['value']='Joueur test';app.keyboard_action('save')
+    with patch('partydeck_couch.subprocess.run',return_value=Mock(returncode=0)):assert app.save()
+    assert read_profile(base,rom)['l4d2']['names'][0]=='Joueur test'
+    saved=json.loads(profile_path(base,rom).read_text())
+    assert all(key not in saved for key in ('anchor','borderlands2','sm64coopdx'))
+    for lang in ('fr','en'):
+        set_language(lang);app.tab=1;app.draw()
+    app.pg.quit()
+
+print('Left 4 Dead 2 : identités J1–J4 distinctes/persistantes, J1 conservé, fichiers privés, noms, AppID et réglages inchangés, hook et UI vérifiés.')

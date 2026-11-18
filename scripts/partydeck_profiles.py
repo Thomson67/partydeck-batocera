@@ -32,6 +32,9 @@ def defaults(rom):
     from partydeck_sm64coopdx import matches as matches_sm64, defaults as sm64_defaults
     if matches_sm64(rom):
         data.update(adapter='sm64coopdx',sm64coopdx=sm64_defaults())
+    from partydeck_l4d2 import matches as matches_l4d2, defaults as l4d2_defaults
+    if matches_l4d2(rom):
+        data.update(adapter='l4d2-goldberg',l4d2=l4d2_defaults())
     return data
 
 
@@ -45,7 +48,7 @@ def validate(data, rom):
         raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError(tr("Option clavier comme joueur invalide."))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx"):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg"):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
@@ -56,6 +59,9 @@ def validate(data, rom):
     if data.get('adapter') == 'sm64coopdx':
         from partydeck_sm64coopdx import validate as validate_sm64
         data['sm64coopdx'] = validate_sm64(data.get('sm64coopdx'))
+    if data.get('adapter') == 'l4d2-goldberg':
+        from partydeck_l4d2 import validate as validate_l4d2
+        data['l4d2'] = validate_l4d2(data.get('l4d2'))
     return data
 
 
