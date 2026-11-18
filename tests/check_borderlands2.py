@@ -106,7 +106,9 @@ with tempfile.TemporaryDirectory() as folder:
     bl2.apply_config(prefix,payload,private_binds=())
     assert explicit.read_bytes().startswith(codecs.BOM_UTF16_LE)
     assert 'WindowedFullscreen=True' in explicit.read_bytes().decode('utf-16')
-    for key,value in (('preset','ultra-invalid'),('vsync','invalid'),('physx','invalid')):
+    for key,value in (('preset','ultra-invalid'),('vsync','invalid'),('physx','invalid'),
+                      ('language','invalid'),('names',['one']),('names',['bad\nLanguage=foo','','','']),
+                      ('names',['bad;name','','','']),('names',[' ']*4),('names',['x'*65]*4)):
         try:
             bl2.validate(dict(bl2.defaults(),**{key:value}))
             raise AssertionError('invalid options accepted')
@@ -129,8 +131,9 @@ with tempfile.TemporaryDirectory() as folder:
     native.write_text(source)
     with patch.object(bl2.shutil,'which',return_value=str(native)),patch.object(bl2.subprocess,'run') as run, \
          patch.dict(os.environ,dict(PARTYDECK_PLAYER_WIDTH='960',PARTYDECK_PLAYER_HEIGHT='540')):
-        bl2.install_hook(root,rom,player)
-        assert run.call_args_list[-1].args[0]==['mount','--bind',str(player/'batocera-wine-borderlands2'),str(native)]
+        bl2.install_hook(root,rom,root/'j1')
+        assert run.call_args_list[-1].args[0]==['mount','--bind',str(root/'j1/batocera-wine-borderlands2'),str(native)]
+        assert json.loads((root/'j1/borderlands2-launch.json').read_text())['index']==0
     assert native.read_text()==source
     spec=importlib.util.spec_from_file_location('bl2_coop',Path(bl2.__file__).parent/'partydeck-batocera-coop.py')
     coop=importlib.util.module_from_spec(spec);sys.modules[spec.name]=coop;spec.loader.exec_module(coop)
@@ -142,5 +145,48 @@ with tempfile.TemporaryDirectory() as folder:
         args=launch.call_args.args[0]
         assert args[args.index('-w')+1]=='1920' and args[args.index('-h')+1]=='540'
         assert launch.call_args.kwargs['env']['PARTYDECK_PLAYER_HEIGHT']=='540'
+
+    # Persona/language are taken from the supplied INI, never from Willow Name.
+    original=(b'### legacy header \xdc\xb2\r\n[Settings]\r\nAppId=49520\r\nUserName=CODEX\r\n'
+              b'Language=french\r\nOffline=0\r\nLobbyEnabled=1\r\n#AccountId=0\r\n'
+              b'[DLC]\r\nDLCUnlockall=0\r\n[Interfaces]\r\nSteamFriends=SteamFriends013\r\n')
+    names=['Alice','Benoît','Charlie','David']
+    configs=[]
+    for index in range(4):
+        player=root/f'persona/j{index+1}'
+        prefix=player/'prefix';game=prefix/'drive_c/game'
+        ini=game/'binaries/WIN32/STEAM_EMU.INI'
+        ini.parent.mkdir(parents=True);ini.write_bytes(original)
+        (prefix/'drive_c/users/steamuser').mkdir(parents=True)
+        payload=dict(player=str(player),index=index,width=960,height=540,
+                     settings=dict(bl2.defaults(),language='english',names=names))
+        bl2.apply_config(prefix,payload,private_binds=(),directory=game)
+        after=ini.read_bytes()
+        assert after==original.replace(b'UserName=CODEX',('UserName='+names[index]).encode()).replace(b'Language=french',b'Language=english')
+        assert any(p.read_bytes()==original for p in (player/'borderlands2-before').glob('*.ini'))
+        configs.append(ini)
+        payload['settings']=bl2.defaults()
+        bl2.apply_config(prefix,payload,private_binds=(),directory=game)
+        assert ini.read_bytes()==after  # Keep leaves the current player values intact.
+    assert b'UserName=Alice' in configs[0].read_bytes() and b'UserName=David' in configs[3].read_bytes()
+    payload['settings']=dict(bl2.defaults(),language='french')
+    bl2.apply_config(prefix,payload,private_binds=(),directory=game)
+    assert b'Language=french' in ini.read_bytes() and b'UserName=David' in ini.read_bytes()
+    # Refuse another game's config, external links or missing configurations,
+    # validating everything before any of the Willow display edits are written.
+    willow=prefix/'drive_c/users/steamuser/Documents/My Games/Borderlands 2/WillowGame/Config/WillowEngine.ini'
+    unchanged=willow.read_bytes()
+    for kind in ('appid','symlink','missing','directory-link'):
+        ini.unlink(missing_ok=True)
+        if kind=='appid':ini.write_bytes(original.replace(b'AppId=49520',b'AppId=123'))
+        if kind=='symlink':ini.symlink_to(configs[0])
+        if kind=='directory-link':
+            ini.parent.rmdir();ini.parent.symlink_to(configs[0].parent,target_is_directory=True)
+        try:
+            bl2.apply_config(prefix,payload,private_binds=(),directory=game)
+            raise AssertionError('invalid Steam config accepted: '+kind)
+        except ValueError:
+            assert willow.read_bytes()==unchanged
+            assert b'UserName=Alice' in configs[0].read_bytes()
 
 print('Borderlands 2 : INI, préréglages, dimensions J1–J4, sauvegardes, liens privés, UMU et application avant Wine vérifiés.')

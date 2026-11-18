@@ -62,6 +62,13 @@ def get_language():
 
 
 EN = {
+    'Image & langue':'Graphics & language', 'Langue du jeu':'Game language', 'Français':'French', 'Anglais':'English',
+    'Borderlands 2 · nom privé par joueur · vide : conserver le nom actuel':'Borderlands 2 · private name per player · empty: keep current name',
+    'Noms Borderlands 2 : quatre noms de 64 caractères maximum, ou vides pour conserver ; sans caractères de contrôle ni ; # = [ ].':'Borderlands 2 names: four names of up to 64 characters, or empty to keep current; no control characters or ; # = [ ].',
+    'Configuration Borderlands 2 liée à un autre emplacement : {p0}':'Borderlands 2 configuration links to another location: {p0}',
+    'Langue ou nom Borderlands 2 : steam_emu.ini introuvable dans la vue privée du jeu. Choisissez Conserver pour utiliser cette installation.':'Borderlands 2 language or name: steam_emu.ini was not found in the private game view. Choose Keep current to use this installation.',
+    'Configuration steam_emu.ini non reconnue pour Borderlands 2 : {p0}':'Unrecognized steam_emu.ini configuration for Borderlands 2: {p0}',
+    'Numéro de joueur Borderlands 2 invalide.':'Invalid Borderlands 2 player number.',
     'Jeu':'Game', 'Configurer':'Configure',
     'Résolution interne (0,5 à 2)':'Internal resolution (0.5 to 2)',
     'Session':'Session', 'Réseau':'Network', 'Joueurs':'Players', 'Image & son':'Graphics & audio', 'Image':'Graphics',

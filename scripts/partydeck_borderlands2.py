@@ -13,6 +13,7 @@ import tempfile
 
 PRESETS = ('keep', 'low', 'medium', 'high', 'max')
 PRESET_LABELS = dict(keep='Conserver les réglages', low='Bas', medium='Moyen', high='Élevé', max='Max')
+LANGUAGES = ('keep', 'french', 'english')
 PRIVATE_BINDS = (Path('/userdata/saves/windows'), Path('/userdata/system/wine-bottles/windows'),
                  Path('/var/run/wine'))
 
@@ -24,7 +25,7 @@ def matches(rom):
 
 
 def defaults():
-    return dict(preset='keep', vsync='keep', physx='keep')
+    return dict(preset='keep', vsync='keep', physx='keep', language='keep', names=[''] * 4)
 
 
 def validate(options):
@@ -34,8 +35,15 @@ def validate(options):
     # display policy and config discovery are now mandatory, not user options.
     normalized = {key:options.get(key,value) for key,value in defaults().items()}
     if (normalized['preset'] not in PRESETS or normalized['vsync'] not in ('keep','on','off')
-            or normalized['physx'] not in ('keep','0','1','2')):
+            or normalized['physx'] not in ('keep','0','1','2')
+            or normalized['language'] not in LANGUAGES):
         raise ValueError(tr('Réglages Borderlands 2 invalides.'))
+    names = normalized['names']
+    if (not isinstance(names,list) or len(names) != 4
+            or any(not isinstance(name,str) or len(name) > 64
+                   or any(ord(c) < 32 or ord(c) == 127 or c in ';#=[]' for c in name)
+                   or (name and not name.strip()) for name in names)):
+        raise ValueError(tr('Noms Borderlands 2 : quatre noms de 64 caractères maximum, ou vides pour conserver ; sans caractères de contrôle ni ; # = [ ].'))
     return normalized
 
 
@@ -174,10 +182,58 @@ def decode(data):
         return data.decode('cp1252'), 'cp1252'
 
 
-def apply_config(prefix, payload, private_binds=PRIVATE_BINDS):
+def game_config_edits(directory, options, index, allowed):
+    """Change only the supplied installation's existing Steam persona/language INI."""
+    if options['language'] == 'keep' and not options['names'][index]:
+        return []
+    directory = safe_path(directory, allowed)
+    candidates = []
+    for parts in (('steam_emu.ini',), ('Binaries','Win32','steam_emu.ini')):
+        path = directory
+        for part in parts:
+            path = child(path,part)
+            safe_path(path,allowed)
+        if path.is_file():
+            if path.is_symlink():
+                raise ValueError(tr('Configuration Borderlands 2 liée à un autre emplacement : {p0}',p0=path))
+            candidates.append(path)
+    if not candidates:
+        raise ValueError(tr('Langue ou nom Borderlands 2 : steam_emu.ini introuvable dans la vue privée du jeu. Choisissez Conserver pour utiliser cette installation.'))
+    changes = {}
+    if options['language'] != 'keep':
+        changes['Language'] = options['language']
+    if options['names'][index]:
+        changes['UserName'] = options['names'][index]
+    edits = []
+    for path in dict.fromkeys(candidates):
+        before = path.read_bytes()
+        # Preserve the legacy non-UTF-8 ASCII-art header exactly; Steam names
+        # supplied by the user are encoded as UTF-8 without touching other bytes.
+        text = before.decode('utf-8-sig',errors='surrogateescape')
+        section, appid = None, None
+        for line in text.splitlines():
+            header = re.match(r'^\s*\[([^\]]+)\]',line)
+            if header:
+                section = header[1].casefold()
+            value = re.match(r'^\s*AppId\s*=\s*(\d+)\s*(?:[;#].*)?$',line,re.I)
+            if section == 'settings' and value:
+                appid = value[1]
+        if appid != '49520':
+            raise ValueError(tr('Configuration steam_emu.ini non reconnue pour Borderlands 2 : {p0}',p0=path))
+        after = patch_ini(text,{'Settings':changes}).encode('utf-8',errors='surrogateescape')
+        if before.startswith(codecs.BOM_UTF8):
+            after = codecs.BOM_UTF8 + after
+        edits.append((path,before,after))
+    return edits
+
+
+def apply_config(prefix, payload, private_binds=PRIVATE_BINDS, directory=None):
     player = Path(payload['player']).resolve()
     prefix = prefix.resolve()
     options = validate(payload['settings'])
+    index = payload.get('index',0)
+    if type(index) is not int or index not in range(4):
+        raise ValueError(tr('Numéro de joueur Borderlands 2 invalide.'))
     changes = overrides(options, payload['width'], payload['height'])
     if not changes:
         return
@@ -195,7 +251,7 @@ def apply_config(prefix, payload, private_binds=PRIVATE_BINDS):
     for candidate in dict.fromkeys(prefixes):
         paths.extend(targets(candidate, allowed))
     # Validate and prepare every path before touching any player configuration.
-    edits = []
+    edits = game_config_edits(directory or prefix/'drive_c/game',options,index,allowed)
     for path in dict.fromkeys(paths):
         before = path.read_bytes() if path.exists() else b''
         text, encoding = decode(before)
@@ -204,7 +260,7 @@ def apply_config(prefix, payload, private_binds=PRIVATE_BINDS):
     for path,before,after in edits:
         if before == after:
             continue
-        backup = player/'borderlands2-before'/('WillowEngine-'+hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'.ini')
+        backup = player/'borderlands2-before'/(path.stem+'-'+hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'.ini')
         if before and not backup.exists():
             write_bytes(backup,before)
         write_bytes(path,after)
@@ -224,7 +280,10 @@ def install_hook(base, rom, player):
     height = int(os.environ.get('PARTYDECK_PLAYER_HEIGHT','0'))
     overrides(options,width,height)  # Refuse unavailable dimensions before starting Wine.
     payload = player/'borderlands2-launch.json'
-    atomic_write(payload,json.dumps(dict(settings=options,player=str(player),width=width,height=height)))
+    index = int(player.name.removeprefix('j')) - 1
+    if index not in range(4):
+        raise ValueError(tr('Numéro de joueur Borderlands 2 invalide.'))
+    atomic_write(payload,json.dumps(dict(settings=options,player=str(player),index=index,width=width,height=height)))
     binary = shutil.which('batocera-wine')
     if not binary:
         raise RuntimeError(tr('batocera-wine introuvable.'))
@@ -242,7 +301,7 @@ if __name__ == '__main__':
         if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != payload['player']:
             raise ValueError(tr('Le profil Borderlands 2 doit être appliqué dans la session Wine privée du joueur.'))
         # Arguments: payload, current game directory, native Wine prefix.
-        apply_config(Path(sys.argv[3]),payload)
+        apply_config(Path(sys.argv[3]),payload,directory=Path(sys.argv[2]))
     except (OSError,ValueError,KeyError,TypeError) as error:
         print(f'Windows Party / Borderlands 2 : {error}',file=sys.stderr)
         raise SystemExit(1)

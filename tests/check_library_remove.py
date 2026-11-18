@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory() as folder:
     # Controller/keyboard confirmation can be cancelled; BL2 has only its own tabs.
     game=windows/'Borderlands 2.wsquashfs'
     app=App(base,game,windowed=True)
-    assert app.available_tabs()==(0,1)
+    assert app.available_tabs()==(0,1,2)
     app.action('next');assert app.tab==1
     assert any(key=='borderlands2.preset' for key,_,_ in app.current_fields())
     app.row=0;app.action('right')
@@ -97,10 +97,20 @@ with tempfile.TemporaryDirectory() as folder:
     assert app.model.data['borderlands2']['vsync']=='on'
     app.action('right')
     assert app.model.data['borderlands2']['vsync']=='off'
+    app.row=3;app.action('right')
+    assert app.model.data['borderlands2']['language']=='french'
+    app.action('right')
+    assert app.model.data['borderlands2']['language']=='english'
+    app.action('next');assert app.tab==2
+    app.row=0;app.action('ok')
+    assert app.keyboard is not None
+    app.keyboard['value']='Alice';app.keyboard_action('save')
+    assert app.model.data['borderlands2']['names']==['Alice','','','']
     with patch('partydeck_couch.subprocess.run',return_value=Mock(returncode=0)):
         assert app.save()
-    assert profiles.read_profile(base,game)['borderlands2']['vsync']=='off'
-    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx'}
+    saved=profiles.read_profile(base,game)['borderlands2']
+    assert saved['vsync']=='off' and saved['language']=='english' and saved['names'][0]=='Alice'
+    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx','language','names'}
     app.draw()
     app.row=len(app.current_fields())+2;app.action('ok')
     assert app.removal and app.removal['common'] and app.help_context()=='remove'
