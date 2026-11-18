@@ -58,15 +58,27 @@ for root_name in ('VideoConfig','video.cfg','video.txt'):
     assert result.endswith('\x00\x1a') and '/* comment */' in result
     assert l4d2.patch_video(result,960,1080)==result
 
-native_locale='#!/bin/bash\ngetWine_var() { printf \'%s\' "${TEST_AUTORUN_LANG:-}"; }\n'
+for command in ('"C:\\game folder\\left4dead2.exe" -novid +sv_lan 1',
+                'left4dead2.exe -language english -novid +sv_lan 1',
+                'left4dead2.exe "-language" "german" -novid +sv_lan 1',
+                'left4dead2.exe -language english -language german -novid +sv_lan 1'):
+    updated=l4d2.language_arguments(command,'french')
+    assert updated.count('-language french')==1 and '-language english' not in updated
+    assert '-novid +sv_lan 1' in updated
+    assert l4d2.language_arguments(updated,'french')==updated
+    assert '-language english' in l4d2.language_arguments(updated,'english')
+    assert l4d2.language_arguments(command,'keep')==command
+
+native_locale='#!/bin/bash\ngetWine_var() { if [[ $2 == LANG ]]; then printf \'%s\' "${TEST_AUTORUN_LANG:-}"; else printf \'%s\' "${TEST_AUTORUN_CMD:-left4dead2.exe}"; fi; }\n'
 for name in ('play_wine','play_pc','play_squashfs'):
-    native_locale+=name+'() {\n WINE_LANG=$(getWine_var "${WINEPOINT}" "LANG" "")\n LC_ALL=${WINE_LANG} '+shlex.quote(sys.executable)+' -c \'import os; print(os.environ["LC_ALL"])\'\n}\n'
+    native_locale+=name+'() {\n WINE_CMD=$(getWine_var "${WINEPOINT}" "CMD" "explorer")\n WINE_LANG=$(getWine_var "${WINEPOINT}" "LANG" "")\n LC_ALL=${WINE_LANG} '+shlex.quote(sys.executable)+' -c \'import os,sys; print(os.environ["LC_ALL"]); print(sys.argv[1])\' "${WINE_CMD}"\n}\n'
 native_locale+='play_wine\nplay_pc\nplay_squashfs\n'
 assert l4d2.instrument_locale(native_locale,'keep')==native_locale
 for language in ('french','english','keep'):
     done=subprocess.run(['bash','-c',l4d2.instrument_locale(native_locale,language)],
         env=dict(os.environ,TEST_AUTORUN_LANG='de_DE.UTF-8'),text=True,capture_output=True,check=True)
-    assert done.stdout.splitlines()==[l4d2.WINE_LOCALES.get(language,'de_DE.UTF-8')]*3
+    assert done.stdout.splitlines()==[l4d2.WINE_LOCALES.get(language,'de_DE.UTF-8'),
+        l4d2.language_arguments('left4dead2.exe',language)]*3
 try:l4d2.instrument_locale(native_locale.replace('WINE_LANG=$(', 'OTHER=$('),'french');raise AssertionError('missing native locale hook accepted')
 except RuntimeError:pass
 
@@ -233,9 +245,9 @@ with tempfile.TemporaryDirectory() as folder:
     (game/'left4dead2/cfg').mkdir(parents=True)
     payload=dict(player=str(player),index=0,settings=profile['l4d2'],width=1920,height=540)
     payload_file=player/'payload.json';payload_file.write_text(json.dumps(payload))
-    source='#!/bin/bash\nset -e\ngetWine_var() { printf \'%s\' "${TEST_AUTORUN_LANG:-}"; }\n'
+    source='#!/bin/bash\nset -e\ngetWine_var() { if [[ $2 == LANG ]]; then printf \'%s\' "${TEST_AUTORUN_LANG:-}"; else printf \'%s\' "${TEST_AUTORUN_CMD:-left4dead2.exe}"; fi; }\n'
     for name in ('play_wine','play_pc','play_squashfs'):
-        source+=name+'() {\n WINE_LANG=$(getWine_var "${WINEPOINT}" "LANG" "")\n if [[ -n "${WINE_LANG:-}" ]]; then\n'
+        source+=name+'() {\n WINE_CMD=$(getWine_var "${WINEPOINT}" "CMD" "explorer")\n WINE_LANG=$(getWine_var "${WINEPOINT}" "LANG" "")\n if [[ -n "${WINE_LANG:-}" ]]; then\n'
         source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q account_name=Alice steam_settings/configs.user.ini)\n else\n'
         source+=' (cd "${WINEPOINT}/${WINE_DIR}" && grep -q account_name=Alice steam_settings/configs.user.ini)\n fi\n}\n'
     source+=f'WINEPOINT={shlex.quote(str(prefix))}\nWINE_DIR=drive_c/game\nplay_wine\nplay_pc\nplay_squashfs\n'

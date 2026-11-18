@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import uuid
@@ -345,6 +346,23 @@ def finish_launch(path, native_status):
         path.unlink(missing_ok=True)
 
 
+def language_arguments(command, language):
+    """Replace Source language tokens without reserializing other arguments."""
+    if language=='keep':return command
+    if language not in WINE_LOCALES:raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
+    tokens=list(re.finditer(r'"[^"\r\n]*"|\'[^\'\r\n]*\'|[^\s]+',command))
+    edits=[];skip=-1
+    for i,token in enumerate(tokens):
+        if i<=skip or token[0].strip('"\'').casefold()!='-language':continue
+        end=token.end()
+        if i+1<len(tokens) and not tokens[i+1][0].strip('"\'').startswith(('-','+')):
+            skip=i+1;end=tokens[skip].end()
+        edits.append((token.start(),end,'-language '+language if not edits else ''))
+    if not edits:return command.rstrip()+' -language '+language
+    for start,end,value in reversed(edits):command=command[:start]+value+command[end:]
+    return command
+
+
 def instrument_locale(source, language):
     """Use Batocera's native LANG -> WINE_LANG -> LC_ALL launch path.
 
@@ -355,12 +373,16 @@ def instrument_locale(source, language):
     locale=WINE_LOCALES[language]
     parts=re.split(r'(?m)^(?=\w+\(\) \{)',source)
     pattern=re.compile(r'(?m)^([ \t]*)WINE_LANG=\$\(getWine_var [^\r\n]+\)[ \t]*$')
+    cmd_pattern=re.compile(r'(?m)^([ \t]*)WINE_CMD=\$\(getWine_var [^\r\n]+\)[ \t]*$')
+    helper=shlex.join([sys.executable,str(Path(__file__).resolve()),'_language_args',language])
     for name in ('play_wine','play_pc','play_squashfs'):
         indices=[i for i,body in enumerate(parts) if body.startswith(name+'() {')]
-        if len(indices)!=1 or len(pattern.findall(parts[indices[0]]))!=1:
+        if (len(indices)!=1 or len(pattern.findall(parts[indices[0]]))!=1
+                or len(cmd_pattern.findall(parts[indices[0]]))!=1):
             raise RuntimeError(tr('Lanceur batocera-wine non reconnu ({p0}) : langue Wine non appliquée.',p0=name))
         i=indices[0]
         parts[i]=pattern.sub(lambda m:m[1]+'WINE_LANG='+locale,parts[i])
+        parts[i]=cmd_pattern.sub(lambda m:m[0]+'\n'+m[1]+'WINE_CMD=$('+helper+' "${WINE_CMD}") || return 1',parts[i])
     return ''.join(parts)
 
 
@@ -404,6 +426,9 @@ def install_hook(base, rom, player):
 
 if __name__=='__main__':
     try:
+        if sys.argv[1]=='_language_args':
+            print(language_arguments(sys.argv[3],sys.argv[2]))
+            raise SystemExit(0)
         payload=json.loads(Path(sys.argv[1]).read_text())
         if os.environ.get('PARTYDECK_PRIVATE_PLAYER')!=payload['player']:
             raise ValueError(tr('Le profil Left 4 Dead 2 doit être appliqué dans la session Wine privée du joueur.'))
