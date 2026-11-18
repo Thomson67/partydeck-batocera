@@ -128,34 +128,50 @@ def dimensions(payload):
 
 
 def patch_video(text, width, height):
-    """Patch the flat VideoConfig KeyValues object, preserving graphics quality."""
+    """Patch root display keys in a Source video KeyValues object."""
     values={'setting.defaultres':str(width),'setting.defaultresheight':str(height),
             'setting.fullscreen':'0','setting.nowindowborder':'1'}
     if not text.strip():
         text='"VideoConfig"\n{\n}\n'
-    # Parse the real flat KeyValues grammar, so comments/quoted braces and
-    # duplicate managed keys cannot cause a replacement in an unrelated field.
-    token=re.compile(r'\s+|//[^\r\n]*|"(?:[^"\\]|\\.)*"|[{}]|[^\s{}"]+')
+    # Accept Source KeyValues variants while changing only root-level settings.
+    # Keep comments, nesting, conditionals and Windows EOF markers verbatim.
+    parsed=text.rstrip('\x00\x1a\r\n\t ')
+    token=re.compile(r'\s+|//[^\r\n]*|/\*[\s\S]*?\*/|"(?:[^"\\]|\\.)*"|[{}]|[^\s{}"]+')
     tokens=[];end=0
-    for m in token.finditer(text):
-        if m.start()!=end:
-            raise ValueError(tr('Fichier video.txt Left 4 Dead 2 invalide ; fichier conservé.'))
+    def invalid():
+        raise ValueError(tr('Fichier video.txt Left 4 Dead 2 invalide ; fichier conservé.'))
+    for m in token.finditer(parsed):
+        if m.start()!=end:invalid()
         end=m.end()
-        if m[0].isspace() or m[0].startswith('//'):continue
+        if m[0].isspace() or m[0].startswith(('//','/*')):continue
         tokens.append(m)
     def plain(m):return m[0].strip('"').casefold()
-    if (end!=len(text) or len(tokens)<3 or plain(tokens[0])!='videoconfig'
-            or tokens[1][0]!='{' or tokens[-1][0]!='}' or (len(tokens)-3)%2
-            or any(t[0] in ('{','}') for t in tokens[2:-1])):
-        raise ValueError(tr('Fichier video.txt Left 4 Dead 2 invalide ; fichier conservé.'))
-    edits=[];seen=set()
-    for key,val in zip(tokens[2:-1:2],tokens[3:-1:2]):
-        name=plain(key)
-        if name in values:
-            edits.append((val.start(),val.end(),'"'+values[name]+'"'));seen.add(name)
+    if (end!=len(parsed) or len(tokens)<3
+            or plain(tokens[0]) not in ('videoconfig','video.cfg','video.txt')
+            or tokens[1][0]!='{'):invalid()
+    edits=[];seen=set();pos=2
+    def scope(depth):
+        nonlocal pos
+        if depth>32:invalid()
+        while pos<len(tokens) and tokens[pos][0]!='}':
+            key=tokens[pos];pos+=1
+            if key[0]=='{' or pos>=len(tokens):invalid()
+            val=tokens[pos];pos+=1
+            if val[0]=='{':
+                scope(depth+1)
+            elif val[0]=='}':invalid()
+            elif depth==0 and plain(key) in values:
+                name=plain(key)
+                edits.append((val.start(),val.end(),'"'+values[name]+'"'));seen.add(name)
+            if pos<len(tokens) and re.fullmatch(r'\[!?\$[A-Za-z0-9_]+\]',tokens[pos][0]):pos+=1
+        if pos>=len(tokens):invalid()
+        closing=tokens[pos];pos+=1
+        return closing
+    closing=scope(0)
+    if pos!=len(tokens):invalid()
     nl='\r\n' if '\r\n' in text else '\n'
     missing=''.join(f'\t"{k}"\t"{v}"{nl}' for k,v in values.items() if k not in seen)
-    if missing:edits.append((tokens[-1].start(),tokens[-1].start(),nl+missing))
+    if missing:edits.append((closing.start(),closing.start(),nl+missing))
     for start,end,replacement in sorted(edits,reverse=True):text=text[:start]+replacement+text[end:]
     return text
 
@@ -170,22 +186,27 @@ def managed_cfg(text, commands):
 
 
 def language_batch(text, language):
-    """Retire the Windows-language preamble from the previous test release.
+    """Set Steam UI language in the game's actual private Wine session.
 
-    Do not inject commands into startup batches. Remove only the exact block
-    that we generated, preserving the original batch byte-for-byte on encoding.
+    Replace only our exact preamble; retain the original commands and encoding.
+    Keep current removes the preamble without deleting a registry value.
     """
     begin='@rem Windows Party language begin'
     end='@rem Windows Party language end'
-    if begin not in text and end not in text:return text
-    expected=re.compile(r'\A'+re.escape(begin)+r'\r?\n'
-        +re.escape('@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d ')
-        +r'(?:'+ '|'.join(re.escape(x) for x in LANGUAGES if x!='keep')+r')'
-        +re.escape(' /f >nul')+r'\r?\n'+re.escape(end)+r'\r?\n')
-    result,count=expected.subn('',text,count=1)
-    if count!=1 or begin in result or end in result:
-        raise ValueError(tr('Bloc de langue Left 4 Dead 2 incomplet ; fichier conservé.'))
-    return result
+    if begin in text or end in text:
+        expected=re.compile(r'\A'+re.escape(begin)+r'\r?\n'
+            +re.escape('@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d ')
+            +r'(?:'+ '|'.join(re.escape(x) for x in LANGUAGES if x!='keep')+r')'
+            +re.escape(' /f >nul')+r'\r?\n'+re.escape(end)+r'\r?\n')
+        text,count=expected.subn('',text,count=1)
+        if count!=1 or begin in text or end in text:
+            raise ValueError(tr('Bloc de langue Left 4 Dead 2 incomplet ; fichier conservé.'))
+    if language=='keep':return text
+    if language not in LANGUAGES:
+        raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
+    nl='\r\n' if '\r\n' in text else '\n'
+    command='@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d '+language+' /f >nul'
+    return begin+nl+command+nl+end+nl+text
 
 
 def game_edits(directory, player, payload, allowed):
@@ -200,16 +221,23 @@ def game_edits(directory, player, payload, allowed):
     for name in ('video.txt','config.cfg','autoexec.cfg'):
         path=safe_path(child(cfg,name),allowed)
         before=path.read_bytes() if path.exists() else b''
-        text,encoding=decode(before)
         if name=='video.txt':
-            text=patch_video(text,width,height)
+            try:
+                text,encoding=decode(before)
+                after=patch_video(text,width,height).encode(encoding)
+            except ValueError:
+                # An unsupported video format is not a failure to launch Wine.
+                # Never replace the user's video settings with a guessed file.
+                after=before
+                print(tr('Left 4 Dead 2 : format vidéo non reconnu : {p0} ; fichier conservé, lancement poursuivi. Sans bordure non réappliqué ; résolution demandée : {p1}×{p2}.',p0=path,p1=width,p2=height),flush=True)
         else:
+            text,encoding=decode(before)
             commands=['joystick "'+str(int(options['gamepad']))+'"']
             if options['gamepad']:commands.append('+jlook')
             if name=='autoexec.cfg':commands.append(f'mat_setvideomode {width} {height} 1')
-            text=managed_cfg(text,commands)
+            after=managed_cfg(text,commands).encode(encoding)
         backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'-'+name),(player,))
-        edits.append((path,before,text.encode(encoding),backup))
+        edits.append((path,before,after,backup))
     batch=safe_path(child(directory,'start.bat'),allowed)
     if batch.is_file():
         before=batch.read_bytes()
@@ -218,6 +246,8 @@ def game_edits(directory, player, payload, allowed):
         after=before if cleaned==text else cleaned.encode(encoding)
         backup=safe_path(player/'l4d2-settings-before'/(hashlib.sha256(os.fsencode(batch)).hexdigest()[:16]+'-start.bat'),(player,))
         edits.append((batch,before,after,backup))
+    elif options['language']!='keep':
+        print(tr('Left 4 Dead 2 : start.bat absent ; forçage de langue Windows/Steam ignoré, lancement poursuivi.'),flush=True)
     return edits
 
 

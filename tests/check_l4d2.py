@@ -49,6 +49,15 @@ assert l4d2.patch_video(text,960,1080).count('"setting.defaultres" "960"')==2
 try:l4d2.patch_video('"VideoConfig" { "broken }',960,540);raise AssertionError('bad quote accepted')
 except ValueError:pass
 
+# Valve root spelling, comments, nested objects and EOF markers are preserved.
+for root_name in ('VideoConfig','video.cfg','video.txt'):
+    source='"'+root_name+'"\r\n{ /* comment */ "setting.defaultres" "1280" [$WIN32] "quality" { "setting.defaultres" "7" } }\x00\x1a'
+    result=l4d2.patch_video(source,960,1080)
+    assert '"setting.defaultres" "960" [$WIN32]' in result
+    assert '"quality" { "setting.defaultres" "7" }' in result
+    assert result.endswith('\x00\x1a') and '/* comment */' in result
+    assert l4d2.patch_video(result,960,1080)==result
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);base=root/'system';base.mkdir();windows=root/'windows';windows.mkdir()
     rom=windows/'Left 4 Dead 2.wsquashfs';rom.write_bytes(b'SOLO ROM')
@@ -135,18 +144,22 @@ with tempfile.TemporaryDirectory() as folder:
     assert (player/'l4d2-goldberg-identity.json').read_bytes()==identity_before
     batch=game/'start.bat'
     original_batch=b'@echo off\r\nstart /wait left4dead2.exe -novid +sv_lan 1\r\n'
-    assert batch.read_bytes()==original_batch
-    # Migration removes the previous private preamble for every language,
-    # preserving the exact original body and line endings; missing batches
+    assert batch.read_bytes().endswith(original_batch)
+    assert b"/d english /f" in batch.read_bytes()
+    # Replacing the private language preamble preserves the original batch,
+    # including the exact body and line endings; missing batches
     # no longer prevent a native launch from selecting its own entrypoint.
     for language in ('keep','french','english'):
         old='@rem Windows Party language begin\r\n@reg add "HKCU\\Software\\Valve\\Steam" /v Language /t REG_SZ /d french /f >nul\r\n@rem Windows Party language end\r\n'
         batch.write_bytes(old.encode()+original_batch)
         payload['settings']['language']=language
         l4d2.apply_config(game,prefix,payload,private_binds=())
-        assert batch.read_bytes()==original_batch
+        expected=original_batch if language=='keep' else l4d2.language_batch(original_batch.decode(),language).encode()
+        assert batch.read_bytes()==expected
+        assert batch.read_bytes().endswith(original_batch)
+        if language!='keep':assert ('/d '+language+' /f').encode() in batch.read_bytes()
         l4d2.apply_config(game,prefix,payload,private_binds=())
-        assert batch.read_bytes()==original_batch
+        assert batch.read_bytes()==expected
     batch.unlink()
     l4d2.apply_config(game,prefix,payload,private_binds=())
     assert not batch.exists()
@@ -158,13 +171,15 @@ with tempfile.TemporaryDirectory() as folder:
     except ValueError:pass
     assert solo_batch.read_bytes()==original_batch and [user.read_bytes() for user in user_configs]==before_users
     batch.unlink();batch.write_bytes(original_batch)
-    # Malformed or external Source configs stop before any Goldberg edit.
-    snapshots=[user.read_bytes() for user in user_configs]
+    # Reproduce the reported pre-Wine failure: an unfamiliar video format
+    # must survive byte-for-byte and let the adapter report successful launch.
     payload['settings']['language']='french'
     video.write_text('broken "VideoConfig"')
-    try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('bad video config accepted')
-    except ValueError:pass
-    assert [user.read_bytes() for user in user_configs]==snapshots
+    l4d2.apply_config(game,prefix,payload,private_binds=())
+    assert video.read_bytes()==b'broken "VideoConfig"'
+    assert 'mat_setvideomode 1920 540 1' in auto.read_text()
+    snapshots=[user.read_bytes() for user in user_configs]
+    # External configs remain forbidden; recovery must not bypass confinement.
     video.unlink();outside=root/'solo-video.txt';outside.write_text(source_video);video.symlink_to(outside)
     try:l4d2.apply_config(game,prefix,payload,private_binds=());raise AssertionError('external video config accepted')
     except ValueError:pass
@@ -243,6 +258,13 @@ with tempfile.TemporaryDirectory() as folder:
     done=subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),capture_output=True,text=True)
     assert done.returncode==0 and json.loads(result.read_text())['code']==0
     assert l4d2.finish_launch(result,0)==0 and not result.exists()
+    video_hook=game/'left4dead2/cfg/video.txt'
+    video_hook.write_bytes(b'unsupported video format\x00')
+    done=subprocess.run(['bash',str(script)],env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player)),capture_output=True,text=True)
+    assert done.returncode==0 and json.loads(result.read_text())['code']==0
+    assert 'format vidéo non reconnu' in done.stdout
+    assert video_hook.read_bytes()==b'unsupported video format\x00'
+    assert l4d2.finish_launch(result,0)==0
     bad_result=root/('l4d2-result-'+'a'*32+'.json')
     try:
         l4d2.apply_launch(game,prefix,dict(payload,result=str(bad_result)))

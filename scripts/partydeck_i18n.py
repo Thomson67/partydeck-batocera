@@ -62,6 +62,10 @@ def get_language():
 
 
 EN = {
+    'Left 4 Dead 2 : start.bat absent ; forçage de langue Windows/Steam ignoré, lancement poursuivi.':'Left 4 Dead 2: start.bat is missing; Windows/Steam language override skipped, startup continuing.',
+
+    'Left 4 Dead 2 : format vidéo non reconnu : {p0} ; fichier conservé, lancement poursuivi. Sans bordure non réappliqué ; résolution demandée : {p1}×{p2}.':'Left 4 Dead 2: unrecognized video format: {p0}; file retained, startup continuing. Borderless mode was not reapplied; requested resolution: {p1}×{p2}.',
+
     'Bloc de langue Left 4 Dead 2 incomplet ; fichier conservé.':'Incomplete Left 4 Dead 2 language block; file retained.',
     'start.bat Left 4 Dead 2 introuvable ; langue Windows/Steam non appliquée.':'Left 4 Dead 2 start.bat was not found; Windows/Steam language was not applied.',
     'Left 4 Dead 2 : langue Windows/Steam {p0} appliquée au démarrage privé.':'Left 4 Dead 2: Windows/Steam language {p0} applied at private startup.',
