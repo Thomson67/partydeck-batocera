@@ -117,7 +117,11 @@ communs encore sans fichier associé.
 Le profil **SM64CoopDX** reconnaît aussi `sm64coopdx`, `SM64 Coop DX` et
 `Super Mario 64 Coop Deluxe`, avec association manuelle possible pour un autre nom.
 
-Dans **Choisir un jeu**, **LB/RB** parcourt la liste par pages de neuf entrées.
+Dans **Choisir un jeu**, **LB/RB** (ou **L1/R1**) parcourt la liste par pages de
+neuf entrées. Maintenir le bouton fait défiler les pages en continu après
+0,35 seconde, puis toutes les 0,12 seconde ; relâcher arrête le défilement.
+La répétition des boutons de page est limitée au sélecteur de jeu : changer
+d'onglet dans les réglages conserve un seul déplacement par appui.
 **HK + Start** quitte le configurateur : le Hotkey de `es_input.cfg` est utilisé
 (`hotkey` ou `hotkeyenable`) ; sans mapping, le bouton Guide + Start SDL sert de
 secours. Cette combinaison n'ouvre pas simultanément le navigateur d'ajout.

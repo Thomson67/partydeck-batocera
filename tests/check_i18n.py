@@ -62,6 +62,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert control_label('add','keyboard')=='Ins'
     assert control_label('ok','ps')=='Cross'
     assert ('save','Save') in context_hints('main','ps')
+    assert ('tabs','Pages · hold') in context_hints('browser','ps')
     assert label_value('input','clavier-j1')=='Keyboard/mouse · P1'
     assert label_value('borderlands2.preset','medium')=='Medium'
     assert label_value('borderlands2.vsync','on')=='Enabled'
@@ -84,6 +85,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert 'shared profile' in COMMON[0].stem
     # Create French-named user data before switching the configurator to English.
     lang.set_language('fr')
+    assert ('tabs','Pages · maintenir') in context_hints('browser','xbox')
     assert fields(2,'sm64coopdx')[0][1]=='Caméra libre'
     assert label_value('sm64coopdx.language','French')=='Français'
     assert fields(2,'borderlands2')[0][1]=='J1 · Nom'

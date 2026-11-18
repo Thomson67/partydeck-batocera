@@ -56,6 +56,40 @@ with tempfile.TemporaryDirectory() as folder:
     app.browse(windows); app.action('next'); assert app.row==9
     app.action('next'); assert app.row==18
     app.action('prev'); assert app.row==9
+    # Holding either shoulder pages continuously in the picker, with the same
+    # delay/rate as directional navigation. SDL and ES fallback both support it.
+    for kind in ('sdl','es'):
+        fake=Mock();fake.name='DualSense';fake.get_name.return_value='8BitDo'
+        fake.get_axis.return_value=0
+        buttons=set()
+        fake.get_button.side_effect=lambda n:n in buttons
+        app.pads.devices=[(kind,fake,{} if kind=='sdl' else {
+            'pageup':dict(type='button',id='4',value='1'),
+            'pagedown':dict(type='button',id='5',value='1')})]
+        app.pads.raw=[];app.pads.previous.clear();app.row=0
+        def held(at):
+            with patch('partydeck_couch.time.monotonic',return_value=at):
+                actions=app.pads.poll(repeat_pages=app.help_context()=='browser')
+                for action in actions:app.action(action)
+                return actions
+        buttons.add(10 if kind=='sdl' else 5)
+        assert held(10)==['next'] and app.row==9
+        assert held(10.34)==[] and app.row==9
+        assert held(10.351)==['next'] and app.row==18
+        assert held(10.46)==[]
+        assert held(10.472)==['next'] and app.row==min(27,len(app.browser_rows)-1)
+        assert held(10.60)==['next'] and app.row==len(app.browser_rows)-1
+        buttons.clear();assert held(11)==[]
+        buttons.add(9 if kind=='sdl' else 4)
+        assert held(12)==['prev']
+        old=app.row;assert held(12.351)==['prev'] and app.row==max(0,old-9)
+        assert held(12.48)==['prev'] and app.row==0
+        # Modal text entry and regular tabs never repeat shoulder actions.
+        app.edit('Search','',lambda value:None)
+        assert held(14)==[]
+        app.action('back');app.action('back');assert app.browser is None
+        assert held(15)==[]
+        app.browse(windows);buttons.clear();held(16)
     app.action('back')
     generic=windows/'Other game.wsquashfs';generic.touch();app.select_game(generic)
     assert app.available_tabs()==(0,)

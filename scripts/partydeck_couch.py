@@ -52,7 +52,7 @@ def context_hints(context, mode, has_tabs=True):
     if context == 'keyboard':
         return [('ok',tr('Valider')), ('back',tr('Annuler'))] if mode == 'keyboard' else [('ok',tr('Saisir')), ('save',tr('Valider')), ('back',tr('Annuler'))]
     if context == 'browser':
-        return [('ok',tr('Choisir')), ('back',tr('Annuler')), ('tabs',tr('Parcourir'))]
+        return [('ok',tr('Choisir')), ('back',tr('Annuler')), ('tabs',tr('Parcourir') if mode=='keyboard' else tr('Pages · maintenir'))]
     return [('ok',tr('Choisir')), ('back',tr('Retour')), ('save',tr('Enregistrer')), ('search',tr('Rechercher')),
             *([('tabs',tr('Onglets'))] if has_tabs else []), ('add',tr('Ajouter'))]
 KEYS = [list('azertyuiop'), list('qsdfghjklm'), list('wxcvbn0123'),
@@ -365,7 +365,7 @@ class Pads:
             return {1:y>0, 2:x>0, 4:y<0, 8:x<0}.get(value, False)
         return False
 
-    def poll(self):
+    def poll(self, repeat_pages=False):
         held = set()
         for kind, pad, mapping in self.devices:
             try:
@@ -420,7 +420,7 @@ class Pads:
             if action not in self.previous:
                 actions.append(action)
                 self.timers[action] = now + .35
-            elif action in ('up', 'down', 'left', 'right') and now >= self.timers.get(action, now):
+            elif (action in ('up','down','left','right') or (repeat_pages and action in ('prev','next'))) and now >= self.timers.get(action,now):
                 actions.append(action)
                 self.timers[action] = now + .12
         self.previous = held
@@ -1184,7 +1184,7 @@ class App:
                             self.finish_text()
                         elif event.key in keymap:
                             self.action(keymap[event.key])
-                for action in self.pads.poll():
+                for action in self.pads.poll(repeat_pages=self.help_context()=='browser'):
                     self.input_mode = self.pads.family
                     self.action(action)
                 self.draw()
