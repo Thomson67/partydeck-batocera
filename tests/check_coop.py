@@ -43,6 +43,17 @@ with patch.object(coop.subprocess, "run") as run:
     assert run.call_args.args[0] == ["xdotool", "search", "--onlyvisible", "--class",
                                     "^partydeck-coop-123-j1$"]
 
+# Hidden windows are discovered by the same exact player class; ambiguity
+# never activates a possibly unrelated window.
+with patch.object(coop.subprocess, "run") as run:
+    run.side_effect = [Mock(stdout="", returncode=1), Mock(stdout="322\n", returncode=0)]
+    assert coop.top_window("partydeck-coop-123-j2") == "322"
+    assert run.call_args.args[0] == ["xdotool", "search", "--class", "^partydeck-coop-123-j2$"]
+with patch.object(coop.subprocess, "run") as run:
+    run.return_value = Mock(stdout="321\n322\n", returncode=0)
+    assert coop.top_window("partydeck-coop-123-j1") is None
+    assert run.call_count == 1
+
 with tempfile.TemporaryDirectory() as temp, patch.object(coop, "sandbox_arguments", return_value=[]), patch.object(coop.subprocess,"Popen") as popen:
     base = Path(temp)
     game = base / "Game.wsquashfs"
@@ -151,5 +162,11 @@ with tempfile.TemporaryDirectory() as temp:
     assert not coop.hybrid_nvidia(root)  # Single NVIDIA keeps system selection.
 with patch.object(coop.subprocess,'run') as run:
     coop.focus_window('810')
-    assert run.call_args.args[0]==['xdotool','windowmap','810','windowraise','810','windowfocus','810']
+    assert [call.args[0] for call in run.call_args_list] == [
+        ['xdotool','windowmap','810'], ['xdotool','windowactivate','810'],
+        ['xdotool','windowraise','810','windowfocus','810']]
+with patch.object(coop.subprocess,'run') as run:
+    run.side_effect = [None, OSError('activation unavailable'), None]
+    coop.focus_window('810')
+    assert run.call_count == 3  # Xorg fallback survives WM activation failure.
 print("Attribution auto, classes J1/J2, placement, GPU hybride, focus et entrée standard détachée vérifiés.")

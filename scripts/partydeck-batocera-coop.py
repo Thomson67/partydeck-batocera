@@ -209,11 +209,19 @@ def remove_fullscreen(window):
 
 
 def top_window(window_class):
-    result = subprocess.run(["xdotool", "search", "--onlyvisible", "--class",
-                             f"^{window_class}$"], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    ids = result.stdout.split()
-    return ids[0] if result.returncode == 0 and len(ids) == 1 else None
+    # A window launched from SSH may still be unmapped behind the desktop.
+    # Match only this player's exact class, and never choose an ambiguous ID.
+    for visible in (True, False):
+        command = ["xdotool", "search"]
+        if visible:
+            command.append("--onlyvisible")
+        result = subprocess.run(command + ["--class", f"^{window_class}$"],
+                                text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL)
+        ids = result.stdout.split()
+        if result.returncode == 0 and ids:
+            return ids[0] if len(ids) == 1 else None
+    return None
 
 
 def place_window(window, rectangle):
@@ -230,13 +238,17 @@ def place_window(window, rectangle):
 
 
 def focus_window(window):
-    # EWMH activation is unreliable on some Batocera Xorg sessions. Use the
-    # map/raise/focus sequence verified there, targeting only our own window.
-    try:
-        subprocess.run(['xdotool','windowmap',window,'windowraise',window,
-                        'windowfocus',window],check=False,timeout=3,
-                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    except (OSError,subprocess.TimeoutExpired):pass
+    # Ask the WM/compositor to activate Xwayland windows over native ES.
+    # Keep the map/raise/focus fallback that works on Batocera Xorg.
+    commands = (["xdotool", "windowmap", window],
+                ["xdotool", "windowactivate", window],
+                ["xdotool", "windowraise", window, "windowfocus", window])
+    for command in commands:
+        try:
+            subprocess.run(command, check=False, timeout=3,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
 
 
 def rom_path(value, argument_parser):
@@ -724,6 +736,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 if window:
                     if seen_windows.get(index) != window:
                         seen_windows[index] = window
+                        focus_window(window)
                         print(f"Fenêtre J{index + 1} repérée : {window}", flush=True)
                     next_attempt[index] = time.monotonic() + 1
                     try:
