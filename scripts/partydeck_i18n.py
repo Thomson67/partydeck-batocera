@@ -62,6 +62,7 @@ def get_language():
 
 
 EN = {
+    'LAN privé : commande cible absente.':'Private LAN: target command missing.',
     'LAN privé : choisissez de 2 à 4 joueurs.':'Private LAN: select 2 to 4 players.',
     'LAN privé : espace réseau hôte refusé.':'Private LAN: host network namespace refused.',
     'LAN privé : espace réseau terminé.':'Private LAN: network namespace exited.',

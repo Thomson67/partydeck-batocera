@@ -1,11 +1,25 @@
 """Experimental, session-owned LAN. All links live in private network namespaces.
 
 No named namespaces, host interfaces, NAT, firewall or host routes are created.
-Namespace FDs pin ownership; nsenter never targets the host namespace.
+Namespace FDs pin ownership; the setns helper refuses the host namespace.
 """
 from pathlib import Path
 import ctypes,os,select,shutil,subprocess,sys
 from partydeck_i18n import tr
+
+
+def enter(fd,host,command):
+    stat=os.fstat(fd)
+    if (stat.st_dev,stat.st_ino)==host:
+        raise RuntimeError(tr('LAN privé : espace réseau hôte refusé.'))
+    if not command:raise ValueError(tr('LAN privé : commande cible absente.'))
+    libc=ctypes.CDLL(None,use_errno=True)
+    libc.setns.argtypes=[ctypes.c_int,ctypes.c_int]
+    libc.setns.restype=ctypes.c_int
+    if libc.setns(fd,0x40000000)!=0:
+        err=ctypes.get_errno();raise OSError(err,os.strerror(err))
+    os.close(fd)
+    os.execvp(command[0],command)
 
 
 class PrivateLAN:
@@ -23,14 +37,15 @@ class PrivateLAN:
             raise RuntimeError(tr('LAN privé : espace réseau hôte refusé.'))
         if self.holders[index].poll() is not None:
             raise RuntimeError(tr('LAN privé : espace réseau terminé.'))
-        return ['nsenter',f'--net=/proc/self/fd/{fd}','--']
+        return [sys.executable,__file__,'_enter',str(fd),
+                str(self.host.st_dev),str(self.host.st_ino),'--']
 
     def command(self,index,args,**kwargs):
         return subprocess.run(self.prefix(index)+args,pass_fds=(self.fds[index],),
                               stdin=subprocess.DEVNULL,check=True,timeout=5,**kwargs)
 
     def start(self):
-        for tool in ('nsenter','ip'):
+        for tool in ('ip',):
             if not shutil.which(tool):raise RuntimeError(tr('LAN privé : commande absente ({p0}).',p0=tool))
         try:
             for index in range(self.count):
@@ -119,6 +134,8 @@ if __name__=='__main__':
                 err=ctypes.get_errno();raise OSError(err,os.strerror(err))
             print('READY',flush=True)
             sys.stdin.buffer.read()
+        elif len(sys.argv)>=7 and sys.argv[1]=='_enter' and sys.argv[5]=='--':
+            enter(int(sys.argv[2]),(int(sys.argv[3]),int(sys.argv[4])),sys.argv[6:])
         elif sys.argv[1:2]==['verifier']:verify(int(sys.argv[2]) if len(sys.argv)>2 else 2)
         else:raise ValueError('Usage: partydeck_private_lan.py verifier [2|3|4]')
     except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:

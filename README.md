@@ -1090,3 +1090,13 @@ verifier tests real same-port UDP communication without a ROM. Automated tests
 cover topology, ownership guards, FD passing and rollback; kernel namespace
 creation is denied in the development container. Both real UDP operation and
 Most Wanted lobby/racing remain unvalidated until tested on Batocera.
+
+L'entrée dans les espaces réseau utilise désormais `setns` via Python/ctypes,
+sans exécutable `nsenter`. `setns` n'est pas une commande à installer ou lancer.
+L'autotest et les jeux utilisent le même helper, qui conserve le refus de
+l'espace hôte et n'exécute aucune commande si l'appel système échoue.
+
+**English:** Network namespace entry uses setns through Python/ctypes, with no
+nsenter executable dependency. setns is not a shell command to install or run.
+The verifier and games share this helper, which refuses the host namespace and
+never executes the target command if the syscall fails.

@@ -21,6 +21,31 @@ try:
     except RuntimeError:pass
 finally:os.close(fd)
 
+# The entry helper rejects the host FD itself, even if invoked directly.
+fd=os.open('/proc/self/ns/net',os.O_RDONLY)
+try:
+    result=subprocess.run([sys.executable,n.__file__,'_enter',str(fd),str(lan.host.st_dev),str(lan.host.st_ino),'--','/bin/true'],
+                          pass_fds=(fd,),capture_output=True,text=True)
+    assert result.returncode==1 and ('host network' in result.stderr or 'réseau hôte' in result.stderr)
+finally:os.close(fd)
+
+# The syscall helper enters the pinned FD, closes it, and execs argv literally.
+with patch.object(n.os,'fstat',return_value=SimpleNamespace(st_dev=1,st_ino=2)),\
+     patch.object(n.ctypes,'CDLL') as library,patch.object(n.os,'close') as close,\
+     patch.object(n.os,'execvp') as execute:
+    library.return_value.setns.return_value=0
+    n.enter(44,(1,3),['/bin/echo','literal $(not a shell)'])
+    library.return_value.setns.assert_called_once_with(44,0x40000000)
+    close.assert_called_once_with(44)
+    execute.assert_called_once_with('/bin/echo',['/bin/echo','literal $(not a shell)'])
+with patch.object(n.os,'fstat',return_value=SimpleNamespace(st_dev=1,st_ino=2)),\
+     patch.object(n.ctypes,'CDLL') as library,patch.object(n.ctypes,'get_errno',return_value=1),\
+     patch.object(n.os,'execvp') as execute:
+    library.return_value.setns.return_value=-1
+    try:n.enter(44,(1,3),['/bin/true']);raise AssertionError('failed setns accepted')
+    except OSError:pass
+    execute.assert_not_called()
+
 def holder(pid):
     p=Mock(pid=pid,stdin=Mock(),stdout=io.BytesIO(b'READY\n'))
     p.poll.return_value=None
@@ -39,12 +64,13 @@ for count in (2,3,4):
         assert [lan.address(i) for i in range(count)]==[f'192.168.247.{11+i}' for i in range(count)]
         commands=[call.args[0] for call in run.call_args_list]
         # Every mutation is prefixed with a pinned, private network FD.
-        assert all(cmd[:1]==['nsenter'] and cmd[1].startswith('--net=/proc/self/fd/') and cmd[2]=='--' for cmd in commands)
+        assert all(cmd[:3]==[sys.executable,n.__file__,'_enter'] and cmd[6]=='--' for cmd in commands)
         assert sum('veth' in cmd for cmd in commands)==count-1
         assert sum('unreachable' in cmd for cmd in commands)==count
         assert all(call.kwargs['pass_fds'] for call in run.call_args_list)
         for i in range(1,count):
-            assert ['nsenter','--net=/proc/self/fd/200','--','ip','link','set',f'e{i}','netns',str(100+i)] in commands
+            assert [sys.executable,n.__file__,'_enter','200',str(lan.host.st_dev),str(lan.host.st_ino),'--',
+                    'ip','link','set',f'e{i}','netns',str(100+i)] in commands
         lan.close()
         assert close.call_count==count and lan.fds==[]
         assert all(p.terminate.called for p in holders)
