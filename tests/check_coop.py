@@ -73,11 +73,14 @@ with tempfile.TemporaryDirectory() as temp, patch.object(coop, "sandbox_argument
     assert "--grab" in exclusive
     assert "--libinput-hold-dev=/dev/input/event2,/dev/input/event3," in exclusive
     network=Mock(fds=[200]);network.prefix.return_value=['python3','partydeck_private_lan.py','_enter','200','1','2','--']
+    network.child_prefix.return_value=['python3','partydeck_private_lan.py','_enter-path','/proc/123/ns/net','1','2','1','3','--']
     network.address.return_value='192.168.247.11'
     coop.start_player(base,base/'j1',game,game,[pad],(0,0,1920,540),'private-j1',network=network)
     command=popen.call_args.args[0]
-    assert command[:7]==network.prefix.return_value
-    assert popen.call_args.kwargs['pass_fds']==(200,)
+    assert command[:2]==[str(base/'AppRun'),'gamescope-kbm']
+    child=network.child_prefix.return_value
+    assert command[command.index('sh')+1:command.index('sh')+1+len(child)]==child
+    assert 'pass_fds' not in popen.call_args.kwargs
     assert command[command.index('PARTYDECK_PRIVATE_LAN_IP')+1]=='192.168.247.11'
 
 for split, second_position, inputs, shared, party, virtual in [

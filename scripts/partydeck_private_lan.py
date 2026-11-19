@@ -22,6 +22,17 @@ def enter(fd,host,command):
     os.execvp(command[0],command)
 
 
+def enter_path(path,expected,host,command):
+    # Gamescope can close inherited FDs when spawning its child. Open the
+    # supervisor-owned namespace here and validate its identity before setns.
+    fd=os.open(path,os.O_RDONLY|os.O_CLOEXEC)
+    stat=os.fstat(fd)
+    if (stat.st_dev,stat.st_ino)!=expected:
+        os.close(fd)
+        raise RuntimeError(tr('LAN privé : espace réseau terminé.'))
+    enter(fd,host,command)
+
+
 class PrivateLAN:
     def __init__(self,count):
         if type(count) is not int or count not in (2,3,4):
@@ -38,6 +49,14 @@ class PrivateLAN:
         if self.holders[index].poll() is not None:
             raise RuntimeError(tr('LAN privé : espace réseau terminé.'))
         return [sys.executable,__file__,'_enter',str(fd),
+                str(self.host.st_dev),str(self.host.st_ino),'--']
+
+    def child_prefix(self,index):
+        self.prefix(index)  # Recheck ownership and holder lifetime.
+        stat=os.fstat(self.fds[index])
+        return [sys.executable,__file__,'_enter-path',
+                f'/proc/{self.holders[index].pid}/ns/net',
+                str(stat.st_dev),str(stat.st_ino),
                 str(self.host.st_dev),str(self.host.st_ino),'--']
 
     def command(self,index,args,**kwargs):
@@ -136,6 +155,9 @@ if __name__=='__main__':
             sys.stdin.buffer.read()
         elif len(sys.argv)>=7 and sys.argv[1]=='_enter' and sys.argv[5]=='--':
             enter(int(sys.argv[2]),(int(sys.argv[3]),int(sys.argv[4])),sys.argv[6:])
+        elif len(sys.argv)>=9 and sys.argv[1]=='_enter-path' and sys.argv[7]=='--':
+            enter_path(sys.argv[2],(int(sys.argv[3]),int(sys.argv[4])),
+                       (int(sys.argv[5]),int(sys.argv[6])),sys.argv[8:])
         elif sys.argv[1:2]==['verifier']:verify(int(sys.argv[2]) if len(sys.argv)>2 else 2)
         else:raise ValueError('Usage: partydeck_private_lan.py verifier [2|3|4]')
     except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:

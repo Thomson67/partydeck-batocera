@@ -529,6 +529,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if network is not None:
         sandbox.extend(['--setenv','PARTYDECK_PRIVATE_LAN_IP',network.address(network_index)])
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"', "sh",
+                 *(network.child_prefix(network_index) if network is not None else []),
                  sys.executable, helper, "_sandbox", os.environ.get("DISPLAY", ""),
                  *bubblewrap_command(app), *sandbox,
                  "--", sys.executable, helper, "_wine",
@@ -544,9 +545,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
-    if network is not None:
-        return subprocess.Popen(network.prefix(network_index)+args,env=environment,start_new_session=True,
-                                stdin=subprocess.DEVNULL,pass_fds=(network.fds[network_index],))
+    # Gamescope, outer X11/Wayland, GPU and desktop services stay on the host.
+    # Only its Wine child enters the private network before Bubblewrap.
     return subprocess.Popen(args,env=environment,start_new_session=True,stdin=subprocess.DEVNULL)
 
 

@@ -46,6 +46,27 @@ with patch.object(n.os,'fstat',return_value=SimpleNamespace(st_dev=1,st_ino=2)),
     except OSError:pass
     execute.assert_not_called()
 
+# Opening by path never trusts a recycled holder PID or a host namespace.
+with patch.object(n.os,'open',return_value=44), \
+     patch.object(n.os,'fstat',return_value=SimpleNamespace(st_dev=1,st_ino=2)), \
+     patch.object(n.os,'close') as close,patch.object(n,'enter') as enter:
+    n.enter_path('/proc/123/ns/net',(1,2),(1,3),['/bin/true'])
+    enter.assert_called_once_with(44,(1,3),['/bin/true'])
+    close.assert_not_called()
+    enter.reset_mock()
+    try:n.enter_path('/proc/123/ns/net',(1,4),(1,3),['/bin/true']);raise AssertionError('recycled PID accepted')
+    except RuntimeError:pass
+    close.assert_called_once_with(44)
+    enter.assert_not_called()
+fd=os.open('/proc/self/ns/net',os.O_RDONLY)
+try:
+    stat=os.fstat(fd)
+    result=subprocess.run([sys.executable,n.__file__,'_enter-path',f'/proc/{os.getpid()}/ns/net',
+                          str(stat.st_dev),str(stat.st_ino),str(stat.st_dev),str(stat.st_ino),'--','/bin/true'],
+                          capture_output=True,text=True)
+    assert result.returncode==1 and ('host network' in result.stderr or 'réseau hôte' in result.stderr)
+finally:os.close(fd)
+
 def holder(pid):
     p=Mock(pid=pid,stdin=Mock(),stdout=io.BytesIO(b'READY\n'))
     p.poll.return_value=None
@@ -71,6 +92,9 @@ for count in (2,3,4):
         for i in range(1,count):
             assert [sys.executable,n.__file__,'_enter','200',str(lan.host.st_dev),str(lan.host.st_ino),'--',
                     'ip','link','set',f'e{i}','netns',str(100+i)] in commands
+        prefix=lan.child_prefix(count-1)
+        assert prefix[2]=='_enter-path' and prefix[3]==f'/proc/{100+count-1}/ns/net'
+        assert prefix[-1]=='--' and prefix[4:6]==[str(lan.host.st_dev),str(lan.host.st_ino+200+count-1)]
         lan.close()
         assert close.call_count==count and lan.fds==[]
         assert all(p.terminate.called for p in holders)
