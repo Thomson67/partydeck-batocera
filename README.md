@@ -836,3 +836,82 @@ Le fonctionnement avec profils et éditeur facultatif s'inspire de
 [Quiver Batocera](https://github.com/DreamerCG/Quiver-Batocera), dont les
 profils `.quiver` et l'option `LAUNCHER_QUIVER` permettent d'ouvrir le launcher
 à la demande.
+
+## Most Wanted 2005 : LAN expérimental
+
+Ce profil reprend les réglages réseau du handler Nucleus v10 de **Need for Speed
+Most Wanted (2005)**. La connexion entre instances sous Wine reste à valider sur
+Batocera. **Underground 2 n'est pas couvert par cette recette.**
+
+Pour une entrée déjà ajoutée, choisissez dans le configurateur **Session → Profil
+du jeu → Most Wanted 2005 · LAN expérimental**, puis enregistrez. Les nouveaux
+ajouts dont le nom contient Most Wanted et 2005 sont reconnus automatiquement ;
+un titre ambigu exige une sélection manuelle. Les formats `.wine`, `.pc` et
+`.wsquashfs` suivent le lancement Wine habituel.
+
+L'onglet réseau propose l'IP LAN du PC (`auto` par défaut), la fréquence LAN
+(`6`), un délai entre joueurs (`0`, `15`, `30` ou `60` secondes), et la musique
+sur J1 uniquement (activée par défaut). Désactiver cette dernière restriction
+réactive la musique pour tous les joueurs. Si l'IP automatique sélectionne une
+interface VPN ou une mauvaise carte réseau, renseignez l'IP LAN manuellement.
+Le délai décale chaque joueur suivant ; il ne détecte pas la création du salon.
+
+Chaque copie privée reçoit les ports **9900 à 9903**, `ADDR` avec IP et port,
+`TRUST_MATCH` avec **l'IP seule**, `TRUST=255.255.255.255` et `LAN_THROTTLE=6`
+(par défaut) dans la section `SERVER` de `server.cfg`. Le profil exige
+`server.cfg`, `server.dll` et le marqueur `NFSMW_icon.ico` dans le dossier de
+lancement. Les premières configurations modifiées sont conservées dans
+`nfsmw-before` de chaque joueur. `server.dll` devient une petite copie privée
+aux octets inchangés ; la ROM solo n'est pas modifiée ou dupliquée intégralement.
+
+Si les fichiers correspondants sont présents dans `scripts`, le profil active
+le multi-instance et le mode fenêtré via Extra Options, puis adapte la résolution
+via Widescreen Fix. Il signale les modules ASI absents (Extra Options, Widescreen
+Fix, HUD Adapter) ; il **ne les installe pas** et ne vérifie pas leur chargement.
+Aucun binaire du jeu, mod, sauvegarde Nucleus ou émulateur n'est distribué.
+Le handler Nucleus vise la version 1.3 et une configuration anglaise ; ce profil
+ne force pas la langue, ne débloque pas les voitures et n'injecte pas les DLL
+d'entrée propres à Nucleus. L'isolation des manettes reste celle de Windows Party.
+
+Procédure de test inspirée du handler :
+
+1. Lancez deux joueurs ; un délai de 30 ou 60 secondes peut aider à préparer J1.
+2. Sur J1, ouvrez LAN, créez un serveur avec un nom distinct, puis un salon.
+3. Sur J2, ouvrez LAN et créez aussi son serveur avec un autre nom, puis cherchez
+   et rejoignez le salon de J1. Attendez l'apparition du ping et réessayez si besoin.
+
+Les tests automatisés vérifient les quatre ports, la préservation des fichiers,
+les refus de chemins externes, le retour d'erreur et l'interface FR/EN. Ils ne
+valident pas la découverte réseau ni l'entrée dans une course sur Batocera.
+
+**English:** This experimental Most Wanted 2005 profile follows the network
+settings of Nucleus handler v10. Underground 2 is not included. Select it in
+Session → Game profile for existing entries; new titles containing Most Wanted
+and 2005 are detected automatically. All three Wine formats are supported.
+The Network tab offers the PC LAN IP (auto by default), LAN throttle (6), a
+per-player startup delay (0/15/30/60 seconds), and music on P1 only (enabled).
+Disabling the music restriction enables music for every player. Override the IP
+when automatic routing picks a VPN or the wrong interface. The delay is timed;
+it does not detect lobby readiness.
+
+Private configurations use ports 9900–9903, ADDR with IP:port, TRUST_MATCH with
+IP only, and TRUST=255.255.255.255 in the SERVER section. The launch directory
+must contain server.cfg, server.dll and NFSMW_icon.ico. Original configurations
+are backed up in each player's nfsmw-before folder. Each player receives a small
+private server.dll copy with identical bytes. The solo ROM remains unchanged
+and is not fully duplicated. Existing Extra Options and Widescreen Fix INIs are
+adjusted for multiple instances, windowed rendering and viewport resolution.
+Missing ASI modules are logged, never installed; their loading is not verified.
+No game/mod binaries, Nucleus saves or emulator files are distributed. Nucleus
+targets version 1.3 and English; this profile does not force language, unlock
+cars or inject Nucleus input DLLs. Windows Party still isolates controllers.
+
+For testing, P1 creates a uniquely named LAN server and a lobby first. P2 also
+creates a differently named LAN server, then finds and joins P1's lobby. A
+30/60-second startup delay may help prepare P1 first. Wait for ping and retry if
+needed. Automated checks cover four-player configuration, file isolation,
+error reporting and FR/EN UI, not actual discovery or racing under Wine.
+
+Références / references :
+[Nucleus handler](https://hub.splitscreen.me/handler/nBgGXtk5pTq9Taq2F),
+[PartyDeck issue #4](https://github.com/partydeck/partydeck/issues/4).

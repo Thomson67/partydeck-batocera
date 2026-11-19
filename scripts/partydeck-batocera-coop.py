@@ -420,6 +420,7 @@ def run_wine(original, target, player, saves=None):
 
 def _run_wine(original, target, player, saves=None):
     goldberg_result=None
+    nfsmw_result=None
     if original.suffix.lower() != ".wsquashfs":
         mount_overlay(target, (saves if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
@@ -441,14 +442,20 @@ def _run_wine(original, target, player, saves=None):
         install_sm64(Path(__file__).resolve().parent, original, player)
         from partydeck_l4d2 import install_hook as install_l4d2, finish_launch as finish_l4d2
         goldberg_result=install_l4d2(Path(__file__).resolve().parent, original, player)
+        from partydeck_nfsmw import install_hook as install_mw, finish_launch as finish_mw
+        nfsmw_result=install_mw(Path(__file__).resolve().parent,original,player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     try:
         status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
         if goldberg_result is not None:
             status=finish_l4d2(goldberg_result,status)
+        if nfsmw_result is not None:
+            status=finish_mw(nfsmw_result,status)
     finally:
         if goldberg_result is not None:
             goldberg_result.unlink(missing_ok=True)
+        if nfsmw_result is not None:
+            nfsmw_result.unlink(missing_ok=True)
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)
     return 128 - status if status < 0 else status
 
@@ -463,7 +470,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            if profile.get('adapter') in ('borderlands2','l4d2-goldberg'):
+            if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if not shared_keyboard_mouse:
         args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])

@@ -62,6 +62,23 @@ def get_language():
 
 
 EN = {
+    'Most Wanted 2005 · LAN expérimental':'Most Wanted 2005 · experimental LAN',
+    'IP LAN du PC (auto : détection)':'PC LAN IP (auto: detect)',
+    'Fréquence du serveur LAN':'LAN server throttle',
+    'Délai entre joueurs (secondes)':'Delay between players (seconds)',
+    'Expérimental · ports 9900–9903 · créer le salon J1 avant de rejoindre avec J2':'Experimental · ports 9900–9903 · create the P1 room before joining with P2',
+    'Réglages Most Wanted LAN invalides.':'Invalid Most Wanted LAN settings.',
+    'Adresse LAN Most Wanted invalide.':'Invalid Most Wanted LAN address.',
+    'IP LAN introuvable ; renseignez l’adresse du PC dans Réseau Most Wanted.':'LAN IP not found; enter the PC address in Most Wanted Network settings.',
+    'Most Wanted 2005 non confirmé : NFSMW_icon.ico absent.':'Most Wanted 2005 not confirmed: NFSMW_icon.ico is missing.',
+    'Most Wanted : server.cfg ou server.dll absent.':'Most Wanted: server.cfg or server.dll is missing.',
+    'Numéro de joueur Most Wanted invalide.':'Invalid Most Wanted player number.',
+    'Dimensions Most Wanted invalides.':'Invalid Most Wanted dimensions.',
+    'Most Wanted : mod absent ({p0}) ; adaptation réseau seule, compatibilité non garantie.':'Most Wanted: missing mod ({p0}); network configuration only, compatibility is not guaranteed.',
+    'Most Wanted J{p0} : {p1}:{p2}, TRUST_MATCH sans port, LAN_THROTTLE={p3}.':'Most Wanted P{p0}: {p1}:{p2}, TRUST_MATCH without port, LAN_THROTTLE={p3}.',
+    'Most Wanted J{p0} : attente de {p1} s pour préparer le salon J1.':'Most Wanted P{p0}: waiting {p1} s to prepare the P1 room.',
+    'Contexte privé Most Wanted invalide.':'Invalid private Most Wanted context.',
+
     'RUNNER WINE':'WINE RUNNER',
     'Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.':'Windows Party runner. Auto: use the original Windows game’s runner.',
     'Configuration ES Windows Party personnalisée ; fichier conservé : {p0}':'Custom Windows Party ES configuration; file retained: {p0}',

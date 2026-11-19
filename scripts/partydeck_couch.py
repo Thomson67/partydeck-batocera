@@ -17,6 +17,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
+from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
 from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2, LANGUAGES as L4D2_LANGUAGES
 from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
@@ -70,7 +71,12 @@ def fields(tab, adapter='standard'):
                 ('input', tr('Attribution des contrôles'), ['auto', 'clavier-j1', 'clavier-j2']),
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg'])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan'])]
+    if adapter == 'nfsmw-lan':
+        return [('nfsmw.host',tr('IP LAN du PC (auto : détection)'),None),
+                ('nfsmw.throttle',tr('Fréquence du serveur LAN'),[1,6,10,30,60]),
+                ('nfsmw.start_delay',tr('Délai entre joueurs (secondes)'),[0,15,30,60]),
+                ('nfsmw.music_j1_only',tr('Musique uniquement pour J1'),[True,False])]
     if adapter == 'l4d2-goldberg':
         if tab==2:
             return [('l4d2.language',tr('Langue du jeu'),list(L4D2_LANGUAGES)),
@@ -149,7 +155,7 @@ def label_value(key, value):
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
-        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg'}.get(value, value)
+        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental')}.get(value, value)
     if key == 'l4d2.language':
         return tr(L4D2_LANGUAGES[value])
     if key == 'sm64coopdx.language':
@@ -183,7 +189,7 @@ class Model:
         self.windows = windows
         self.selected = rom
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
-                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2)}
+                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw)}
         self.common_for_rom = {}
         self.data = None
         self.saved = None
@@ -245,6 +251,7 @@ class Model:
         self.data.setdefault('borderlands2', bl2_defaults())
         self.data.setdefault('sm64coopdx', sm64_defaults())
         self.data.setdefault('l4d2',l4d2_defaults())
+        self.data.setdefault('nfsmw',mw_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
@@ -268,6 +275,7 @@ class Model:
             stored.pop('sm64coopdx', None)
         if stored.get('adapter') != 'l4d2-goldberg':
             stored.pop('l4d2',None)
+        if stored.get('adapter') != 'nfsmw-lan':stored.pop('nfsmw',None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'partydeck-test'), 'ajouter', str(self.rom),
@@ -516,6 +524,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get('adapter') == 'nfsmw-lan':return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
@@ -1040,6 +1049,8 @@ class App:
             for position, i in enumerate(self.available_tabs()):
                 if self.model.data.get('adapter') == 'sm64coopdx':
                     title = tr(('Session','Graphismes','Gameplay','Options','Son')[i])
+                elif self.model.data.get('adapter') == 'nfsmw-lan':
+                    title=tr(('Session','Réseau')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
                     title = tr(('Session','Joueurs','Options')[i])
                 else:
@@ -1059,6 +1070,8 @@ class App:
                 if self.model.data['adapter'] == 'l4d2-goldberg':
                     subtitle = (tr('Sans bordure et résolution automatiques · langue : fichiers du jeu requis') if self.tab==2
                                 else tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables'))
+                if self.model.data['adapter']=='nfsmw-lan':
+                    subtitle=tr('Expérimental · ports 9900–9903 · créer le salon J1 avant de rejoindre avec J2')
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
             rows = self.current_fields()
             offset = max(0, min(self.row, len(rows)-1) - 6)

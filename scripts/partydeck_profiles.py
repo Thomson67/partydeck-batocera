@@ -40,6 +40,9 @@ def defaults(rom):
     from partydeck_l4d2 import matches as matches_l4d2, defaults as l4d2_defaults
     if matches_l4d2(rom):
         data.update(adapter='l4d2-goldberg',l4d2=l4d2_defaults())
+    from partydeck_nfsmw import matches as matches_mw, defaults as mw_defaults
+    if matches_mw(rom):
+        data.update(adapter='nfsmw-lan',nfsmw=mw_defaults())
     return data
 
 
@@ -53,7 +56,7 @@ def validate(data, rom):
         raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError(tr("Option clavier comme joueur invalide."))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg"):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan"):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
@@ -67,6 +70,9 @@ def validate(data, rom):
     if data.get('adapter') == 'l4d2-goldberg':
         from partydeck_l4d2 import validate as validate_l4d2
         data['l4d2'] = validate_l4d2(data.get('l4d2'))
+    if data.get('adapter') == 'nfsmw-lan':
+        from partydeck_nfsmw import validate as validate_mw
+        data['nfsmw']=validate_mw(data.get('nfsmw'))
     return data
 
 

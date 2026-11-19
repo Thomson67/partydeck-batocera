@@ -33,6 +33,10 @@ for language,title in (('fr','RUNNER WINE'),('en','WINE RUNNER')):
     hint=lang.tr('Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.')
     assert ('original Windows' in hint) if language=='en' else ('d’origine' in hint)
 
+for language,label in (('fr','IP LAN du PC (auto : détection)'),('en','PC LAN IP (auto: detect)')):
+    lang.set_language(language)
+    assert fields(1,'nfsmw-lan')[0][1]==label
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);conf=root/'batocera.conf';es=root/'es_settings.cfg'
     env={'LANG':'fr_FR.UTF-8'}

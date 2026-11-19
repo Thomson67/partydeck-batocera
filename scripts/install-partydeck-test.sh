@@ -233,6 +233,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
     [[ -f $source_dir/partydeck_borderlands2.py ]] || die 'Module Borderlands 2 absent du paquet.'
     [[ -f $source_dir/partydeck_sm64coopdx.py && -f $source_dir/../templates/sm64coopdx-common.txt ]] || die 'Profil SM64CoopDX absent du paquet.'
+    [[ -f $source_dir/partydeck_nfsmw.py ]] || die 'Module Most Wanted absent du paquet.'
     [[ -f $source_dir/partydeck_l4d2.py ]] || die 'Module Left 4 Dead 2 absent du paquet.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
@@ -326,6 +327,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_borderlands2.py" "$base/partydeck_borderlands2.py"
     cp -- "$source_dir/partydeck_sm64coopdx.py" "$staging/partydeck_sm64coopdx.py"
     mv -fT -- "$staging/partydeck_sm64coopdx.py" "$base/partydeck_sm64coopdx.py"
+    cp -- "$source_dir/partydeck_nfsmw.py" "$staging/partydeck_nfsmw.py"
+    mv -fT -- "$staging/partydeck_nfsmw.py" "$base/partydeck_nfsmw.py"
     cp -- "$source_dir/partydeck_l4d2.py" "$staging/partydeck_l4d2.py"
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
     cp -- "$source_dir/partydeck_storage.py" "$staging/partydeck_storage.py"
