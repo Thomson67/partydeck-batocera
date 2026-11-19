@@ -595,7 +595,13 @@ def session_result(processes, states, wayland):
     statuses = [process.poll() for process in processes]
     wine = [read_wine_exit(path) for path in states]
     finished = [i for i,status in enumerate(statuses) if status is not None or (wayland and wine[i] is not None)]
-    if not finished or (not wayland and len(finished) != len(processes)):
+    failed = any((status is not None and status != 0) or
+                 (native is not None and native != 0) for status,native in zip(statuses,wine))
+    # A failed Xorg player must not strand ES behind a surviving compositor.
+    # Normal Xorg exits still wait for every player, as before.
+    if failed:
+        finished = [i for i,status in enumerate(statuses) if status is not None or wine[i] is not None]
+    if not finished or (not wayland and not failed and len(finished) != len(processes)):
         return None
     results = []
     for index in finished:

@@ -961,3 +961,13 @@ placement, then P1 receives focus. Focus is not continually taken during play.
 Gamescope standard input is detached from SSH; keyboard/controller input still
 comes through devices and windows. The observed Enter-to-unblock behavior has
 not been conclusively attributed to stdin, so this part needs machine testing.
+
+Après un échec Wine ou Gamescope, la session arrête désormais ses autres joueurs
+également sous Xorg, pour ne pas laisser ES attendre une instance survivante.
+Le code d'erreur réel reste transmis. La fermeture normale Xorg continue
+à attendre tous les joueurs. Cela ne corrige pas le plantage Vulkan lui-même.
+
+**English:** On Wine or Gamescope failure, Xorg sessions now stop their remaining
+owned players rather than leaving ES waiting for a survivor. The real failure
+code is retained. Normal Xorg exits still wait for all players. This does not
+fix the underlying Vulkan crash.

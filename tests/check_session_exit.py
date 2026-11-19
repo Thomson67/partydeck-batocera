@@ -30,6 +30,12 @@ with tempfile.TemporaryDirectory() as folder,contextlib.redirect_stdout(io.Strin
     state(states[0],0)
     assert coop.session_result(processes,states,True)==0  # Wine exited, SDL keeps running.
     assert coop.session_result(processes,states,False) is None  # Preserve Xorg lifetime.
+    processes[0].poll.return_value=-6
+    assert coop.session_result(processes,states,False)==134  # Abort survivor cleanup follows in finally.
+    processes[0].poll.return_value=None
+    state(states[0],7)
+    assert coop.session_result(processes,states,False)==7  # Native failure also cannot wait forever.
+    state(states[0],0)
     for native,outer,want in ((0,-11,0),(0,245,0),(0,139,0),(0,7,7),(8,0,8),(139,-11,139)):
         state(states[0],native);processes[0].poll.return_value=outer
         assert coop.session_result(processes,states,True)==want
