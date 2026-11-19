@@ -183,3 +183,13 @@ with tempfile.TemporaryDirectory() as folder:
     app.pg.quit()
 
 print('Langues : priorité Batocera/SSH, FR sinon EN, options de jeux, clavier, stockage et données conservées vérifiés.')
+
+# Global screen/GPU settings are translated without changing connector IDs.
+from partydeck_display import Output,output_label
+for language in ('fr','en'):
+    lang.set_language(language)
+    assert lang.tr('PARAMÈTRES')==('PARAMÈTRES' if language=='fr' else 'SETTINGS')
+    assert lang.tr('Écran des jeux')==('Écran des jeux' if language=='fr' else 'Game display')
+    assert lang.tr('GPU par défaut')==('GPU par défaut' if language=='fr' else 'Default GPU')
+    assert output_label([Output('DP-4',(1920,0,1920,1080))],'DP-4')=='DP-4 · 1920×1080 · 1920,0'
+    assert ('unavailable' if language=='en' else 'indisponible') in output_label([],'eDP-1')

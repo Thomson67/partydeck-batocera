@@ -62,6 +62,23 @@ def get_language():
 
 
 EN = {
+    'Réglages écran/GPU invalides.':'Invalid display/GPU settings.',
+    'Aucun écran actif détecté.':'No active display detected.',
+    'Automatique · écran actif':'Automatic · active display',
+    '{p0} · indisponible (repli automatique)':'{p0} · unavailable (automatic fallback)',
+    'Écran demandé : {p0} · zone active : {p1}':'Requested display: {p0} · active area: {p1}',
+    'Écran reconnecté : fenêtres replacées sur {p0}.':'Display reconnected: windows repositioned to {p0}.',
+    'PARAMÈTRES WINDOWS PARTY':'WINDOWS PARTY SETTINGS',
+    'Réglages globaux · enregistrés automatiquement':'Global settings · saved automatically',
+    'Écran des jeux':'Game display',
+    'GPU par défaut':'Default GPU',
+    'ACTUALISER LES ÉCRANS':'REFRESH DISPLAYS',
+    'Écran indisponible : repli sur un écran actif, choix conservé.':'Unavailable display: use an active display and retain your choice.',
+    'Reconnexion : placement des jeux réajusté automatiquement.':'Reconnection: game window placement adjusts automatically.',
+    'GPU appliqué au prochain lancement. Le GPU du jeu peut remplacer ce choix.':'GPU applies on next launch. A per-game GPU choice can override it.',
+    'GPU du jeu sur Automatique : utiliser ce réglage global.':'Per-game GPU set to Automatic: use this global setting.',
+    'PARAMÈTRES':'SETTINGS',
+    'Gauche / droite : choisir · réglages enregistrés automatiquement':'Left / right: choose · settings saved automatically',
     'LAN privé : commande cible absente.':'Private LAN: target command missing.',
     'LAN privé : choisissez de 2 à 4 joueurs.':'Private LAN: select 2 to 4 players.',
     'LAN privé : espace réseau hôte refusé.':'Private LAN: host network namespace refused.',

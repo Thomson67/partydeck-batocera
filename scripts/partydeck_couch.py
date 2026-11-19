@@ -25,6 +25,9 @@ from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_
 from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
                                snapshot as storage_snapshot, clean as clean_storage, prepare_launch, human)
 
+from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
+                               discover_outputs, output_choices, output_label)
+
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'tabs':'PgUp/PgDn'}
 
@@ -45,6 +48,8 @@ def context_hints(context, mode, has_tabs=True):
         return [('ok',tr('Confirmer')), ('back',tr('Annuler'))]
     if context == 'storage-error':
         return [('back',tr('Fermer'))]
+    if context == 'desktop':
+        return [('ok',tr('Choisir')), ('back',tr('Retour'))]
     if context == 'storage':
         return [('ok',tr('Choisir')), ('back',tr('Retour')), ('tabs',tr('Jeux par taille'))]
     if context == 'confirm':
@@ -507,6 +512,10 @@ class App:
         self.missing = None
         self.removal = None
         self.pending_common = None
+        self.desktop_open = False
+        self.desktop_row = 0
+        self.desktop_config = None
+        self.desktop_outputs = []
         self.storage_open = False
         self.storage_row = self.storage_page = 0
         self.storage_result = None
@@ -604,7 +613,50 @@ class App:
     def help_context(self):
         return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
                 'keyboard' if self.keyboard else 'browser' if self.browser is not None else
-                'storage' if self.storage_open else 'main')
+                'desktop' if self.desktop_open else 'storage' if self.storage_open else 'main')
+
+    def open_desktop(self):
+        try:
+            self.desktop_config=desktop_settings(self.model.base)
+            self.desktop_outputs=discover_outputs()
+            self.desktop_open=True
+            self.desktop_row=0
+        except (OSError,ValueError) as error:self.toast(str(error))
+
+    def desktop_action(self,action):
+        if action=='back':
+            self.desktop_open=False
+        elif action in ('up','down'):
+            self.desktop_row=(self.desktop_row+(1 if action=='down' else -1))%3
+        elif action in ('ok','left','right'):
+            if self.desktop_row==2:
+                self.desktop_outputs=discover_outputs()
+                return
+            key='output' if self.desktop_row==0 else 'gpu'
+            values=output_choices(self.desktop_outputs,self.desktop_config[key]) if key=='output' else ['auto','system','nvidia']
+            value=values[(values.index(self.desktop_config[key])+(-1 if action=='left' else 1))%len(values)]
+            candidate=dict(self.desktop_config,**{key:value})
+            try:
+                save_desktop_settings(self.model.base,candidate)
+                self.desktop_config=candidate
+            except (OSError,ValueError) as error:self.toast(str(error))
+
+    def draw_desktop(self):
+        self.text(tr('PARAMÈTRES WINDOWS PARTY'),416,161,28,width=960)
+        self.text(tr('Réglages globaux · enregistrés automatiquement'),418,215,20,width=950)
+        for index,title in enumerate((tr('Écran des jeux'),tr('GPU par défaut'),tr('ACTUALISER LES ÉCRANS'))):
+            y=285+index*105
+            focused=self.desktop_row==index
+            self.box((410,y-12,986,90),(38,64,86) if focused else (25,33,50),(90,210,229) if focused else None)
+            self.text(title,430,y,24,width=925)
+            if index<2:
+                value=(output_label(self.desktop_outputs,self.desktop_config['output']) if index==0
+                       else label_value('gpu',self.desktop_config['gpu']))
+                self.text('‹ '+value+' ›',445,y+39,20,(144,223,234),910)
+        self.text(tr('Écran indisponible : repli sur un écran actif, choix conservé.'),418,630,20,width=950)
+        self.text(tr('Reconnexion : placement des jeux réajusté automatiquement.'),418,672,20,width=950)
+        self.text(tr('GPU appliqué au prochain lancement. Le GPU du jeu peut remplacer ce choix.'),418,714,16,width=950)
+        self.text(tr('GPU du jeu sur Automatique : utiliser ce réglage global.'),418,750,16,width=950)
 
     def storage_job(self, task='scan'):
         if self.storage_future is not None:
@@ -905,6 +957,9 @@ class App:
             elif action == 'back':
                 self.modal = None
             return
+        if self.desktop_open:
+            self.desktop_action(action)
+            return
         if self.storage_open:
             self.storage_action(action)
             return
@@ -946,15 +1001,17 @@ class App:
             self.row, self.pane = 0, 'settings'
         elif self.pane == 'library':
             if action in ('up', 'down'):
-                index = (self.library + (1 if action == 'down' else -1)) % (len(self.model.rows)+1)
+                index = (self.library + (1 if action == 'down' else -1)) % (len(self.model.rows)+2)
                 def select():
                     self.library = index
                     if index < len(self.model.rows):
                         self.model.select(self.model.rows[index])
-                select() if index == len(self.model.rows) else self.switch(select)
+                select() if index >= len(self.model.rows) else self.switch(select)
             elif action in ('ok', 'right'):
                 if self.library == len(self.model.rows):
                     self.open_storage()
+                elif self.library == len(self.model.rows)+1:
+                    self.open_desktop()
                 elif isinstance(self.model.selected, CommonGame):
                     self.missing = self.model.selected
                 elif self.model.data:
@@ -1028,12 +1085,12 @@ class App:
                              (int(self.logo.get_width()*factor), int(self.logo.get_height()*factor))), (1110, 35))
         else:
             self.text(tr('CONFIGURATEUR'), 1100, 60, 20, (117, 213, 230), 280)
-        self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open else None)
+        self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open and not self.desktop_open else None)
         self.text(tr('BIBLIOTHÈQUE'), 46, 163, 20, (122, 209, 229))
         start_label = control_label('add', self.input_mode)
         self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 201, 16, (160, 174, 199))
-        offset = max(0, min(self.library, len(self.model.rows)-1) - 8)
-        for i, rom in enumerate(self.model.rows[offset:offset+10], offset):
+        offset = max(0, min(self.library, len(self.model.rows)-1) - 7)
+        for i, rom in enumerate(self.model.rows[offset:offset+9], offset):
             y = 246 + (i-offset)*50
             selected = self.model.selected == rom and self.library < len(self.model.rows)
             if selected:
@@ -1042,8 +1099,13 @@ class App:
         self.box((38,750,312,36), (35,75,94) if self.library == len(self.model.rows) else (29,39,55),
                  (72,202,222) if self.library == len(self.model.rows) else None)
         self.text(tr('STOCKAGE'),50,758,16,width=284)
-        self.box((386, 142, 1030, 652), (20, 25, 40), (76,197,219) if self.storage_open else None)
-        if self.storage_open:
+        selected=self.library==len(self.model.rows)+1
+        self.box((38,708,312,36),(35,75,94) if selected else (29,39,55),(72,202,222) if selected else None)
+        self.text(tr('PARAMÈTRES'),50,716,16,width=284)
+        self.box((386, 142, 1030, 652), (20, 25, 40), (76,197,219) if self.storage_open or self.desktop_open else None)
+        if self.desktop_open:
+            self.draw_desktop()
+        elif self.storage_open:
             self.draw_storage()
         elif self.model.data:
             self.text(self.model.rom.stem, 416, 161, 28, width=950)
@@ -1130,6 +1192,8 @@ class App:
             subtitle = ''
         elif context == 'browser':
             subtitle = navigation
+        elif context == 'desktop':
+            subtitle=tr('Gauche / droite : choisir · réglages enregistrés automatiquement')
         elif context == 'storage':
             subtitle = tr('Gauche / droite : ajuster · ') + control_label('ok', self.input_mode) + tr(' : saisir / exécuter · réglages enregistrés automatiquement')
         if context == 'keyboard':

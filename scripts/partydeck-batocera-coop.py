@@ -153,17 +153,23 @@ def layout(monitor, count, split):
     return rectangles
 
 
-def primary_monitor():
-    if shutil.which("xrandr"):
-        result = subprocess.run(["xrandr", "--listactivemonitors"], text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        pattern = r"^\s*\d+:\s+(\S+)\s+(\d+)/\d+x(\d+)/\d+([+-]\d+)([+-]\d+)"
-        monitors = re.findall(pattern, result.stdout, re.M)
-        if monitors:
-            _, width, height, x, y = next((m for m in monitors if "*" in m[0]), monitors[0])
-            return tuple(map(int, (x, y, width, height)))
-    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"]).split())
-    return 0, 0, width, height
+def primary_monitor(output='auto'):
+    from partydeck_display import discover_outputs,choose_output
+    return choose_output(discover_outputs(),output).rectangle
+
+
+def reposition_windows(classes,boxes):
+    complete=True
+    for window_class,rectangle in zip(classes,boxes):
+        window=top_window(window_class)
+        if not window:
+            complete=False
+            continue
+        try:
+            complete=place_window(window,rectangle) and complete
+        except (OSError,subprocess.SubprocessError):
+            complete=False
+    return complete
 
 
 class ClientMessage(C.Structure):
@@ -647,14 +653,16 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     for tool in ("batocera-wine", "xdotool", "mount"):
         if not shutil.which(tool):
             raise RuntimeError(f"Commande indisponible : {tool}")
+    from partydeck_display import settings as desktop_settings
+    desktop=desktop_settings(base)
     keyboard_player = True
-    gpu='auto'
+    gpu=desktop['gpu']
     if party:
         from partydeck_profiles import profile_path, read_profile
         if profile_path(base, original).exists():
             profile=read_profile(base, original)
             keyboard_player = profile.get("keyboard_player", True)
-            gpu=profile.get('gpu','auto')
+            if profile.get('gpu','auto')!='auto':gpu=profile['gpu']
     if gpu=='nvidia':
         for key in ('VK_DRIVER_FILES','VK_ICD_FILENAMES','DRI_PRIME','MESA_VK_DEVICE_SELECT'):
             os.environ.pop(key,None)
@@ -672,7 +680,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     # input exclusively. All-pad sessions use ordinary SDL window focus.
     shared_keyboard_mouse = not any(d.category in {KEYBOARDS, MICE}
                                     for devices in players for d in devices)
-    boxes = layout(primary_monitor(), len(players), split)
+    monitor=primary_monitor(desktop['output'])
+    boxes = layout(monitor, len(players), split)
+    print(tr('Écran demandé : {p0} · zone active : {p1}',p0=desktop['output'],p1=monitor),flush=True)
     print(f"Joueurs : {len(players)} | demande : {count} | entrées : {input_mode} | "
           f"partage : {split}", flush=True)
     if shared_keyboard_mouse:
@@ -756,10 +766,20 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 print(f"Fenêtre J{index + 1} non repérée : {window_classes[index]}", flush=True)
         if seen_windows:
             focus_window(seen_windows[min(seen_windows)])
+        next_output_check=time.monotonic()+2
         while True:
             result = session_result(processes,states,wayland)
             if result is not None:
                 return result
+            if time.monotonic()>=next_output_check:
+                next_output_check=time.monotonic()+2
+                try:
+                    current=primary_monitor(desktop['output'])
+                    if current!=monitor and reposition_windows(window_classes,layout(current,len(players),split)):
+                        monitor=current
+                        print(tr('Écran reconnecté : fenêtres replacées sur {p0}.',p0=current),flush=True)
+                except (OSError,RuntimeError,subprocess.SubprocessError):
+                    pass  # A dock can temporarily report no active outputs.
             time.sleep(0.1)
     except SessionStopped as stopped:
         print(tr('Fermeture de la session demandée (signal {p0}).',p0=stopped.args[0]),flush=True)

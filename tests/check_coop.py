@@ -103,7 +103,11 @@ for split, second_position, inputs, shared, party, virtual in [
             mock(coop, "PARTY_SAVES", new=base / "party-saves")
         mock(coop.shutil, "which", return_value="/path")
         mock(coop, "read_input_devices", return_value=inputs)
-        mock(coop, "primary_monitor", return_value=(0, 0, 1920, 1080))
+        monitor_call=mock(coop, "primary_monitor", return_value=(0, 0, 1920, 1080))
+        graphics_call=mock(coop, "graphics_environment", return_value={})
+        if party and not virtual:
+            from partydeck_display import save_settings as save_desktop
+            save_desktop(base,dict(gpu="system",output="DP-7"))
         mock(coop.subprocess, "run", return_value=Mock(returncode=0))
         mock(coop.signal, "signal")
         mock(coop, "stop_players")
@@ -120,6 +124,9 @@ for split, second_position, inputs, shared, party, virtual in [
             process.poll.side_effect = lambda: 0 if place.call_count==2 else None
         output = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
         assert coop.run_session(base, base, game, game, "auto", split, "auto", party=party) == 0
+        if party and not virtual:
+            assert graphics_call.call_args.args[1]=="system"
+            assert monitor_call.call_args.args==("DP-7",)
         assert [call.args[0] for call in windows.call_args_list] == classes
         assert [call.args[-1] for call in starts.call_args_list] == classes
         assert all(call.kwargs["shared_keyboard_mouse"] is (shared or virtual)
