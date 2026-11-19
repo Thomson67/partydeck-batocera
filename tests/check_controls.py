@@ -15,7 +15,7 @@ for player in ('j1','j2','j3','j4'):
   assert c.send_enter(player)
   commands=[call.args[0] for call in run.call_args_list[1:]]
   assert commands[0][:6]==['xdotool','key','--window','123','--delay','0']
-  assert commands[0].count('BackSpace')==64 and commands[0].count('Delete')==64
+  assert commands[0].count('BackSpace')==4 and commands[0].count('Delete')==4
   assert commands[1]==['xdotool','type','--window','123','--delay','0','--',player.upper()]
   assert commands[2]==['xdotool','key','--window','123','--delay','40','Return']
 # Never confirm when clearing or typing fails.

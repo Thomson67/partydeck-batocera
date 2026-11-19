@@ -29,10 +29,11 @@ def send_enter(player):
     # --window uses XSendEvent, not global XTEST/uinput. DISPLAY is the inner
     # Gamescope X server inherited by this Wine child, never the ES display.
     # The game's custom field need not implement Ctrl+A. Clear on both sides
-    # of the caret instead; enough for the full name field, without clipboard
-    # access or keyboard-layout-dependent punctuation.
+    # of the caret instead. The supplied placeholders are NOM / NAME (four
+    # characters); replacement IDs J1-J4 are shorter. Avoid a long queue of
+    # delete events after the field is already empty.
     commands=[(['xdotool','key','--window',ids[0],'--delay','0',
-                'End',*(['BackSpace']*64),*(['Delete']*64)],3),
+                'End',*(['BackSpace']*4),*(['Delete']*4)],3),
               (['xdotool','type','--window',ids[0],'--delay','0','--',player.upper()],2),
               (['xdotool','key','--window',ids[0],'--delay','40','Return'],2)]
     for command,timeout in commands:

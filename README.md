@@ -60,7 +60,7 @@ Les couches Vulkan 32/64 bits de la toolbox sont déclarées dans des manifestes
 propres à chaque joueur, également exposés au runtime UMU. Auto sans réglage
 de profil conserve le fonctionnement Windows/toolbox existant.
 
-Dans Most Wanted, **LB + RB** (PlayStation : **L1 + R1**) efface le champ actif,
+Dans Most Wanted, **LB + RB** (PlayStation : **L1 + R1**) efface le texte initial **NOM / NAME** du champ actif,
 saisit **J1**, **J2**, **J3** ou **J4** selon l’instance, puis valide avec **Entrée**.
 À utiliser dans le champ de nom de sauvegarde ou de serveur. Une seule séquence
 est envoyée jusqu’au relâchement ; ce raccourci est désactivable dans le profil
@@ -193,8 +193,8 @@ on the MangoHud layers available in Batocera.
 Toolbox 32/64-bit Vulkan layers use player-local manifests also exposed to UMU.
 Auto with no profile selection retains the existing Windows/toolbox behavior.
 
-For Most Wanted only, **LB + RB** (**L1 + R1** on PlayStation) clears the active
-name field, types **J1**, **J2**, **J3** or **J4** for that instance, then sends
+For Most Wanted only, **LB + RB** (**L1 + R1** on PlayStation) clears the initial
+**NOM / NAME** text from the active name field, types **J1**, **J2**, **J3** or **J4** for that instance, then sends
 **Enter**. Use it with the save/server name field active. One sequence is sent
 per chord press; the shortcut can be disabled in the profile.
 Actual confirmation inside the game still needs testing.
