@@ -122,7 +122,6 @@ EN = {
     'Réglages Most Wanted LAN invalides.':'Invalid Most Wanted LAN settings.',
     'Adresse LAN Most Wanted invalide.':'Invalid Most Wanted LAN address.',
     'IP LAN introuvable ; renseignez l’adresse du PC dans Réseau Most Wanted.':'LAN IP not found; enter the PC address in Most Wanted Network settings.',
-    'Most Wanted 2005 non confirmé : NFSMW_icon.ico absent.':'Most Wanted 2005 not confirmed: NFSMW_icon.ico is missing.',
     'Most Wanted : server.cfg ou server.dll absent.':'Most Wanted: server.cfg or server.dll is missing.',
     'Numéro de joueur Most Wanted invalide.':'Invalid Most Wanted player number.',
     'Dimensions Most Wanted invalides.':'Invalid Most Wanted dimensions.',

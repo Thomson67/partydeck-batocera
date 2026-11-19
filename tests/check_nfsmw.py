@@ -38,7 +38,9 @@ with tempfile.TemporaryDirectory() as temp:
     solo=b'# ORIGINAL\r\nLAN_THROTTLE=30\r\nACCOUNT=1\r\nADDR=%%bind("159.153.253.82")\r\n'
     for index in range(4):
         player=base/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game';scripts=game/'scripts';scripts.mkdir(parents=True)
-        (game/'NFSMW_icon.ico').write_bytes(b'ICON');(game/'server.cfg').write_bytes(solo);(game/'server.dll').write_bytes(b'PRIVATE DLL')
+        # Optional distribution icons must not prevent a selected MW profile
+        # from starting; the actual LAN files are still required.
+        (game/'server.cfg').write_bytes(solo);(game/'server.dll').write_bytes(b'PRIVATE DLL')
         extra=scripts/'NFSMWExtraOptionsSettings.ini';extra.write_text('[Misc]\nWindowedMode=0\nOther=keep\n')
         wide=scripts/'NFSMostWanted.WidescreenFix.ini';wide.write_text('[MAIN]\nResX=1920\nResY=1080\nFixHUD=1\n')
         data=dict(player=str(player),index=index,settings=mw.defaults(),host='192.168.1.20',width=1920,height=540)
@@ -64,10 +66,10 @@ with tempfile.TemporaryDirectory() as temp:
         env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player))
         done=subprocess.run([sys.executable,mw.__file__,str(payload),str(game),str(prefix)],env=env,capture_output=True,text=True)
         assert done.returncode==0 and mw.finish_launch(result,0)==0
-        (game/'NFSMW_icon.ico').unlink()
+        (game/'server.dll').unlink()
         done=subprocess.run([sys.executable,mw.__file__,str(payload),str(game),str(prefix)],env=env,capture_output=True,text=True)
         assert done.returncode==1 and mw.finish_launch(result,0)==1
-        (game/'NFSMW_icon.ico').write_bytes(b'ICON')
+        (game/'server.dll').write_bytes(b'PRIVATE DLL')
         # A game config symlink outside the private player area is never edited.
         cfg=game/'server.cfg';cfg.unlink();external=root/f'solo-{index}.cfg';external.write_bytes(solo);cfg.symlink_to(external)
         try:mw.apply_config(game,prefix,data,private_binds=());raise AssertionError('outside edit')

@@ -14,9 +14,9 @@ for player in ('j1','j2','j3','j4'):
  with patch.object(c.subprocess,'run',side_effect=[Mock(returncode=0,stdout='123\n'),*[Mock(returncode=0)]*3]) as run:
   assert c.send_enter(player)
   commands=[call.args[0] for call in run.call_args_list[1:]]
-  assert commands[0][:6]==['xdotool','key','--window','123','--delay','10']
+  assert commands[0][:6]==['xdotool','key','--window','123','--delay','2']
   assert commands[0].count('BackSpace')==64 and commands[0].count('Delete')==64
-  assert commands[1]==['xdotool','type','--window','123','--delay','40','--',player.upper()]
+  assert commands[1]==['xdotool','type','--window','123','--delay','20','--',player.upper()]
   assert commands[2]==['xdotool','key','--window','123','--delay','40','Return']
 # Never confirm when clearing or typing fails.
 for code in (1,2):

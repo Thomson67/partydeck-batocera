@@ -52,10 +52,8 @@ def apply_config(directory,prefix,payload,private_binds=PRIVATE_BINDS):
     directory=safe_path(directory,allowed)
     cfg=safe_path(child(directory,'server.cfg'),allowed)
     dll=safe_path(child(directory,'server.dll'),allowed)
-    # speed.exe is also used by other NFS titles; this profile is opt-in for
-    # ambiguous titles and requires the known Most Wanted marker.
-    if not child(directory,'NFSMW_icon.ico').is_file():
-        raise ValueError(tr('Most Wanted 2005 non confirmé : NFSMW_icon.ico absent.'))
+    # The Most Wanted adapter is selected by the profile, not by an optional
+    # repack icon. Only require the files used by the LAN adapter itself.
     if not cfg.is_file() or not dll.is_file():raise ValueError(tr('Most Wanted : server.cfg ou server.dll absent.'))
     options=validate(payload['settings']);index=payload['index']
     if type(index) is not int or index not in range(4):raise ValueError(tr('Numéro de joueur Most Wanted invalide.'))
