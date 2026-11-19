@@ -138,3 +138,30 @@ with patch.object(coop.subprocess,'run') as run:
     coop.focus_window('810')
     assert run.call_args.args[0]==['xdotool','windowmap','810','windowraise','810','windowfocus','810']
 print("Attribution auto, classes J1/J2, placement, GPU hybride, focus et entrée standard détachée vérifiés.")
+
+# Match the working native 32/64-bit Vulkan driver choice for Wine, while
+# leaving Gamescope's PRIME environment and explicit user selectors intact.
+with tempfile.TemporaryDirectory() as temp:
+    root=Path(temp);icds=root/'icd.d';icds.mkdir()
+    assert coop.wine_graphics_environment({}, {'__NV_PRIME_RENDER_OFFLOAD':'1'},icds) is None
+    for name in ('nvidia_icd.x86_64.json','nvidia_icd.i686.json','intel_icd.json'):
+        (icds/name).write_text('{}')
+    initial={'PATH':'/usr/bin','LD_LIBRARY_PATH':'native-libs','VK_DRIVER_FILES':'old.json',
+             'DRI_PRIME':'0','__NV_PRIME_RENDER_OFFLOAD':'1','__VK_LAYER_NV_optimus':'NVIDIA_only'}
+    selected=coop.graphics_environment({},'nvidia')
+    native=coop.wine_graphics_environment(initial,selected,icds)
+    assert native['VK_ICD_FILENAMES']==':'.join(map(str,sorted(icds.glob('*nvidia*.json'))))
+    assert native['LD_LIBRARY_PATH']=='native-libs' and native['PATH']=='/usr/bin'
+    assert '__NV_PRIME_RENDER_OFFLOAD' not in native and '__VK_LAYER_NV_optimus' not in native
+    assert 'VK_DRIVER_FILES' not in native and 'DRI_PRIME' not in native
+    assert '__NV_PRIME_RENDER_OFFLOAD' in initial  # Input and compositor choice unchanged.
+    assert coop.wine_graphics_environment(initial,{},icds) is None
+    with patch.dict(os.environ,selected,clear=True),patch.object(coop,'player_paths',return_value=[]),patch.object(coop,'UMU_HOME',root/'absent'):
+        args=coop.sandbox_arguments(root/'j1',[],wine_graphics=native)
+        assert args[args.index('VK_ICD_FILENAMES')-1]=='--setenv'
+        assert args[args.index('__NV_PRIME_RENDER_OFFLOAD')-1]=='--unsetenv'
+    with patch.dict(os.environ,selected,clear=True),patch.object(coop,'sandbox_arguments',return_value=[]) as sandbox,patch.object(coop.subprocess,'Popen') as launch:
+        coop.start_player(root,root/'j1',root/'Game.wine',root/'Game.wine',[],(0,0,1920,540),'own-j1',wine_graphics=native)
+        assert sandbox.call_args.kwargs['wine_graphics']==native
+        assert launch.call_args.kwargs['env']['__NV_PRIME_RENDER_OFFLOAD']=='1'
+print('Wine : ICD NVIDIA 32/64 bits, PRIME réservé au compositeur, environnement natif et repli sans manifeste vérifiés.')

@@ -79,6 +79,25 @@ def graphics_environment(environment,mode='auto'):
                 __GLX_VENDOR_LIBRARY_NAME='nvidia',VK_LOADER_DRIVERS_SELECT='*nvidia*')
 
 
+def wine_graphics_environment(environment,selected,icd_dir=Path('/usr/share/vulkan/icd.d')):
+    # PRIME selects Gamescope's renderer, but must not be imposed again on its
+    # nested Wine client. Select Vulkan's NVIDIA ICDs directly, including the
+    # 32-bit manifest used by games such as Most Wanted. Keep native paths.
+    if not selected:
+        return None
+    manifests=sorted(path for path in icd_dir.glob('*nvidia*.json') if path.is_file())
+    if not manifests:
+        return None  # Keep the existing path when this distribution differs.
+    result={key:environment[key] for key in NATIVE_GRAPHICS_ENV if key in environment}
+    for key in ('__NV_PRIME_RENDER_OFFLOAD','__VK_LAYER_NV_optimus',
+                'VK_LOADER_DRIVERS_SELECT','VK_DRIVER_FILES','DRI_PRIME','MESA_VK_DEVICE_SELECT'):
+        result.pop(key,None)
+    result['VK_ICD_FILENAMES']=':'.join(map(str,manifests))
+    # Preserve the explicit GLX vendor for OpenGL games, without PRIME offload.
+    result['__GLX_VENDOR_LIBRARY_NAME']='nvidia'
+    return result
+
+
 @dataclass(frozen=True)
 class Device:
     node: Path
@@ -357,7 +376,7 @@ def dbus_socket_mounts(address):
             yield "--ro-bind", str(path), str(path)
 
 
-def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=None):
+def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=None, wine_graphics=None):
     args = ["--die-with-parent", "--unshare-pid", "--ro-bind", "/", "/",
             "--proc", "/proc", "--dev-bind", "/dev", "/dev",
             *MOUNT_CAPS,
@@ -370,9 +389,10 @@ def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=N
     if saves is not None:
         saves.mkdir(parents=True, exist_ok=True)
         args.extend(["--bind", str(saves), str(saves)])
+    graphics = os.environ if wine_graphics is None else wine_graphics
     for key in NATIVE_GRAPHICS_ENV:
-        if key in os.environ:
-            args.extend(["--setenv", key, os.environ[key]])
+        if key in graphics:
+            args.extend(["--setenv", key, graphics[key]])
         else:
             args.extend(["--unsetenv", key])
     for item in dbus_socket_mounts(os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")):
@@ -496,7 +516,7 @@ def _run_wine(original, target, player, saves=None):
 
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
-                 shared_keyboard_mouse=True, saves=None, exit_state=None):
+                 shared_keyboard_mouse=True, saves=None, exit_state=None, wine_graphics=None):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -515,7 +535,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     helper = str(Path(__file__).resolve())
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"', "sh",
                  sys.executable, helper, "_sandbox", os.environ.get("DISPLAY", ""),
-                 *bubblewrap_command(app), *sandbox_arguments(player, devices, saves=saves),
+                 *bubblewrap_command(app), *sandbox_arguments(player, devices, saves=saves, wine_graphics=wine_graphics),
                  "--", sys.executable, helper, "_wine",
                  str(original), str(target), str(player)])
     if saves is not None:
@@ -635,8 +655,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         for key in ('VK_DRIVER_FILES','VK_ICD_FILENAMES','DRI_PRIME','MESA_VK_DEVICE_SELECT'):
             os.environ.pop(key,None)
     graphics=graphics_environment(os.environ,gpu)
+    wine_graphics=wine_graphics_environment(os.environ,graphics)
     if graphics:
         os.environ.update(graphics)
+        if wine_graphics is not None:
+            print("Wine VK_ICD_FILENAMES="+wine_graphics["VK_ICD_FILENAMES"],flush=True)
         print(tr('GPU hybride : rendu NVIDIA demandé pour Gamescope et Wine.'),flush=True)
     if keyboard_player:
         players = assign_players(read_input_devices(), count, input_mode)
@@ -674,7 +697,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             state = player/f'session-{uuid.uuid4().hex}.json'
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
-                                          shared_keyboard_mouse=shared_keyboard_mouse, saves=saves,exit_state=state))
+                                          shared_keyboard_mouse=shared_keyboard_mouse, saves=saves,exit_state=state,wine_graphics=wine_graphics))
             states.append(state)
         pending = dict(enumerate(processes))
         seen_windows = {}
