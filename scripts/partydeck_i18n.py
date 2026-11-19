@@ -62,6 +62,10 @@ def get_language():
 
 
 EN = {
+    'Contrôles virtuels toolbox : un autre service est actif ; session conservée.':'Toolbox virtual controls: another watcher is active; existing session preserved.',
+    'Contrôles virtuels toolbox indisponibles ; consulter le diagnostic toolbox.':'Toolbox virtual controls unavailable; check the toolbox diagnostic.',
+    'Contrôles virtuels toolbox : service démarré ; journal {p0}.':'Toolbox virtual controls: watcher started; log {p0}.',
+    'Contrôles virtuels toolbox : {p0}':'Toolbox virtual controls: {p0}',
     'GPU de rendu':'Rendering GPU',
     'Configuration système':'System configuration',
     'Choix du GPU invalide.':'Invalid GPU selection.',

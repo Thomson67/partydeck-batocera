@@ -971,3 +971,58 @@ Le code d'erreur réel reste transmis. La fermeture normale Xorg continue
 owned players rather than leaving ES waiting for a survivor. The real failure
 code is retained. Normal Xorg exits still wait for all players. This does not
 fix the underlying Vulkan crash.
+
+## Clavier et souris virtuels Ultimate Wine Toolbox (test)
+
+Windows Party reprend automatiquement l'activation du **clavier virtuel** et de
+la **souris virtuelle** définie dans la toolbox ou dans les options ES du jeu
+Windows d'origine. Activez ces fonctions pour la ROM dans le système **Windows**,
+puis lancez son entrée Windows Party. La toolbox avec ses contrôles virtuels doit
+être déjà installée ; Windows Party ne télécharge ni ne remplace ses composants.
+Cette étape concerne les contrôles virtuels, pas les autres hooks graphiques UWT
+ni le lancement automatique des profils AntiMicroX.
+
+- **HK + Select** : afficher/masquer le clavier virtuel.
+- **HK + L3** : activer/désactiver la souris virtuelle.
+- Le raccourci cible la fenêtre du joueur auquel cette manette est attribuée.
+  Un seul panneau est utilisé à la fois. Fermez celui du premier joueur avant
+  de l'ouvrir pour un autre joueur.
+- La manette qui utilise le panneau est capturée ; les autres restent disponibles
+  pour leurs jeux. Le clavier et la souris physiques gardent leur attribution.
+- **HK + Start** avec les contrôles virtuels ouverts demande la fermeture de la
+  session PartyDeck, sans appeler un arrêt global de tous les jeux Wine.
+
+Un service hôte unique réutilise l'interface et l'injection uinput de la toolbox.
+Les fenêtres cibles doivent appartenir aux groupes de processus de la session.
+Le service utilise des fichiers de cycle de vie privés et ne remplace pas un
+service solo déjà actif. Ses verrous et fichiers temporaires sont nettoyés à la
+sortie. Le journal du dernier essai remplace le précédent :
+`/userdata/system/partydeck-test/logs/virtual-input.log`.
+Les chemins ROM et réglages du jeu Windows sont conservés ; le watcher suit le
+superviseur PartyDeck, y compris lors d'un lancement direct depuis SSH.
+
+Lorsque ces fonctions sont activées, les backends SDL de tous les joueurs
+acceptent les événements clavier/souris du bureau pour recevoir les événements
+virtuels. Les périphériques physiques attribués restent isolés comme avant.
+Les tests automatisés couvrent le routage, la capture limitée au joueur, les
+réglages hérités et l'arrêt du service. L'injection réelle et l'affichage GTK
+restent à valider sur Batocera, sous Xorg et Wayland.
+
+**English:** Windows Party automatically inherits virtual keyboard/mouse
+activation from the toolbox and the original Windows game's ES options. Enable
+these features for the original ROM in Windows, then launch its Windows Party
+entry. UWT virtual controls must already be installed. Other UWT graphics hooks
+and automatic AntiMicroX mappings are not part of this adapter.
+HK+Select toggles the keyboard; HK+L3 toggles the mouse. The initiating
+controller targets its assigned player's window. Only that controller is
+captured; other players keep playing. Close the current panel before opening
+it for another player. HK+Start while captured stops the owned PartyDeck
+session, never all Wine games. One host watcher reuses UWT UI/uinput, accepts
+only session-owned window process groups and uses private lifecycle files.
+It does not replace an active solo watcher. Configuration and ROM files are
+unchanged. The supervisor owns cleanup, including direct SSH launches. The
+latest diagnostic is logs/virtual-input.log, overwritten on the next launch.
+SDL keyboard/mouse handling is enabled for all players when virtual input is
+active; assigned physical devices keep their existing isolation. Automated
+checks cover routing, ownership, settings and cleanup. Actual GTK/uinput behavior
+still needs Batocera Xorg and Wayland testing.

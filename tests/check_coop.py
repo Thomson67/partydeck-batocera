@@ -62,12 +62,13 @@ with tempfile.TemporaryDirectory() as temp, patch.object(coop, "sandbox_argument
     assert "--grab" in exclusive
     assert "--libinput-hold-dev=/dev/input/event2,/dev/input/event3," in exclusive
 
-for split, second_position, inputs, shared, party in [
-    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, False),
-    ("vertical", (960, 0, 960, 1080), [pad, keyboard, mouse], False, False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another], True, False),
-    ("vertical", (960, 0, 960, 1080), [pad, another], True, False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True),
+for split, second_position, inputs, shared, party, virtual in [
+    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, False,False),
+    ("vertical", (960, 0, 960, 1080), [pad, keyboard, mouse], False, False,False),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, False,False),
+    ("vertical", (960, 0, 960, 1080), [pad, another], True, False,False),
+    ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True,False),
+    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, True,True),
 ]:
     with tempfile.TemporaryDirectory() as temp, contextlib.ExitStack() as stack:
         def mock(obj, attr, **kwargs):
@@ -76,7 +77,7 @@ for split, second_position, inputs, shared, party in [
         game = base / "Game.wsquashfs"
         if party:
             profile = defaults(game)
-            profile['keyboard_player'] = False
+            profile['keyboard_player'] = virtual
             save_profile(base, game, profile)
             mock(coop, "PARTY_SAVES", new=base / "party-saves")
         mock(coop.shutil, "which", return_value="/path")
@@ -85,6 +86,9 @@ for split, second_position, inputs, shared, party in [
         mock(coop.subprocess, "run", return_value=Mock(returncode=0))
         mock(coop.signal, "signal")
         mock(coop, "stop_players")
+        import partydeck_virtual_input as virtual_module
+        mock(virtual_module,'probe',return_value=virtual)
+        watcher=mock(virtual_module,'Watcher')
         processes = [Mock(pid=123, **{"poll.return_value": None, "wait.return_value": 0}),
                      Mock(pid=456, **{"poll.return_value": None, "wait.return_value": 0})]
         starts = mock(coop, "start_player", side_effect=processes)
@@ -97,10 +101,14 @@ for split, second_position, inputs, shared, party in [
         assert coop.run_session(base, base, game, game, "auto", split, "auto", party=party) == 0
         assert [call.args[0] for call in windows.call_args_list] == classes
         assert [call.args[-1] for call in starts.call_args_list] == classes
-        assert all(call.kwargs["shared_keyboard_mouse"] is shared
+        assert all(call.kwargs["shared_keyboard_mouse"] is (shared or virtual)
                    for call in starts.call_args_list)
-        if party:
+        if party and not virtual:
             assert all(d.category == coop.GAMEPADS for call in starts.call_args_list for d in call.args[4])
+        if virtual:
+            watcher.return_value.start.assert_called_once()
+            watcher.return_value.close.assert_called_once()
+            assert starts.call_args_list[1].args[4]==[keyboard,mouse]
         assert place.call_args_list[1].args == ("811", second_position)
         assert "Joueurs : 2" in output.getvalue() and "Fenêtre J2 placée : 811" in output.getvalue()
 with tempfile.TemporaryDirectory() as temp:

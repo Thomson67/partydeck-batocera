@@ -659,6 +659,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
           f"partage : {split}", flush=True)
     if shared_keyboard_mouse:
         print("Clavier et souris disponibles sur la fenêtre sélectionnée.", flush=True)
+    from partydeck_virtual_input import probe as virtual_input_probe, Watcher
+    virtual_input=party and virtual_input_probe(original)
     probe = subprocess.run([*bubblewrap_command(app), *MOUNT_CAPS,
                             "--ro-bind", "/", "/", "--unshare-pid", "--proc", "/proc",
                             "--", "/bin/true"])
@@ -668,6 +670,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     game_id = hashlib.sha256(os.fsencode(original)).hexdigest()[:16]
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
     processes, states = [], []
+    virtual_watcher=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
@@ -680,8 +683,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             state = player/f'session-{uuid.uuid4().hex}.json'
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
-                                          shared_keyboard_mouse=shared_keyboard_mouse, saves=saves,exit_state=state))
+                                          shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state))
             states.append(state)
+        if virtual_input:
+            virtual_watcher=Watcher(base,original,processes,players,window_classes)
+            virtual_watcher.start()
         pending = dict(enumerate(processes))
         seen_windows = {}
         next_attempt = dict.fromkeys(pending, 0)
@@ -733,7 +739,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         for signum in SIGNALS:
             signal.signal(signum, signal.SIG_IGN)
         try:
-            stop_players(processes)
+            try:
+                if virtual_watcher is not None:virtual_watcher.close()
+            finally:stop_players(processes)
         finally:
             for path in states:
                 path.unlink(missing_ok=True)

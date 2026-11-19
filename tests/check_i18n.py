@@ -42,6 +42,10 @@ for language,title,choice in (('fr','GPU de rendu','Configuration système'),('e
     assert next(label for key,label,_ in fields(0) if key=='gpu')==title
     assert label_value('gpu','system')==choice
 
+for language,prefix in (('fr','Contrôles virtuels toolbox'),('en','Toolbox virtual controls')):
+    lang.set_language(language)
+    assert lang.tr('Contrôles virtuels toolbox : {p0}',p0='test').startswith(prefix)
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);conf=root/'batocera.conf';es=root/'es_settings.cfg'
     env={'LANG':'fr_FR.UTF-8'}

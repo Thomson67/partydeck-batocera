@@ -237,6 +237,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_l4d2.py ]] || die 'Module Left 4 Dead 2 absent du paquet.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
+    [[ -f $source_dir/partydeck_virtual_input.py ]] || die 'Module contrôles virtuels absent du paquet.'
     [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py && -f $source_dir/partydeck_theme.py && -f $source_dir/../assets/windows-party.png && -f $source_dir/../templates/soh-common.json ]] ||
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
 fi
@@ -335,6 +336,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_storage.py" "$base/partydeck_storage.py"
     cp -- "$source_dir/partydeck_catalog.py" "$staging/partydeck_catalog.py"
     mv -fT -- "$staging/partydeck_catalog.py" "$base/partydeck_catalog.py"
+    cp -- "$source_dir/partydeck_virtual_input.py" "$staging/partydeck_virtual_input.py"
+    mv -fT -- "$staging/partydeck_virtual_input.py" "$base/partydeck_virtual_input.py"
     mv -fT -- "$staging/partydeck_couch.py" "$base/partydeck_couch.py"
     mkdir -p -- "$base/assets" "$base/templates"
     cp -- "$source_dir/../assets/windows-party.png" "$staging/windows-party.png"
