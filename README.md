@@ -54,6 +54,11 @@ uniquement l’accès aux manettes qui lui sont attribuées.
 réglage Windows/toolbox ; un choix explicite s’applique au jeu de chaque joueur.
 Le runtime MangoHud de la toolbox est réutilisé s’il est installé ; sans lui,
 l’activation Vulkan dépend des couches MangoHud déjà disponibles sur Batocera.
+**Profil MangoHud** propose **Standard** (défaut en activation explicite),
+**Minimal** (FPS) et **Détaillé** (CPU/GPU, températures, RAM/VRAM et frametimes).
+Les couches Vulkan 32/64 bits de la toolbox sont déclarées dans des manifestes
+propres à chaque joueur, également exposés au runtime UMU. Auto sans réglage
+de profil conserve le fonctionnement Windows/toolbox existant.
 
 Dans Most Wanted, **LB + RB** (PlayStation : **L1 + R1**) envoie **Entrée** à la
 fenêtre du joueur pour valider les noms de sauvegarde ou de serveur. La pression
@@ -182,6 +187,10 @@ retains access only to its assigned controllers.
 Windows/toolbox setting; explicit choices apply to each player's game. The
 installed UWT MangoHud runtime is reused. Without it, Vulkan support depends
 on the MangoHud layers available in Batocera.
+**MangoHud profile** offers **Standard** (default when explicitly enabled),
+**Minimal** (FPS) and **Detailed** (CPU/GPU, temperatures, RAM/VRAM, frametimes).
+Toolbox 32/64-bit Vulkan layers use player-local manifests also exposed to UMU.
+Auto with no profile selection retains the existing Windows/toolbox behavior.
 
 For Most Wanted only, **LB + RB** (**L1 + R1** on PlayStation) sends **Enter**
 directly to the corresponding player's game window, once per chord press.

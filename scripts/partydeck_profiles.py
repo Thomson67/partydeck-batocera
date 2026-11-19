@@ -312,6 +312,10 @@ def install_runner_editor(config_dir):
         description=tr('Afficher MangoHud dans chaque instance. Auto : conserver le réglage Windows/toolbox.'))
     ET.SubElement(feature,'choice',name=tr('Désactivé'),value='0')
     ET.SubElement(feature,'choice',name=tr('Activé'),value='1')
+    feature=ET.SubElement(system,'feature',name=tr('Profil MangoHud'),value='mangohud_profile',
+        description=tr('Standard par défaut lorsque MangoHud est activé dans Windows Party.'))
+    for value,label in (('default','Standard'),('minimal','Minimal'),('detailed','Détaillé')):
+        ET.SubElement(feature,'choice',name=tr(label),value=value)
     ET.indent(root,space='  ')
     atomic_write(path,ET.tostring(root,encoding='unicode')+'\n',0o644)
     return path

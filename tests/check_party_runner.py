@@ -42,6 +42,9 @@ with tempfile.TemporaryDirectory() as temp:
         hidraw=tree.find('./emulator/systems/system/feature[@value="enable_hidraw"]')
         assert hidraw.get('name')==('ACTIVER HIDRAW' if locale=='fr' else 'ENABLE HIDRAW')
         assert [c.get('value') for c in hidraw.findall('choice')]==['0','1']
+        hud=tree.find('./emulator/systems/system/feature[@value="mangohud_profile"]')
+        assert [c.get('value') for c in hud.findall('choice')]==['default','minimal','detailed']
+        assert hud.get('name')==('Profil MangoHud' if locale=='fr' else 'MangoHud profile')
     path.write_text('USER CONFIG')
     try:p.install_runner_editor(root);raise AssertionError('personal features replaced')
     except ValueError:pass
