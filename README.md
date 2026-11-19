@@ -14,6 +14,10 @@ attribués à chaque joueur et des fenêtres disposées en écran partagé.
 Le lancement repose sur le Gamescope de PartyDeck et sur Wine/les runners de
 Batocera. Le dépôt ne distribue ni jeux, ni DLLs de jeux, ni sauvegardes Nucleus.
 
+Profil expérimental [Hollow Knight / HKMP](docs/HOLLOW_KNIGHT_HKMP.md) : adaptation
+de l'écran, serveur J1 et connexion automatiques après chargement d'une partie,
+pseudos et options coop, activation privée d'ESoulLink et GhostHunter déjà installés.
+
 ## Installation
 
 La branche de développement courante est `feature/gamepad-configurator`.

@@ -194,3 +194,12 @@ for language in ('fr','en'):
     assert lang.tr('GPU par défaut')==('GPU par défaut' if language=='fr' else 'Default GPU')
     assert output_label([Output('DP-4',(1920,0,1920,1080))],'DP-4')=='DP-4 · 1920×1080 · 1920,0'
     assert ('unavailable' if language=='en' else 'indisponible') in output_label([],'eDP-1')
+
+# Hollow Knight network/co-op controls and addon identifiers are bilingual.
+for language,title,coop in (('fr','Héberger et rejoindre automatiquement','PV partagés des ennemis · ESoulLink'),('en','Host and join automatically','Shared enemy HP · ESoulLink')):
+    lang.set_language(language)
+    assert fields(1,'hollowknight-hkmp')[0][1]==title
+    assert fields(2,'hollowknight-hkmp')[-2][1]==coop
+    assert label_value('hkmp.enemy_health','keep')==('Conserver' if language=='fr' else 'Keep current')
+    assert label_value('hkmp.enemy_ghosts','on')==('Activé' if language=='fr' else 'Enabled')
+    assert lang.tr('Hollow Knight · coop HKMP')==('Hollow Knight · coop HKMP' if language=='fr' else 'Hollow Knight · HKMP co-op')
