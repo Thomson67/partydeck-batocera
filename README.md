@@ -50,6 +50,15 @@ celui du jeu Windows d’origine.
 L’option **Activer HIDRAW**, également disponible par jeu, propose Auto / Activé /
 Désactivé. Auto hérite du réglage Windows d’origine. Chaque instance conserve
 uniquement l’accès aux manettes qui lui sont attribuées.
+**MangoHud** dispose du même choix Auto / Activé / Désactivé. Auto conserve le
+réglage Windows/toolbox ; un choix explicite s’applique au jeu de chaque joueur.
+Le runtime MangoHud de la toolbox est réutilisé s’il est installé ; sans lui,
+l’activation Vulkan dépend des couches MangoHud déjà disponibles sur Batocera.
+
+Dans Most Wanted, **LB + RB** (PlayStation : **L1 + R1**) envoie **Entrée** à la
+fenêtre du joueur pour valider les noms de sauvegarde ou de serveur. La pression
+n’est envoyée qu’une fois jusqu’au relâchement ; ce raccourci est désactivable
+dans les réglages du profil Most Wanted. Validation dans le jeu encore à tester.
 
 **Paramètres**, en bas de la bibliothèque, propose le choix global de l’écran et
 du GPU. Le GPU du jeu sur Automatique hérite de ce choix. Un écran indisponible
@@ -169,6 +178,15 @@ window placement on Xorg/Wayland. Game ROMs and scraped media are reused.
 ES system and per-game options include **Enable HIDRAW** (Auto / Enabled /
 Disabled). Auto inherits the original Windows game's setting. Each instance
 retains access only to its assigned controllers.
+**MangoHud** has the same Auto / Enabled / Disabled choices. Auto retains the
+Windows/toolbox setting; explicit choices apply to each player's game. The
+installed UWT MangoHud runtime is reused. Without it, Vulkan support depends
+on the MangoHud layers available in Batocera.
+
+For Most Wanted only, **LB + RB** (**L1 + R1** on PlayStation) sends **Enter**
+directly to the corresponding player's game window, once per chord press.
+This helps confirm save/server names and can be disabled in the profile.
+Actual confirmation inside the game still needs testing.
 
 Install with the command above. The canonical entry point is
 `/userdata/system/windows-party/windows-party`. Open **Configure Windows Party**

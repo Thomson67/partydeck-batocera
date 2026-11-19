@@ -487,6 +487,8 @@ def _run_wine(original, target, player, saves=None):
     if saves is not None:
         from partydeck_profiles import install_party_runner_hook
         install_party_runner_hook(original,player)
+        from partydeck_mangohud import install_hook as install_mangohud
+        install_mangohud(original,player)
         from partydeck_anchor import install_hook
         install_hook(Path(__file__).resolve().parent, original, player)
         from partydeck_borderlands2 import install_hook as install_bl2
@@ -501,8 +503,16 @@ def _run_wine(original, target, player, saves=None):
     # All UMU distributions receive cheap COW views: native Wine resolves the
     # selected runner itself, including per-ROM and filename overrides.
     from partydeck_umu import runner_views,pressure_vessel_environment
+    from partydeck_controls import Confirmation
+    confirm=False
+    if saves is not None:
+        from partydeck_profiles import profile_path,read_profile
+        base=Path(__file__).resolve().parent
+        if profile_path(base,original).exists():
+            profile=read_profile(base,original)
+            confirm=profile.get('adapter')=='nfsmw-lan' and profile['nfsmw']['controller_enter']
     try:
-        with runner_views(player) as views:
+        with runner_views(player) as views,Confirmation(confirm):
             environment={'env':pressure_vessel_environment(views)} if views else {}
             status = subprocess.run(["batocera-wine", "windows", "play", str(original)],
                                     **environment).returncode

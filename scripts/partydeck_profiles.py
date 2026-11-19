@@ -308,6 +308,10 @@ def install_runner_editor(config_dir):
         description=tr('Accès HID brut de la manette attribuée au joueur. Auto : reprendre le réglage du jeu Windows d’origine.'))
     ET.SubElement(feature,'choice',name=tr('Désactivé'),value='0')
     ET.SubElement(feature,'choice',name=tr('Activé'),value='1')
+    feature=ET.SubElement(system,'feature',name='MangoHud',value='mangohud',
+        description=tr('Afficher MangoHud dans chaque instance. Auto : conserver le réglage Windows/toolbox.'))
+    ET.SubElement(feature,'choice',name=tr('Désactivé'),value='0')
+    ET.SubElement(feature,'choice',name=tr('Activé'),value='1')
     ET.indent(root,space='  ')
     atomic_write(path,ET.tostring(root,encoding='unicode')+'\n',0o644)
     return path
@@ -335,16 +339,21 @@ def selected_party_runner(rom):
 
 
 def selected_party_hidraw(rom):
+    return selected_party_switch(rom,'enable_hidraw')
+
+
+def selected_party_switch(rom,key):
+    if key not in ('enable_hidraw','mangohud'):raise ValueError('Unsupported Windows Party switch')
     binary=shutil.which('batocera-settings-get')
     if binary is None:return None
     name=party_entry_name(rom).replace('=','').replace('#','')
-    for key in (f'windows-party["{name}"].enable_hidraw','windows-party.enable_hidraw'):
-        result=subprocess.run([binary,key],capture_output=True,text=True,check=False)
+    for setting in (f'windows-party["{name}"].{key}',f'windows-party.{key}'):
+        result=subprocess.run([binary,setting],capture_output=True,text=True,check=False)
         if result.returncode!=0 or not isinstance(result.stdout,str):continue
         value=result.stdout.strip()
         if not value or value=='auto':continue
         if value not in ('0','1'):
-            raise ValueError(tr('Réglage HIDRAW Windows Party invalide.'))
+            raise ValueError(tr('Réglage Windows Party invalide : {p0}',p0=key))
         return value
     return None
 

@@ -91,5 +91,6 @@ no host launcher is rewritten. Aliases at `runtime/<game>/jN/proton-runners/<run
 are stable across launches so Proton DLL links never persist a random temporary
 path. Only writable layers and the relay are temporary. Views are unmounted and removed
 after native Wine returns; failed cleanup is logged and retained. Full runner
-copies are not made and host binaries stay unchanged. Actual nested-runtime
-operation still needs validation on Batocera.
+copies are not made and host binaries stay unchanged. A user confirmed UMU
+game startup after installing the writable-alias relay (GDK-Proton11-12-Custom-UMU).
+Other runner versions still need individual validation.
