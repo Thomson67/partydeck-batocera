@@ -31,9 +31,9 @@ def send_enter(player):
     # The game's custom field need not implement Ctrl+A. Clear on both sides
     # of the caret instead; enough for the full name field, without clipboard
     # access or keyboard-layout-dependent punctuation.
-    commands=[(['xdotool','key','--window',ids[0],'--delay','2',
+    commands=[(['xdotool','key','--window',ids[0],'--delay','0',
                 'End',*(['BackSpace']*64),*(['Delete']*64)],3),
-              (['xdotool','type','--window',ids[0],'--delay','20','--',player.upper()],2),
+              (['xdotool','type','--window',ids[0],'--delay','0','--',player.upper()],2),
               (['xdotool','key','--window',ids[0],'--delay','40','Return'],2)]
     for command,timeout in commands:
         result=subprocess.run(command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=timeout)
