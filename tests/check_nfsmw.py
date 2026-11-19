@@ -20,6 +20,17 @@ for ip in ('0.0.0.0','127.0.0.1','255.255.255.255','224.0.0.1','x','192.168.1.2:
     except ValueError:pass
 with patch.object(mw.subprocess,'check_output',return_value='[{"prefsrc":"192.168.1.20"}]'):
     assert mw.host_ip('auto')=='192.168.1.20'
+from partydeck_profiles import private_lan_enabled
+assert mw.defaults()['private_lan'] is True
+assert mw.validate(dict(host='auto'))['private_lan'] is True  # Existing profiles migrate by default.
+for adapter in ('standard','soh-anchor','borderlands2','sm64coopdx','l4d2-goldberg'):
+    assert not private_lan_enabled(dict(adapter=adapter),2)
+for count in (2,3,4):
+    assert private_lan_enabled(dict(adapter='nfsmw-lan',nfsmw={}),count)
+    assert not private_lan_enabled(dict(adapter='nfsmw-lan',nfsmw=dict(private_lan=False)),count)
+assert not private_lan_enabled(dict(adapter='nfsmw-lan'),1)
+try:mw.validate(dict(private_lan='yes'));raise AssertionError('non-boolean network mode')
+except ValueError:pass
 with tempfile.TemporaryDirectory() as temp:
     root=Path(temp);base=root/'system';base.mkdir();rom=root/'Most Wanted 2005.wsquashfs';rom.write_bytes(b'SOLO')
     profile=defaults(rom);assert profile['adapter']=='nfsmw-lan' and recipe_for(rom).id=='nfsmw'
@@ -63,6 +74,10 @@ with tempfile.TemporaryDirectory() as temp:
         except ValueError:pass
         assert external.read_bytes()==solo
     app=App(base,rom,windowed=True);assert app.available_tabs()==(0,1)
+    app.tab=1
+    assert 'nfsmw.host' not in [row[0] for row in app.current_fields()]
+    app.model.data['nfsmw']['private_lan']=False
+    assert 'nfsmw.host' in [row[0] for row in app.current_fields()]
     for language in ('fr','en'):
         set_language(language);app.tab=1;app.draw()
         labels=[label for _,label,_ in fields(1,'nfsmw-lan')]

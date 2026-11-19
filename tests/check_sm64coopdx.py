@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as folder:
     model=Model(base,rom,windows)
     assert model.data['adapter']=='sm64coopdx' and rom in model.rows
     for index in range(4):
-        player=base/'party'/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
+        player=base/'runtime'/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
         game.mkdir(parents=True);portable=game/'sm64config.txt';portable.write_text('SOLO CONFIG')
         appdata=prefix/'drive_c/users/steamuser/AppData/Roaming/sm64coopdx';appdata.mkdir(parents=True)
         ini=appdata/'sm64config.txt';ini.write_text('OLD PRIVATE')

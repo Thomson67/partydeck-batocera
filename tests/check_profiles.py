@@ -21,10 +21,10 @@ with tempfile.TemporaryDirectory() as folder:
     base = Path(folder)
     rom = base/"Game ' & $(touch injected).wsquashfs"
     rom.touch()
-    roms = base/"windows-party"
+    roms = base/"roms-windows-party"
     roms.mkdir()
     old = roms/"Game.sh"
-    launcher = base/"partydeck-test"
+    launcher = base/"windows-party"
     old.write_text("#!/bin/bash\n" + profiles.MARKER + "\nexec " +
                    shlex.join([str(launcher), "party", str(rom), "2", "vertical", "auto"]) + "\n")
     custom = roms/"User.sh"

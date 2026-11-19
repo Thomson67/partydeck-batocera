@@ -656,6 +656,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     from partydeck_display import settings as desktop_settings
     desktop=desktop_settings(base)
     keyboard_player = True
+    profile=None
     gpu=desktop['gpu']
     if party:
         from partydeck_profiles import profile_path, read_profile
@@ -704,16 +705,20 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     try:
-        if os.environ.get('PARTYDECK_NFSMW_PRIVATE_LAN')=='1':
-            from partydeck_profiles import profile_path,read_profile
-            if (not party or not profile_path(base,original).is_file()
-                    or read_profile(base,original).get('adapter')!='nfsmw-lan'):
-                raise ValueError(tr('Le LAN privé expérimental exige le profil Most Wanted 2005.'))
+        from partydeck_profiles import private_lan_enabled,PRIVATE_LAN_PROFILES
+        requested=os.environ.get('PARTYDECK_PRIVATE_LAN',os.environ.get('PARTYDECK_NFSMW_PRIVATE_LAN'))
+        use_private=private_lan_enabled(profile,len(players))
+        if requested=='1':
+            if not profile or profile.get('adapter') not in PRIVATE_LAN_PROFILES:
+                raise ValueError(tr('Le LAN privé exige un profil compatible.'))
+            use_private=True
+        elif requested=='0':use_private=False
+        if use_private:
             from partydeck_private_lan import PrivateLAN
             network=PrivateLAN(len(players))
             network.start()
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
-            player = base / ("party" if party else "coop") / game_id / f"j{index}"
+            player = base / ("runtime" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
             player.mkdir(parents=True, exist_ok=True)
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
@@ -828,7 +833,7 @@ def main():
             from partydeck_profiles import prepare_profile
             prepare_profile(args.base, original, args.count, args.split, args.input_mode)
         port = write_port(PARTY_ROMS if party else args.ports,
-                          args.base / "partydeck-test", original,
+                          args.base / "windows-party", original,
                           args.count, args.split, args.input_mode,
                           mode="party" if party else "coop", profile=party)
         print(f"Entrée enregistrée : {port}")

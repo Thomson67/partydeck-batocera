@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert [key for key,_,_ in fields(1,'l4d2-goldberg')]==[f'l4d2.names.{i}' for i in range(4)]
     ids=[]
     for index in range(4):
-        player=base/'party'/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
+        player=base/'runtime'/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game'
         user_configs=[]
         other_files=[]
         game.mkdir(parents=True)

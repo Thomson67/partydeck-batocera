@@ -14,7 +14,7 @@ def matches(rom):
     return bool(re.search(r'(?:most[ _-]*wanted|nfsmw)',name) and re.search(r'(?<!\d)2005(?!\d)',name))
 
 
-def defaults():return dict(host='auto',throttle=6,music_j1_only=True,start_delay=0)
+def defaults():return dict(host='auto',throttle=6,music_j1_only=True,start_delay=0,private_lan=True)
 
 
 def validate(data):
@@ -27,7 +27,7 @@ def validate(data):
             if ip.is_unspecified or ip.is_loopback or ip.is_multicast or int(ip)==0xffffffff:raise ValueError()
         except ValueError:raise ValueError(tr('Adresse LAN Most Wanted invalide.')) from None
     if (type(out['throttle']) is not int or not 1<=out['throttle']<=1000
-            or type(out['music_j1_only']) is not bool or type(out['start_delay']) is not int
+            or type(out['private_lan']) is not bool or type(out['music_j1_only']) is not bool or type(out['start_delay']) is not int
             or out['start_delay'] not in (0,15,30,60)):
         raise ValueError(tr('Réglages Most Wanted LAN invalides.'))
     return out

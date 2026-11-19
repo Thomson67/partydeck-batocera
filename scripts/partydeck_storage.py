@@ -101,7 +101,7 @@ def files(root, mounts=None):
 
 
 def players(base):
-    for mode in ('party', 'coop'):
+    for mode in ('runtime', 'coop'):
         for game in sorted((Path(base) / mode).glob('*')):
             if re.fullmatch(r'[a-f0-9]{16}', game.name) and not game.is_symlink():
                 for index in range(1, 5):
@@ -245,7 +245,7 @@ def _clean(base, config, purge=False):
 def clean(base, purge=False):
     """User requested maintenance; also respect the existing installer/GUI lock."""
     base = Path(base)
-    with (base / 'test.lock').open('a') as lock:
+    with (base / 'session.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -257,7 +257,7 @@ def clean(base, purge=False):
 def prepare_launch(base):
     """UI preflight stays responsive and reports refusal before leaving SDL."""
     base = Path(base)
-    with (base / 'test.lock').open('a') as lock:
+    with (base / 'session.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -334,11 +334,11 @@ def snapshot(base, saves=None):
             mapped.add(digest)
             cache = logs = 0
             for index in range(1, 5):
-                player = base / 'party' / digest / f'j{index}'
+                player = base / 'runtime' / digest / f'j{index}'
                 cache += size(player / 'cache')
                 logs += sum(size(player / item) for item in ('logs', 'umu-logs', 'proton-logs'))
             persistent = size(saves / name)
-            runtime = size(base / 'party' / digest)
+            runtime = size(base / 'runtime' / digest)
             row = dict(name=rom.stem, cache=cache, logs=logs, persistent=persistent, runtime=runtime)
             row['total'] = cache + logs + persistent + runtime
             games.append(row)
@@ -349,7 +349,7 @@ def snapshot(base, saves=None):
     for kind, root in disposable_roots(base):
         categories[kind] += size(root)
     categories['persistent'] += size(saves)
-    for mode in ('party', 'coop'):
+    for mode in ('runtime', 'coop'):
         categories['runtime'] += size(base / mode)
     categories['installation'] = size(base)
     return dict(categories=categories, total=sum(categories.values()),
@@ -367,7 +367,7 @@ def main():
     elif args.action == 'reglages':
         result = settings(args.base)
     elif args.action == '_maintenance':
-        # Only the installed shell launcher uses this while holding test.lock.
+        # Only the installed shell launcher uses this while holding session.lock.
         with storage_lock(args.base):
             cfg = settings(args.base)
             result = _clean(args.base, cfg) if cfg['auto_clean'] else {'freed': 0}

@@ -23,6 +23,18 @@ MARKER = "# Entrée gérée par PartyDeck Wine"
 PARTY_ROMS = Path("/userdata/roms/windows-party")
 
 
+# Capability opt-in belongs to game profiles, never to the generic namespace
+# implementation. Additional adapters can reuse PrivateLAN after validation.
+PRIVATE_LAN_PROFILES = {'nfsmw-lan': 'nfsmw'}
+
+
+def private_lan_enabled(profile,count):
+    if not profile or count not in (2,3,4):return False
+    section=PRIVATE_LAN_PROFILES.get(profile.get('adapter'))
+    if section is None:return False
+    return profile.get(section,{}).get('private_lan',True) is True
+
+
 def profile_path(base, rom):
     digest = hashlib.sha256(os.fsencode(rom)).hexdigest()[:16]
     return base / "profiles" / f"{digest}.json"
@@ -117,7 +129,7 @@ def prepare_profile(base, rom, count, split, input_mode):
 def remove_profile(base, rom, roms=None):
     """Remove only our generated launcher and its settings; never ROM/save data."""
     roms = PARTY_ROMS if roms is None else roms
-    with (base/'test.lock').open('a') as lock:
+    with (base/'session.lock').open('a') as lock:
         try:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:
@@ -132,8 +144,8 @@ def remove_profile(base, rom, roms=None):
         if entry.exists():
             lines = entry.read_text().splitlines()
             command = shlex.split(lines[2]) if len(lines) == 3 else []
-            expected = ['exec',str(base/'partydeck-test'),'profil',str(rom)]
-            legacy = len(command)==7 and command[:4] == ['exec',str(base/'partydeck-test'),'party',str(rom)]
+            expected = ['exec',str(base/'windows-party'),'profil',str(rom)]
+            legacy = len(command)==7 and command[:4] == ['exec',str(base/'windows-party'),'party',str(rom)]
             if len(lines)!=3 or lines[1]!=MARKER or (command!=expected and not legacy):
                 raise ValueError(tr('Le lanceur a été personnalisé ; retrait automatique refusé.'))
         previous = entry.read_text() if entry.exists() else None
@@ -273,7 +285,7 @@ def sync_library_scrapes(base, roms=PARTY_ROMS):
         if len(lines)!=3 or lines[1]!=MARKER:continue
         try:command=shlex.split(lines[2])
         except ValueError:continue
-        if len(command)==4 and command[:3]==['exec',str(base/'partydeck-test'),'profil']:
+        if len(command)==4 and command[:3]==['exec',str(base/'windows-party'),'profil']:
             pairs.append((Path(command[3]),entry))
     return inherit_scrapes(pairs,roms)
 
@@ -485,7 +497,7 @@ def launch_profile(base, rom):
         if not edit_profile(base, rom):
             return 0
         data = read_profile(base, rom)
-    command = [str(base / "partydeck-test"), "party", str(rom),
+    command = [str(base / "windows-party"), "party", str(rom),
                data["players"], data["split"], data["input"]]
     os.execv(command[0], command)
 
@@ -500,7 +512,7 @@ def install_menu(base, roms=PARTY_ROMS):
         if len(lines) != 3 or lines[1] != MARKER or not lines[2].startswith("exec "):
             continue
         command = shlex.split(lines[2])
-        if len(command) != 7 or command[:3] != ["exec", str(base / "partydeck-test"), "party"]:
+        if len(command) != 7 or command[:3] != ["exec", str(base / "windows-party"), "party"]:
             continue
         rom = Path(command[3])
         path = profile_path(base, rom)
@@ -509,14 +521,14 @@ def install_menu(base, roms=PARTY_ROMS):
         else:
             read_profile(base, rom)
         atomic_write(entry, f"#!/bin/bash\n{MARKER}\nexec " +
-                     shlex.join([str(base / "partydeck-test"), "profil", str(rom)]) + "\n", 0o755)
+                     shlex.join([str(base / "windows-party"), "profil", str(rom)]) + "\n", 0o755)
     sync_library_scrapes(base,roms)
     menu = roms / "Configurer Windows Party.sh"
     marker = "# Configuration gérée par Windows Party"
     if menu.exists() and marker not in menu.read_text().splitlines()[:2]:
         raise ValueError(tr('Une entrée utilisateur existe déjà : {p0}', p0=menu))
     atomic_write(menu, f"#!/bin/bash\n{marker}\nexec " +
-                 shlex.join([str(base / "partydeck-test"), "configurer"]) + "\n", 0o755)
+                 shlex.join([str(base / "windows-party"), "configurer"]) + "\n", 0o755)
 
 
 def choose_rom():
@@ -581,7 +593,7 @@ def configure_legacy(base, rom=None):
             selected = rom
         if selected is not None and edit_profile(base, selected):
             data = read_profile(base, selected)
-            subprocess.run([str(base / "partydeck-test"), "ajouter", str(selected),
+            subprocess.run([str(base / "windows-party"), "ajouter", str(selected),
                             data["players"], data["split"], data["input"]], check=True)
         if rom is not None:
             return 0

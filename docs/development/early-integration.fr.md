@@ -1,6 +1,6 @@
 # Tester PartyDeck sur Batocera
 
-Ce prototype s'installe dans `/userdata/system/partydeck-test` et se configure depuis SSH.
+Ce prototype s'installe dans `/userdata/system/windows-party` et se configure depuis SSH.
 Il utilise PartyDeck v0.8.7-e avec Gamescope et UMU. L'installation demande un
 PC x86-64 et un accès à GitHub.
 L'UMU embarqué passe par le pont d'UMU Runner Toolbox lorsque la session
@@ -12,7 +12,7 @@ Décompressez le paquet du projet ou clonez son dépôt, puis lancez cette
 commande depuis la racine du projet.
 
 ```bash
-bash scripts/install-partydeck-test.sh installer
+bash scripts/install-windows-party.sh installer
 ```
 
 Sur une machine qui a déjà le prototype Ultimate Wine Toolbox, la même
@@ -24,7 +24,7 @@ des joueurs restent dans leurs emplacements actuels.
 Avec EmulationStation affiché, lancez le diagnostic depuis SSH.
 
 ```bash
-/userdata/system/partydeck-test/partydeck-test verifier
+/userdata/system/windows-party/windows-party verifier
 ```
 
 Le journal indique le type de session et l'état des dépendances. Gamescope a
@@ -32,7 +32,7 @@ besoin de Xwayland pour ses fenêtres internes, y compris quand Batocera utilise
 Xorg comme session principale. Si Batocera fournit Xwayland, le script l'utilise.
 Sinon, la première vérification télécharge une version portable dont les paquets
 sont vérifiés par SHA-256. Elle est rangée dans
-`/userdata/system/partydeck-test/releases` et utilisée uniquement par le test
+`/userdata/system/windows-party/releases` et utilisée uniquement par le test
 PartyDeck.
 
 ## Windows Party
@@ -53,14 +53,14 @@ Si un profil est absent, l'éditeur est proposé au lancement pour le recréer.
 Depuis SSH, la commande suivante ouvre aussi le gestionnaire.
 
 ```bash
-/userdata/system/partydeck-test/partydeck configurer
+/userdata/system/windows-party/partydeck configurer
 ```
 
 Pour ajouter directement un jeu depuis SSH, utilisez `ajouter`. Les formats acceptés sont
 `.wine`, `.pc` et `.wsquashfs`.
 
 ```bash
-/userdata/system/partydeck-test/partydeck ajouter \
+/userdata/system/windows-party/partydeck ajouter \
   "/userdata/roms/windows/Mon Jeu.wsquashfs" 2 horizontal clavier-j2
 ```
 
@@ -77,7 +77,7 @@ préfixes Wine des jeux compressés et `content` les écritures des jeux
 Une nouvelle entrée démarre avec ses propres sauvegardes.
 OverlayFS est nécessaire pour les écritures du jeu.
 Les données techniques sont conservées dans
-`/userdata/system/partydeck-test/party/<identifiant>/jN`.
+`/userdata/system/windows-party/party/<identifiant>/jN`.
 Les journaux Batocera sont écrits dans `jN/logs` et le cache du chargeur
 de bibliothèques dans `jN/ldconfig-cache`. Chaque joueur a ses propres copies
 pour permettre la préparation du runtime sous v44.
@@ -117,7 +117,7 @@ Si le journal UMU contient `runtime_reused_after_interruption` suivi de
 montage vide. Le [correctif de reprise est disponible sur une branche de
 test UMU Runner Toolbox](https://github.com/Thomson67/umu-runner-toolbox/tree/fix/resume-empty-c-game-mountpoint).
 
-Les profils JSON sont dans `/userdata/system/partydeck-test/profiles`.
+Les profils JSON sont dans `/userdata/system/windows-party/profiles`.
 La commande `ajouter` avec le même chemin actualise le lanceur existant et
 les paramètres fournis. L'option d'affichage de l'éditeur est conservée.
 Les variantes `horizontal` et `vertical` partagent les profils des joueurs.
@@ -126,12 +126,12 @@ données de `coop/<identifiant>`.
 
 ## Essai manuel avec un exécutable autonome
 
-Placez une copie autonome du jeu dans `/userdata/system/partydeck-test/jeux`.
+Placez une copie autonome du jeu dans `/userdata/system/windows-party/jeux`.
 Choisissez un jeu capable de démarrer dans un préfixe neuf et doté d'un mode
 LAN et d'un support manette.
 
 ```bash
-/userdata/system/partydeck-test/partydeck-test preparer-port "Mon Jeu/Jeu.exe"
+/userdata/system/windows-party/windows-party preparer-port "Mon Jeu/Jeu.exe"
 ```
 
 Actualisez les listes de jeux dans EmulationStation, puis ouvrez **Ports →
@@ -154,5 +154,5 @@ la session PartyDeck et le masque à sa fermeture, si `unclutter-remote` est
 disponible.
 
 Chaque exécution affiche le chemin de son journal sous
-`/userdata/system/partydeck-test/logs`. Pour confirmer la compatibilité avec
+`/userdata/system/windows-party/logs`. Pour confirmer la compatibilité avec
 votre build, lancez le même test sous Xorg et sous Wayland.

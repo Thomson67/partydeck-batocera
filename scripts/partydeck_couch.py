@@ -79,7 +79,8 @@ def fields(tab, adapter='standard'):
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan'])]
     if adapter == 'nfsmw-lan':
-        return [('nfsmw.host',tr('IP LAN du PC (auto : détection)'),None),
+        return [('nfsmw.private_lan',tr('LAN privé local (sans Internet)'),[True,False]),
+                ('nfsmw.host',tr('IP LAN du PC (auto : détection)'),None),
                 ('nfsmw.throttle',tr('Fréquence du serveur LAN'),[1,6,10,30,60]),
                 ('nfsmw.start_delay',tr('Délai entre joueurs (secondes)'),[0,15,30,60]),
                 ('nfsmw.music_j1_only',tr('Musique uniquement pour J1'),[True,False])]
@@ -287,7 +288,7 @@ class Model:
         if stored.get('adapter') != 'nfsmw-lan':stored.pop('nfsmw',None)
         save_profile(self.base, self.rom, stored)
         try:
-            subprocess.run([str(self.base / 'partydeck-test'), 'ajouter', str(self.rom),
+            subprocess.run([str(self.base / 'windows-party'), 'ajouter', str(self.rom),
                             self.data['players'], self.data['split'], self.data['input']], check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         except (OSError, subprocess.CalledProcessError):
@@ -547,7 +548,10 @@ class App:
         return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
 
     def current_fields(self):
-        return fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard')
+        rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard')
+        if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
+            rows=[row for row in rows if row[0]!='nfsmw.host']
+        return rows
 
     def text(self, value, x, y, size=24, color=(228, 234, 247), width=1000):
         font = self.fonts[size]
@@ -1137,7 +1141,9 @@ class App:
                     subtitle = (tr('Sans bordure et résolution automatiques · langue : fichiers du jeu requis') if self.tab==2
                                 else tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables'))
                 if self.model.data['adapter']=='nfsmw-lan':
-                    subtitle=tr('Expérimental · ports 9900–9903 · créer le salon J1 avant de rejoindre avec J2')
+                    subtitle=(tr('LAN privé : J1 crée le serveur et le salon, J2 le rejoint · sans Internet')
+                              if self.model.data.get('nfsmw',{}).get('private_lan',True) else
+                              tr('Réseau partagé : connexion au LAN du PC'))
                 self.text(subtitle, 418, 310, 16, (150, 169, 193), 950)
             rows = self.current_fields()
             offset = max(0, min(self.row, len(rows)-1) - 6)
@@ -1301,9 +1307,9 @@ def configure(base, rom=None, single=False):
         accepted = app.run(single)
         if app.launch_requested:
             data = app.model.data
-            launcher = str(Path(base) / 'partydeck-test')
+            launcher = str(Path(base) / 'windows-party')
             os.execv(launcher, [launcher, 'party', str(app.model.rom), data['players'], data['split'], data['input']])
         return accepted
     except ImportError as error:
         raise RuntimeError(tr('Pygame 2 est requis pour le configurateur à la manette. '
-                           'Ancienne interface : PARTYDECK_UI=legacy partydeck-test configurer')) from error
+                           'Ancienne interface : PARTYDECK_UI=legacy windows-party configurer')) from error

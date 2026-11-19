@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as temp:
     base=root/'system';base.mkdir()
     game=windows/'Sous dossier/Jeu & test.wsquashfs';game.parent.mkdir();game.write_bytes(b'ROM')
     entry=party/'Jeu [abc].sh'
-    entry.write_text('#!/bin/bash\n'+profiles.MARKER+'\nexec '+__import__('shlex').join([str(base/'partydeck-test'),'profil',str(game)])+'\n')
+    entry.write_text('#!/bin/bash\n'+profiles.MARKER+'\nexec '+__import__('shlex').join([str(base/'windows-party'),'profil',str(game)])+'\n')
     src=windows/'gamelist.xml'
     source=ET.Element('gameList');g=ET.SubElement(source,'game',id='original')
     fields={'path':'./Sous dossier/Jeu & test.wsquashfs','name':'Titre propre','desc':'Texte & accents é',
@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory() as temp:
         ET.SubElement(game,'name').text='Scrap '+suffix
         entry=party/(rom.name+'.sh');pairs.append((rom,entry))
         party.mkdir(exist_ok=True)
-        entry.write_text('#!/bin/bash\n'+profiles.MARKER+'\nexec '+__import__('shlex').join([str(base/'partydeck-test'),'profil',str(rom)])+'\n')
+        entry.write_text('#!/bin/bash\n'+profiles.MARKER+'\nexec '+__import__('shlex').join([str(base/'windows-party'),'profil',str(rom)])+'\n')
     ET.ElementTree(source).write(windows/'gamelist.xml',encoding='utf-8')
     # The installer catches up every managed entry without touching custom ones.
     (party/'custom.sh').write_text('echo custom\n')

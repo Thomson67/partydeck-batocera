@@ -35,7 +35,8 @@ for language,title in (('fr','RUNNER WINE'),('en','WINE RUNNER')):
 
 for language,label in (('fr','IP LAN du PC (auto : détection)'),('en','PC LAN IP (auto: detect)')):
     lang.set_language(language)
-    assert fields(1,'nfsmw-lan')[0][1]==label
+    assert next(title for key,title,_ in fields(1,'nfsmw-lan') if key=='nfsmw.host')==label
+    assert fields(1,'nfsmw-lan')[0][1]==('LAN privé local (sans Internet)' if language=='fr' else 'Local private LAN (no Internet)')
 
 for language,title,choice in (('fr','GPU de rendu','Configuration système'),('en','Rendering GPU','System configuration')):
     lang.set_language(language)

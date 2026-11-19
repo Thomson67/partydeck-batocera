@@ -11,4 +11,4 @@ curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 \
     --output "$staging/source.tar.gz"
 mkdir "$staging/source"
 tar -xzf "$staging/source.tar.gz" --strip-components=1 -C "$staging/source"
-bash "$staging/source/scripts/install-partydeck-test.sh" installer
+bash "$staging/source/scripts/install-windows-party.sh" installer

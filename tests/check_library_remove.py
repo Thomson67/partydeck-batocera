@@ -17,7 +17,7 @@ def launcher(base,rom,roms):
     import hashlib
     path=roms/f'{rom.stem[:90]} [{hashlib.sha256(os.fsencode(rom)).hexdigest()[:10]}].sh'
     path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text('#!/bin/bash\n'+profiles.MARKER+'\nexec '+shlex.join([str(base/'partydeck-test'),'profil',str(rom)])+'\n')
+    path.write_text('#!/bin/bash\n'+profiles.MARKER+'\nexec '+shlex.join([str(base/'windows-party'),'profil',str(rom)])+'\n')
     return path
 
 

@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory() as directory:
     base.mkdir()
     rom = root/'Game.wsquashfs'
     digest, name = storage.identity(rom)
-    player = base/'party'/digest/'j1'
+    player = base/'runtime'/digest/'j1'
     config = dict(storage.DEFAULTS, cache_mib=2, logs_mib=4, log_file_mib=1, log_keep=3)
     storage.save_settings(base, config)
     assert storage.settings(base) == config
@@ -150,9 +150,9 @@ with tempfile.TemporaryDirectory() as directory:
     assert outside.exists()
     # The installed shell entry point must dispatch storage without graphical
     # initialization/network access or recursively taking its own flock.
-    script = Path(__file__).resolve().parents[1]/'scripts'/'install-partydeck-test.sh'
+    script = Path(__file__).resolve().parents[1]/'scripts'/'install-windows-party.sh'
     launcher = root/'launcher.sh'
-    launcher.write_text(script.read_text().replace("base='/userdata/system/partydeck-test'", f"base='{base}'"))
+    launcher.write_text(script.read_text().replace("base='/userdata/system/windows-party'", f"base='{base}'"))
     (base/'partydeck_storage.py').write_text(Path(storage.__file__).read_text())
     (base/'partydeck_i18n.py').write_text((Path(storage.__file__).parent/'partydeck_i18n.py').read_text())
     bin_dir = root/'bin'

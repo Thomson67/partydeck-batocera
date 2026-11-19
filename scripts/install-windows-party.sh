@@ -4,12 +4,10 @@ set -euo pipefail
 version='v0.8.7-e'
 asset="partydeck-${version}-anylinux-x86_64.AppImage"
 checksum='9a6df7a214f5320154bf5344a65431d118ded24917cc65a3d578280e82f42acd'
-base='/userdata/system/partydeck-test'
+base='/userdata/system/windows-party'
 release="$base/releases/$version"
 appdir="$release/AppDir"
-data="$base/data/partydeck"
-games="$base/jeux"
-launcher="$base/partydeck-test"
+launcher="$base/windows-party"
 coop_helper="$base/partydeck-batocera-coop.py"
 profiles_helper="$base/partydeck_profiles.py"
 xwayland_dir="$base/releases/xwayland-24.1.15-1"
@@ -35,24 +33,13 @@ load_graphical_environment() {
 
 usage() {
     cat <<'HELP'
-Usage :
-  bash install-partydeck-test.sh installer
-  /userdata/system/partydeck-test/partydeck-test verifier
-  /userdata/system/partydeck-test/partydeck stockage [bilan|nettoyer|purger-caches|reglages]
-  /userdata/system/partydeck-test/partydeck-test preparer-port "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
-  /userdata/system/partydeck-test/partydeck-test jouer "Dossier/Jeu.exe" [chemin-absolu-vers-Proton]
-  /userdata/system/partydeck-test/partydeck-test preparer-coop "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
-  /userdata/system/partydeck-test/partydeck configurer ["/chemin/Jeu.wsquashfs"]
-  /userdata/system/partydeck-test/partydeck ajouter "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
-
-« installer » installe PartyDeck et la commande locale, même sans session graphique.
-« verifier » vérifie la session Xorg ou Wayland, Gamescope, Xwayland et Bubblewrap.
-« preparer-port » crée l'entrée de test dans Ports pour lancer depuis EmulationStation.
-« preparer-coop » crée une entrée Ports à lancement direct pour un .wine, .pc ou .wsquashfs.
-« ajouter » crée ou actualise le lanceur du jeu dans Windows Party.
-« jouer » sélectionne les manettes dans PartyDeck. Placez au préalable
-une copie de test autonome du jeu dans /userdata/system/partydeck-test/jeux/.
-L'EXE doit pouvoir se lancer avec un préfixe Wine neuf.
+Windows Party — Batocera
+  windows-party verifier
+  windows-party configurer ["/chemin/Jeu.wsquashfs"]
+  windows-party ajouter "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
+  windows-party profil "/chemin/Jeu.wsquashfs"
+  windows-party stockage [bilan|nettoyer|purger-caches|reglages]
+Formats : .wine, .pc, .wsquashfs
 HELP
 }
 
@@ -186,7 +173,6 @@ case "${1:-verifier}" in
     profil) [[ $# -eq 2 ]] || { usage; exit 2; } ;;
     installer|verifier) [[ $# -le 1 ]] || die 'Argument inattendu.' ;;
     stockage) [[ $# -le 2 ]] || { usage; exit 2; } ;;
-    jouer|preparer-port) [[ $# -ge 2 && $# -le 3 ]] || { usage; exit 2; } ;;
     coop|preparer-coop|party|ajouter) [[ $# -ge 2 && $# -le 5 ]] || { usage; exit 2; } ;;
     *) usage; exit 2 ;;
 esac
@@ -197,7 +183,11 @@ for cmd in curl sha256sum python3 flock realpath; do
     command -v "$cmd" >/dev/null || die "Commande requise : $cmd"
 done
 
-mkdir -p "$base/releases" "$base/logs" "$base/cache" "$data" "$games"
+if [[ ${1:-verifier} == installer ]]; then
+    source_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+    python3 "$source_dir/partydeck_migrate.py" prepare /userdata/system/partydeck-test "$base"
+fi
+mkdir -p "$base/releases" "$base/logs" "$base/cache"
 if [[ ${1:-verifier} == configurer || ${1:-verifier} == profil ]]; then
     [[ -f $profiles_helper ]] || die 'Réinstallez Windows Party pour restaurer le gestionnaire de profils.'
     mode=$1
@@ -211,8 +201,8 @@ if [[ ${1:-verifier} == stockage ]]; then
     exec python3 "$base/partydeck_storage.py" "${1:-bilan}" "$base"
 fi
 
-exec 9>"$base/test.lock"
-flock -n 9 || die 'Un test PartyDeck est déjà en cours.'
+exec 9>"$base/session.lock"
+flock -n 9 || die 'Une session Windows Party est déjà en cours.'
 
 if [[ ${1:-verifier} == preparer-coop || ${1:-verifier} == ajouter ]]; then
     [[ -x $launcher && -f $coop_helper ]] || die 'Installez cette version de PartyDeck avant de préparer un port coop.'
@@ -241,81 +231,9 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_virtual_input.py ]] || die 'Module contrôles virtuels absent du paquet.'
     [[ -f $source_dir/partydeck_private_lan.py ]] || die 'Module LAN privé absent / Private LAN module missing.'
     [[ -f $source_helper && -f $source_dir/partydeck_profiles.py && -f $source_dir/partydeck_anchor.py && -f $source_dir/partydeck_theme.py && -f $source_dir/../assets/windows-party.png && -f $source_dir/../templates/soh-common.json ]] ||
-        die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-partydeck-test.sh installer.'
+        die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-windows-party.sh installer.'
 fi
 
-if [[ ${1:-verifier} == jouer || ${1:-verifier} == preparer-port ]]; then
-    executable=$(realpath -e -- "$games/$2") || die "EXE introuvable dans $games"
-    [[ $executable == "$games/"* && -f $executable && ${executable,,} == *.exe ]] ||
-        die "Indiquez un EXE situé dans $games."
-    proton=${3:-}
-    if [[ -n $proton ]]; then
-        [[ $proton == /* && -x $proton/proton ]] ||
-            die 'Indiquez le dossier absolu du runner qui contient le fichier exécutable proton.'
-        proton=$(realpath -e -- "$proton")
-    fi
-fi
-
-if [[ ${1:-verifier} == preparer-port ]]; then
-    [[ -x $launcher ]] || die 'Installez le lanceur PartyDeck avant de créer l’entrée Ports.'
-    port="$ports_dir/PartyDeck - Test.sh"
-    marker='# Entrée gérée par partydeck-test'
-    mkdir -p -- "$ports_dir"
-    if [[ -L $port ]] || { [[ -e $port ]] && ! grep -qxF -- "$marker" "$port"; }; then
-        die "Un fichier existe déjà à cet emplacement : $port"
-    fi
-
-    temporary_port=$(mktemp "$ports_dir/.partydeck-XXXXXX")
-    trap 'rm -f -- "$temporary_port"' EXIT
-    {
-        printf '#!/bin/bash\n%s\n' "$marker"
-        printf 'exec %q jouer %q %q\n' "$launcher" "$2" "$proton"
-    } > "$temporary_port"
-    chmod 0755 "$temporary_port"
-    mv -fT -- "$temporary_port" "$port"
-    trap - EXIT
-    printf 'Entrée enregistrée : %s\n' "$port"
-    printf 'Actualisez les listes de jeux dans EmulationStation, puis lancez Ports → PartyDeck - Test.\n'
-    exit 0
-fi
-
-if [[ -f $base/partydeck_storage.py && ${1:-verifier} != party && ${1:-verifier} != coop ]]; then
-    python3 "$base/partydeck_storage.py" _maintenance "$base" ||
-        printf 'Entretien stockage différé ; consultez le configurateur.\n' >&2
-fi
-
-log=$(mktemp "$base/logs/partydeck-$(date +%Y%m%d-%H%M%S)-XXXXXX")
-printf 'Journal : %s\n' "$log"
-exec > >(tee -a "$log") 2>&1
-printf 'Batocera %s\nPartyDeck %s\n' "$(batocera-version)" "$version"
-df -h "$base"
-
-if [[ ! -x $appdir/AppRun ]]; then
-    staging=$(mktemp -d "$base/releases/.partydeck-XXXXXX")
-    trap 'rm -rf -- "$staging"' EXIT
-    curl --fail --show-error --location --retry 2 --connect-timeout 15 --proto '=https' \
-        "https://github.com/partydeck/partydeck/releases/download/$version/$asset" \
-        --output "$staging/$asset"
-    (cd "$staging" && printf '%s  %s\n' "$checksum" "$asset" | sha256sum -c -)
-    chmod 0755 "$staging/$asset"
-    (cd "$staging" && "./$asset" --appimage-extract >/dev/null)
-    [[ -x $staging/AppDir/AppRun && -x $staging/AppDir/bin/umu-run ]] ||
-        die 'Le contenu extrait ne correspond pas au paquet PartyDeck attendu.'
-    rm -- "$staging/squashfs-root"
-    [[ ! -e $release ]] || die "Installation incomplète dans $release."
-    mv -T -- "$staging" "$release"
-    trap - EXIT
-fi
-
-prepare_batocera_umu
-
-# PartyDeck masque /tmp dans chaque instance. Son AppImage est extraite dans
-# un emplacement persistant pour que le lanceur UMU reste accessible.
-export APPDIR="$appdir" APPIMAGE="$release/$asset"
-export XDG_DATA_HOME="$base/data" XDG_CACHE_HOME="$base/cache" USE_HOST_XDG_CACHE_HOME=1
-unset ARGV0
-
-"$appdir/AppRun" --help
 if [[ ${1:-verifier} == installer ]]; then
     staging=$(mktemp -d "$base/.coop-XXXXXX")
     trap 'rm -rf -- "$staging"' EXIT
@@ -334,6 +252,7 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_nfsmw.py" "$base/partydeck_nfsmw.py"
     cp -- "$source_dir/partydeck_l4d2.py" "$staging/partydeck_l4d2.py"
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
+    cp -- "$source_dir/partydeck_migrate.py" "$base/partydeck_migrate.py"
     cp -- "$source_dir/partydeck_display.py" "$staging/partydeck_display.py"
     mv -fT -- "$staging/partydeck_display.py" "$base/partydeck_display.py"
     cp -- "$source_dir/partydeck_storage.py" "$staging/partydeck_storage.py"
@@ -369,18 +288,13 @@ if [[ ${1:-verifier} == installer ]]; then
     chmod 0755 "$temporary_launcher"
     mv -fT -- "$temporary_launcher" "$launcher"
     trap - EXIT
-    if [[ -e $base/partydeck || -L $base/partydeck ]]; then
-        [[ -L $base/partydeck && $(readlink -- "$base/partydeck") == partydeck-test ]] ||
-            die "Un fichier utilisateur existe déjà dans $base/partydeck."
-    else
-        ln -s partydeck-test "$base/partydeck"
-    fi
+    python3 "$base/partydeck_migrate.py" finalize "$base" /userdata/system/partydeck-test /userdata/roms/windows-party "$ports_dir"
     python3 "$coop_helper" install-system
     python3 "$profiles_helper" installer "$base"
     python3 "$base/partydeck_theme.py" "$base"
-    printf 'Ajoutez un jeu avec : %s ajouter "/userdata/roms/windows/Jeu.wsquashfs" 2 horizontal auto\n' "$base/partydeck"
+    printf 'Ajoutez un jeu avec : %s ajouter "/userdata/roms/windows/Jeu.wsquashfs" 2 horizontal auto\n' "$launcher"
     printf 'Redémarrez EmulationStation pour charger le nouveau système Windows Party.\n'
-    printf '\nPartyDeck installé. Quand EmulationStation est affiché, lancez :\n%s verifier\n' "$launcher"
+    printf '\nWindows Party installé. Quand EmulationStation est affiché, lancez :\n%s verifier\n' "$launcher"
     exit 0
 fi
 
@@ -448,7 +362,7 @@ if [[ ${1:-verifier} == verifier ]]; then
     else
         printf 'xdotool absent. Le placement automatique des fenêtres coop en a besoin.\n'
     fi
-    printf '\nVérifications de base OK. Dossier des jeux de test : %s\n' "$games"
+    printf '\nVérifications de base Windows Party OK.\n'
     exit 0
 fi
 
@@ -461,40 +375,4 @@ if [[ ${1:-verifier} == coop || ${1:-verifier} == party ]]; then
     exit 0
 fi
 
-# PartyDeck enregistre sa configuration dans le dossier dédié à cet essai.
-python3 - "$data/settings.json" "$proton" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-settings = json.loads(path.read_text()) if path.exists() else {}
-settings.update(
-    enable_kwin_script=False,
-    kbm_support=True,
-    proton_separate_pfxs=True,
-    profile_unique_dirs=True,
-    check_for_updates=False,
-)
-if sys.argv[2]:
-    settings["proton_version"] = sys.argv[2]
-temp = path.with_suffix(".tmp")
-temp.write_text(json.dumps(settings, indent=2) + "\n")
-temp.replace(path)
-print(f"Runner Proton : {settings.get('proton_version') or 'GE-Proton (géré par UMU)'}")
-PY
-
-printf 'Lancement avec le jeu de test : %s\n' "$executable"
-cd "$base"
-if [[ $session == Xorg ]] && command -v unclutter-remote >/dev/null; then
-    if unclutter-remote -s; then
-        trap 'unclutter-remote -h || true' EXIT
-        printf 'Curseur Xorg affiché pendant la session PartyDeck.\n'
-    else
-        printf 'Impossible de réafficher le curseur Xorg via unclutter-remote.\n' >&2
-    fi
-fi
-# The original PartyDeck GUI also owns caches while it is running.
-exec 8>"$base/storage.lock"
-flock -n 8 || die 'Une session ou un nettoyage Windows Party est déjà en cours.'
-"$appdir/AppRun" --exec "$executable"
+die 'Commande Windows Party inconnue.'

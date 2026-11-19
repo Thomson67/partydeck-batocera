@@ -2,7 +2,7 @@
 
 Dans **Configurer Windows Party**, choisissez **Paramètres** en bas de la
 bibliothèque. Tout est accessible à la manette et au clavier. Les changements
-sont enregistrés immédiatement dans `/userdata/system/partydeck-test/desktop.json`.
+sont enregistrés immédiatement dans `/userdata/system/windows-party/desktop.json`.
 
 - **Écran des jeux** : Automatique ou une sortie détectée, par exemple DP-4.
   Les positions réelles sont utilisées, même si aucun écran n’occupe 0,0.
@@ -40,7 +40,7 @@ physique réel reste à valider sur Batocera.
 
 Open **Configure Windows Party**, then **Settings** below the library.
 Controller and keyboard navigation are supported. Changes save immediately to
-`/userdata/system/partydeck-test/desktop.json`.
+`/userdata/system/windows-party/desktop.json`.
 
 **Game display** selects Automatic or a detected connector. Actual output
 positions are used, including layouts with no active output at 0,0. Missing or
