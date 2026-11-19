@@ -11,8 +11,12 @@ for buttons,expected in (([],False),([310],False),([311],False),([310,311],True)
   for code in buttons:data[code//8]|=1<<(code%8)
  with patch.object(c.fcntl,'ioctl',side_effect=ioctl):assert c.held(1)==expected
 for player in ('j1','j2','j3','j4'):
- with patch.object(c.subprocess,'run',side_effect=[Mock(returncode=0,stdout='123\n'),*[Mock(returncode=0)]*3]) as run:
+ with patch.object(c.subprocess,'run',side_effect=[Mock(returncode=0,stdout='123\n'),*[Mock(returncode=0)]*3]) as run,patch.object(c.time,'sleep') as sleep:
+  events=Mock()
+  events.attach_mock(run,'run');events.attach_mock(sleep,'sleep')
   assert c.send_enter(player)
+  assert [event[0] for event in events.mock_calls]==['run','run','sleep','run','sleep','run']
+  assert [call.args for call in sleep.call_args_list]==[(1.0,),(1.0,)]
   commands=[call.args[0] for call in run.call_args_list[1:]]
   assert commands[0][:6]==['xdotool','key','--window','123','--delay','0']
   assert commands[0].count('BackSpace')==4 and commands[0].count('Delete')==4
@@ -20,7 +24,7 @@ for player in ('j1','j2','j3','j4'):
   assert commands[2]==['xdotool','key','--window','123','--delay','40','Return']
 # Never confirm when clearing or typing fails.
 for code in (1,2):
- with patch.object(c.subprocess,'run',side_effect=[Mock(returncode=0,stdout='123\n')]+[Mock(returncode=0)]*(code-1)+[Mock(returncode=1)]) as run:
+ with patch.object(c.subprocess,'run',side_effect=[Mock(returncode=0,stdout='123\n')]+[Mock(returncode=0)]*(code-1)+[Mock(returncode=1)]) as run,patch.object(c.time,'sleep'):
   assert not c.send_enter('j2') and run.call_count==code+1
 with patch.object(c.subprocess,'run') as run:
  try:c.send_enter('j5');raise AssertionError('invalid player accepted')
