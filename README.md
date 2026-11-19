@@ -1026,3 +1026,67 @@ SDL keyboard/mouse handling is enabled for all players when virtual input is
 active; assigned physical devices keep their existing isolation. Automated
 checks cover routing, ownership, settings and cleanup. Actual GTK/uinput behavior
 still needs Batocera Xorg and Wayland testing.
+
+## Most Wanted : essai avec un LAN privé par session
+
+Le lobby TCP (`9900`, `9901`…) et les échanges de jeu UDP sont distincts. Sur
+une machine de test, le salon était visible mais la connexion restait en attente :
+la capture montrait du trafic `IP:3658 → même IP:3658`, et le relevé des sockets
+ne montrait qu'une instance propriétaire du port UDP `3658`. Cela motive un
+**essai d'isolation réseau**, sans prouver à lui seul la cause complète du blocage.
+
+Ce mode expérimental crée 2 à 4 espaces réseau reliés par des veth et un pont
+privé dans l'espace du premier joueur. Chaque instance dispose de son IP
+`192.168.247.11` à `.14` et peut posséder UDP `3658` indépendamment des autres.
+Le serveur.cfg reçoit l'adresse privée de son joueur, même si une IP manuelle
+est conservée dans le profil normal. Le réseau du PC, ses interfaces, ses
+routes, le pare-feu et le NAT ne sont pas modifiés. Aucun espace nommé n'est
+créé dans `/run/netns`. Des descripteurs épinglent les espaces détenus par cette
+session ; les commandes de création de liens refusent l'espace réseau hôte.
+
+**Les jeux de ce mode n'ont pas accès à Internet ni au LAN extérieur.**
+Le bureau, ES, le service de contrôles virtuels et SSH gardent leur réseau
+normal. Les espaces sont fermés après l'arrêt des processus de jeu. Le mode
+normal ne change pas ; cette expérience s'active uniquement par variable pour
+un profil `nfsmw-lan` et au moins deux joueurs.
+
+Avant de charger une ROM, vérifiez que cette build Batocera sait créer les
+espaces, les veth et le pont, et échanger sur UDP 3658 depuis deux espaces :
+
+```bash
+python3 /userdata/system/partydeck-test/partydeck_private_lan.py verifier 2
+```
+
+Puis testez le jeu (manette + clavier/souris, ou deux manettes) :
+
+```bash
+PARTYDECK_NFSMW_PRIVATE_LAN=1 \
+  /userdata/system/partydeck-test/partydeck-test party \
+  "/userdata/roms/windows/NFS Most Wanted 2005 Next-Gen.wsquashfs" \
+  2 horizontal auto
+```
+
+Créez les serveurs avec des noms distincts, puis rejoignez le salon J1 avec J2.
+Le choix GPU, le runner, les contrôles virtuels et les sauvegardes privées
+restent ceux du lancement Windows Party habituel. Les tests automatisés
+vérifient la construction 2–4 joueurs, les garde-fous, le passage des descripteurs
+et le nettoyage en échec. **Le noyau de l'environnement de développement refuse
+la création des espaces réseau** : le test réel UDP fourni et la connexion
+Most Wanted doivent encore être validés sur Batocera. Ce n'est pas un correctif
+LAN déclaré fonctionnel avant cette validation.
+
+**English:** Experimental private LAN gives each of 2–4 Most Wanted instances
+its own network namespace/IP (`192.168.247.11`–`.14`), so UDP 3658 can be bound
+independently. Veth links and the bridge are created inside the first player's
+private namespace; host interfaces, routes, NAT and firewall are untouched.
+Namespace FDs pin ownership and the host namespace is refused. No named netns
+mounts are created. Game server.cfg uses the player's private IP for this run;
+the normal saved manual IP is retained. Games have no Internet or external LAN
+access in this mode; the desktop, ES, virtual input and SSH remain on the host
+network. Owned game processes stop before namespace cleanup. Normal launches
+are unchanged. Run the verifier command above first, then launch with
+PARTYDECK_NFSMW_PRIVATE_LAN=1 and the nfsmw-lan profile, with 2–4 players. The
+verifier tests real same-port UDP communication without a ROM. Automated tests
+cover topology, ownership guards, FD passing and rollback; kernel namespace
+creation is denied in the development container. Both real UDP operation and
+Most Wanted lobby/racing remain unvalidated until tested on Batocera.

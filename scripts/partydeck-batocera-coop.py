@@ -496,7 +496,7 @@ def _run_wine(original, target, player, saves=None):
 
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
-                 shared_keyboard_mouse=True, saves=None, exit_state=None):
+                 shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -513,9 +513,12 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if kb_mouse:
         args.extend(["--libinput-hold-dev=" + ",".join(kb_mouse) + ",", "--grab"])
     helper = str(Path(__file__).resolve())
+    sandbox=list(sandbox_arguments(player,devices,saves=saves))
+    if network is not None:
+        sandbox.extend(['--setenv','PARTYDECK_PRIVATE_LAN_IP',network.address(network_index)])
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"', "sh",
                  sys.executable, helper, "_sandbox", os.environ.get("DISPLAY", ""),
-                 *bubblewrap_command(app), *sandbox_arguments(player, devices, saves=saves),
+                 *bubblewrap_command(app), *sandbox,
                  "--", sys.executable, helper, "_wine",
                  str(original), str(target), str(player)])
     if saves is not None:
@@ -529,6 +532,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
+    if network is not None:
+        return subprocess.Popen(network.prefix(network_index)+args,env=environment,start_new_session=True,
+                                stdin=subprocess.DEVNULL,pass_fds=(network.fds[network_index],))
     return subprocess.Popen(args,env=environment,start_new_session=True,stdin=subprocess.DEVNULL)
 
 
@@ -671,10 +677,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
     processes, states = [], []
     virtual_watcher=None
+    network=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     try:
+        if os.environ.get('PARTYDECK_NFSMW_PRIVATE_LAN')=='1':
+            from partydeck_profiles import profile_path,read_profile
+            if (not party or not profile_path(base,original).is_file()
+                    or read_profile(base,original).get('adapter')!='nfsmw-lan'):
+                raise ValueError(tr('Le LAN privé expérimental exige le profil Most Wanted 2005.'))
+            from partydeck_private_lan import PrivateLAN
+            network=PrivateLAN(len(players))
+            network.start()
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
             player = base / ("party" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
@@ -683,7 +698,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             state = player/f'session-{uuid.uuid4().hex}.json'
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
-                                          shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state))
+                                          shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
+                                          network=network,network_index=index-1))
             states.append(state)
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)
@@ -741,7 +757,10 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         try:
             try:
                 if virtual_watcher is not None:virtual_watcher.close()
-            finally:stop_players(processes)
+            finally:
+                try:stop_players(processes)
+                finally:
+                    if network is not None:network.close()
         finally:
             for path in states:
                 path.unlink(missing_ok=True)

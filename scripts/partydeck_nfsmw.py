@@ -106,7 +106,7 @@ def install_hook(base,rom,player):
     if profile.get('adapter')!='nfsmw-lan':return
     settings=validate(profile['nfsmw']);index=int(player.name.removeprefix('j'))-1
     if index not in range(4):raise ValueError(tr('Numéro de joueur Most Wanted invalide.'))
-    host=host_ip(settings['host'])
+    host=host_ip(os.environ.get('PARTYDECK_PRIVATE_LAN_IP') or settings['host'])
     if index and settings['start_delay']:
         print(tr('Most Wanted J{p0} : attente de {p1} s pour préparer le salon J1.',p0=index+1,p1=index*settings['start_delay']),flush=True)
         time.sleep(index*settings['start_delay'])

@@ -62,6 +62,18 @@ def get_language():
 
 
 EN = {
+    'LAN privé : choisissez de 2 à 4 joueurs.':'Private LAN: select 2 to 4 players.',
+    'LAN privé : espace réseau hôte refusé.':'Private LAN: host network namespace refused.',
+    'LAN privé : espace réseau terminé.':'Private LAN: network namespace exited.',
+    'LAN privé : commande absente ({p0}).':'Private LAN: command missing ({p0}).',
+    'LAN privé : création de l’espace réseau trop longue.':'Private LAN: network namespace startup timed out.',
+    'LAN privé indisponible : {p0}':'Private LAN unavailable: {p0}',
+    'LAN privé J{p0} : {p1} ; Internet désactivé pour cette instance.':'Private LAN P{p0}: {p1}; Internet disabled for this instance.',
+    'LAN privé : serveur de test UDP indisponible.':'Private LAN: UDP test server unavailable.',
+    'LAN privé : échec du test UDP.':'Private LAN: UDP test failed.',
+    'LAN privé OK : port UDP 3658 distinct et échanges entre joueurs vérifiés.':'Private LAN OK: separate UDP 3658 sockets and player communication verified.',
+    'LAN privé : {p0}':'Private LAN: {p0}',
+    'Le LAN privé expérimental exige le profil Most Wanted 2005.':'Experimental private LAN requires the Most Wanted 2005 profile.',
     'Contrôles virtuels toolbox : un autre service est actif ; session conservée.':'Toolbox virtual controls: another watcher is active; existing session preserved.',
     'Contrôles virtuels toolbox indisponibles ; consulter le diagnostic toolbox.':'Toolbox virtual controls unavailable; check the toolbox diagnostic.',
     'Contrôles virtuels toolbox : service démarré ; journal {p0}.':'Toolbox virtual controls: watcher started; log {p0}.',
