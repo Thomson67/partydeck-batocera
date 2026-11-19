@@ -915,3 +915,49 @@ error reporting and FR/EN UI, not actual discovery or racing under Wine.
 Références / references :
 [Nucleus handler](https://hub.splitscreen.me/handler/nBgGXtk5pTq9Taq2F),
 [PartyDeck issue #4](https://github.com/partydeck/partydeck/issues/4).
+
+## GPU et premier plan
+
+Dans **Session → GPU de rendu**, le choix est enregistré par jeu :
+
+- **Automatique** (défaut, y compris pour les anciens profils) : conserve les
+  sélections Vulkan/PRIME explicites. À défaut, sur un PC hybride possédant un
+  GPU NVIDIA avec le pilote propriétaire chargé et un autre GPU, demande le
+  rendu NVIDIA avec PRIME et le filtre Vulkan NVIDIA. Sur les autres machines,
+  conserve le comportement système.
+- **Configuration système** : n'ajoute aucune préférence GPU. Les pilotes et
+  l'environnement choisissent le GPU ; ce mode ne mesure pas le GPU employé
+  par EmulationStation et ne garantit pas une correspondance avec celui-ci.
+- **NVIDIA** : demande explicitement le GPU NVIDIA pour Gamescope et Wine, en
+  remplaçant les sélections Vulkan/PRIME contradictoires de l'environnement.
+  Ce mode exige un pilote NVIDIA fonctionnel.
+
+Il n'y a pas d'ID PCI ni de modèle de GPU codé en dur. Le chemin NVIDIA a été
+validé jusqu'au menu de Most Wanted sur Batocera 44 Xorg avec une T550 Laptop.
+Cela ne valide pas toutes les combinaisons de pilotes et GPU hybrides ; les
+configurations AMD/Intel conservent leur sélection système. Les environnements
+compositeur et Wine reçoivent les mêmes variables NVIDIA, sans imposer un
+rendu logiciel ni désactiver Glamor.
+
+Le lanceur remet ses propres fenêtres devant ES après leur placement et rend
+le focus à J1 après cette phase. Il ne reprend pas continuellement le focus
+pendant la partie. Les processus Gamescope ne lisent plus l'entrée standard du
+terminal SSH ; les contrôles restent fournis par les périphériques et fenêtres.
+Le déblocage observé après Entrée dans SSH n'est pas encore attribué avec
+certitude à l'entrée standard : ce changement reste à vérifier sur la machine.
+
+**English:** Session → Rendering GPU stores a choice per game. Automatic keeps
+explicit Vulkan/PRIME settings; otherwise it requests NVIDIA rendering only on
+a hybrid system with a bound proprietary NVIDIA driver and another GPU. Other
+systems retain their default behavior. System configuration adds no GPU
+preference; it does not inspect or mirror EmulationStation's actual GPU. NVIDIA
+explicitly requests NVIDIA rendering for Gamescope and Wine and replaces
+conflicting Vulkan/PRIME selections; it requires a working NVIDIA driver.
+No GPU model or PCI ID is hardcoded. Reaching the Most Wanted menu was validated
+on Batocera 44 Xorg with a T550 Laptop; other driver/GPU combinations remain to
+be tested. AMD/Intel systems retain system selection. No software rendering or
+Glamor-disable workaround is enabled. Owned windows are raised/focused after
+placement, then P1 receives focus. Focus is not continually taken during play.
+Gamescope standard input is detached from SSH; keyboard/controller input still
+comes through devices and windows. The observed Enter-to-unblock behavior has
+not been conclusively attributed to stdin, so this part needs machine testing.

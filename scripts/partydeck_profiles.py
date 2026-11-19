@@ -30,7 +30,7 @@ def profile_path(base, rom):
 
 def defaults(rom):
     data = dict(version=1, rom=str(rom), players="auto", split="horizontal",
-                input="auto", configure_before_launch=False, keyboard_player=True)
+                input="auto", configure_before_launch=False, keyboard_player=True,gpu='auto')
     from partydeck_borderlands2 import matches, defaults as bl2_defaults
     if matches(rom):
         data.update(adapter='borderlands2',borderlands2=bl2_defaults())
@@ -56,6 +56,8 @@ def validate(data, rom):
         raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError(tr("Option clavier comme joueur invalide."))
+    if data.get('gpu','auto') not in ('auto','system','nvidia'):
+        raise ValueError(tr('Choix du GPU invalide.'))
     if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan"):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":

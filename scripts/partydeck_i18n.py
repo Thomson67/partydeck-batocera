@@ -62,7 +62,11 @@ def get_language():
 
 
 EN = {
+    'GPU de rendu':'Rendering GPU',
+    'Configuration système':'System configuration',
+    'Choix du GPU invalide.':'Invalid GPU selection.',
     'Most Wanted 2005 · LAN expérimental':'Most Wanted 2005 · experimental LAN',
+    'GPU hybride : rendu NVIDIA demandé pour Gamescope et Wine.':'Hybrid GPU: NVIDIA rendering requested for Gamescope and Wine.',
     'IP LAN du PC (auto : détection)':'PC LAN IP (auto: detect)',
     'Fréquence du serveur LAN':'LAN server throttle',
     'Délai entre joueurs (secondes)':'Delay between players (seconds)',

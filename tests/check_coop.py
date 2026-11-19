@@ -48,6 +48,7 @@ with tempfile.TemporaryDirectory() as temp, patch.object(coop, "sandbox_argument
     game = base / "Game.wsquashfs"
     coop.start_player(base, base / "j2", game, game, [], (960, 0, 960, 1080), "test-j2")
     assert popen.call_args.kwargs["env"]["SDL_VIDEO_X11_WMCLASS"] == "test-j2"
+    assert popen.call_args.kwargs['stdin']==coop.subprocess.DEVNULL
     assert "test-j2" not in popen.call_args.args[0]
     assert "-W" in popen.call_args.args[0]
     assert "--backend-disable-keyboard" not in popen.call_args.args[0]
@@ -102,4 +103,38 @@ for split, second_position, inputs, shared, party in [
             assert all(d.category == coop.GAMEPADS for call in starts.call_args_list for d in call.args[4])
         assert place.call_args_list[1].args == ("811", second_position)
         assert "Joueurs : 2" in output.getvalue() and "Fenêtre J2 placée : 811" in output.getvalue()
-print("Attribution auto, classes J1/J2 et placement horizontal/vertical vérifiés.")
+with tempfile.TemporaryDirectory() as temp:
+    root=Path(temp)
+    def gpu(name,vendor,driver):
+        path=root/name;path.mkdir()
+        (path/'class').write_text('0x030200')
+        (path/'vendor').write_text(vendor)
+        (path/'driver').symlink_to(root/'drivers'/driver)
+        return path
+    intel=gpu('intel','0x8086','i915')
+    assert not coop.hybrid_nvidia(root)
+    nvidia=gpu('nvidia','0x10de','nvidia')
+    assert coop.hybrid_nvidia(root)
+    with patch.object(coop,'hybrid_nvidia',return_value=True):
+        env=coop.graphics_environment({'__GLX_VENDOR_LIBRARY_NAME':'nvidia'})
+        assert env['VK_LOADER_DRIVERS_SELECT']=='*nvidia*'
+        for key,value in (('DRI_PRIME','0'),('VK_DRIVER_FILES','custom.json'),
+                          ('__NV_PRIME_RENDER_OFFLOAD','0'),('MESA_VK_DEVICE_SELECT','8086:1234')):
+            assert coop.graphics_environment({key:value})=={}
+        assert coop.graphics_environment({},'system')=={}
+        assert coop.graphics_environment({'DRI_PRIME':'0'},'nvidia')==env
+        with patch.dict(os.environ,env,clear=True),patch.object(coop,'player_paths',return_value=[]),patch.object(coop,'UMU_HOME',root/'absent'):
+            arguments=coop.sandbox_arguments(root/'j1',[])
+            assert arguments[arguments.index('__VK_LAYER_NV_optimus')+1]=='NVIDIA_only'
+    (nvidia/'driver').unlink();(nvidia/'driver').symlink_to(root/'drivers/nouveau')
+    assert not coop.hybrid_nvidia(root)
+    (nvidia/'driver').unlink();(nvidia/'driver').symlink_to(root/'drivers/nvidia')
+    (intel/'vendor').write_text('0x1002')
+    assert coop.hybrid_nvidia(root)  # AMD + NVIDIA also uses the guarded path.
+    for file in intel.iterdir():file.unlink()
+    intel.rmdir()
+    assert not coop.hybrid_nvidia(root)  # Single NVIDIA keeps system selection.
+with patch.object(coop.subprocess,'run') as run:
+    coop.focus_window('810')
+    assert run.call_args.args[0]==['xdotool','windowmap','810','windowraise','810','windowfocus','810']
+print("Attribution auto, classes J1/J2, placement, GPU hybride, focus et entrée standard détachée vérifiés.")

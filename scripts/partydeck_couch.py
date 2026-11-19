@@ -70,6 +70,7 @@ def fields(tab, adapter='standard'):
                 ('split', tr('Partage de l’écran'), ['horizontal', 'vertical']),
                 ('input', tr('Attribution des contrôles'), ['auto', 'clavier-j1', 'clavier-j2']),
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
+                ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan'])]
     if adapter == 'nfsmw-lan':
@@ -146,6 +147,8 @@ def put(data, key, value):
 
 
 def label_value(key, value):
+    if key=='gpu':
+        return {'auto':tr('Automatique'),'system':tr('Configuration système'),'nvidia':'NVIDIA'}[value]
     if key in ('players','input') and value == 'auto':
         return tr('Automatique')
     if key == 'split':
@@ -247,6 +250,7 @@ class Model:
             self.data = defaults(rom)
         self.data.setdefault('adapter', 'standard')
         self.data.setdefault('keyboard_player', True)
+        self.data.setdefault('gpu','auto')
         self.data.setdefault('anchor', anchor_defaults())
         self.data.setdefault('borderlands2', bl2_defaults())
         self.data.setdefault('sm64coopdx', sm64_defaults())

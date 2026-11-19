@@ -37,6 +37,11 @@ for language,label in (('fr','IP LAN du PC (auto : détection)'),('en','PC LAN I
     lang.set_language(language)
     assert fields(1,'nfsmw-lan')[0][1]==label
 
+for language,title,choice in (('fr','GPU de rendu','Configuration système'),('en','Rendering GPU','System configuration')):
+    lang.set_language(language)
+    assert next(label for key,label,_ in fields(0) if key=='gpu')==title
+    assert label_value('gpu','system')==choice
+
 with tempfile.TemporaryDirectory() as folder:
     root=Path(folder);conf=root/'batocera.conf';es=root/'es_settings.cfg'
     env={'LANG':'fr_FR.UTF-8'}

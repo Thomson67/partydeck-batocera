@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory() as directory:
     app.action('right')
     assert app.model.data['input'] == 'auto'
     assert app.available_tabs() == (0,)
-    app.row = 5  # Explicitly choose the SoH recipe before accessing its tabs.
+    app.row = next(i for i,(key,_,_) in enumerate(app.current_fields()) if key=='adapter')
     app.action('ok')
     assert app.available_tabs() == (0,1,2,3)
     app.action('next')

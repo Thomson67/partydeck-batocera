@@ -51,7 +51,32 @@ NATIVE_GRAPHICS_ENV = (
     "__EGL_VENDOR_LIBRARY_DIRS", "__EGL_VENDOR_LIBRARY_FILENAMES", "__GLX_VENDOR_LIBRARY_NAME",
     "VK_DRIVER_FILES", "VK_ICD_FILENAMES", "VK_LAYER_PATH", "VK_ADD_LAYER_PATH",
     "MESA_LOADER_DRIVER_OVERRIDE", "LIBGL_KOPPER_DRI2", "SDL_VIDEO_X11_WMCLASS",
+    "__NV_PRIME_RENDER_OFFLOAD", "__VK_LAYER_NV_optimus", "VK_LOADER_DRIVERS_SELECT",
 )
+
+
+def hybrid_nvidia(devices=Path('/sys/bus/pci/devices')):
+    """Require a bound proprietary NVIDIA display driver and another GPU."""
+    nvidia,other=False,False
+    for device in devices.glob('*'):
+        try:
+            if int((device/'class').read_text().strip(),16)>>16 != 3:continue
+            vendor=int((device/'vendor').read_text().strip(),16)
+            nvidia |= vendor==0x10de and (device/'driver').resolve().name=='nvidia'
+            other |= vendor!=0x10de
+        except (OSError,ValueError):continue
+    return nvidia and other
+
+
+def graphics_environment(environment,mode='auto'):
+    # Honor explicit Vulkan/PRIME choices. A GLX vendor alone does not select
+    # Gamescope's Vulkan GPU (as observed on Intel + NVIDIA Batocera Xorg).
+    selectors=('VK_DRIVER_FILES','VK_ICD_FILENAMES','VK_LOADER_DRIVERS_SELECT',
+               'DRI_PRIME','MESA_VK_DEVICE_SELECT','__NV_PRIME_RENDER_OFFLOAD','__VK_LAYER_NV_optimus')
+    if mode=='system':return {}
+    if mode=='auto' and (any(environment.get(key) for key in selectors) or not hybrid_nvidia()):return {}
+    return dict(__NV_PRIME_RENDER_OFFLOAD='1',__VK_LAYER_NV_optimus='NVIDIA_only',
+                __GLX_VENDOR_LIBRARY_NAME='nvidia',VK_LOADER_DRIVERS_SELECT='*nvidia*')
 
 
 @dataclass(frozen=True)
@@ -202,6 +227,16 @@ def place_window(window, rectangle):
                                        text=True)
     values = dict(line.partition("=")[::2] for line in geometry.splitlines())
     return tuple(int(values[name]) for name in ("X", "Y", "WIDTH", "HEIGHT")) == rectangle
+
+
+def focus_window(window):
+    # EWMH activation is unreliable on some Batocera Xorg sessions. Use the
+    # map/raise/focus sequence verified there, targeting only our own window.
+    try:
+        subprocess.run(['xdotool','windowmap',window,'windowraise',window,
+                        'windowfocus',window],check=False,timeout=3,
+                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    except (OSError,subprocess.TimeoutExpired):pass
 
 
 def rom_path(value, argument_parser):
@@ -494,7 +529,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
-    return subprocess.Popen(args,env=environment,start_new_session=True)
+    return subprocess.Popen(args,env=environment,start_new_session=True,stdin=subprocess.DEVNULL)
 
 
 def stop_players(processes, timeout=5):
@@ -589,10 +624,20 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if not shutil.which(tool):
             raise RuntimeError(f"Commande indisponible : {tool}")
     keyboard_player = True
+    gpu='auto'
     if party:
         from partydeck_profiles import profile_path, read_profile
         if profile_path(base, original).exists():
-            keyboard_player = read_profile(base, original).get("keyboard_player", True)
+            profile=read_profile(base, original)
+            keyboard_player = profile.get("keyboard_player", True)
+            gpu=profile.get('gpu','auto')
+    if gpu=='nvidia':
+        for key in ('VK_DRIVER_FILES','VK_ICD_FILENAMES','DRI_PRIME','MESA_VK_DEVICE_SELECT'):
+            os.environ.pop(key,None)
+    graphics=graphics_environment(os.environ,gpu)
+    if graphics:
+        os.environ.update(graphics)
+        print(tr('GPU hybride : rendu NVIDIA demandé pour Gamescope et Wine.'),flush=True)
     if keyboard_player:
         players = assign_players(read_input_devices(), count, input_mode)
     else:
@@ -656,6 +701,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     try:
                         if place_window(window, boxes[index]):
                             print(f"Fenêtre J{index + 1} placée : {window}", flush=True)
+                            focus_window(window)
                             del pending[index]
                             continue
                     except subprocess.CalledProcessError:
@@ -667,6 +713,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 print(f"Placement J{index + 1} non confirmé : {seen_windows[index]}", flush=True)
             else:
                 print(f"Fenêtre J{index + 1} non repérée : {window_classes[index]}", flush=True)
+        if seen_windows:
+            focus_window(seen_windows[min(seen_windows)])
         while True:
             result = session_result(processes,states,wayland)
             if result is not None:
