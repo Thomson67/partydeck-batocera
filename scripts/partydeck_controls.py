@@ -4,7 +4,7 @@ Read key state without grabbing or remapping the controller. Send X11 events
 directly to that player's game window, including on hosts without XTEST.
 """
 from pathlib import Path
-import fcntl,os,subprocess,threading
+import fcntl,os,subprocess,threading,time
 from partydeck_i18n import tr
 
 BTN_TL=310
@@ -36,7 +36,9 @@ def send_enter(player):
                 'End',*(['BackSpace']*4),*(['Delete']*4)],3),
               (['xdotool','type','--window',ids[0],'--delay','0','--',player.upper()],2),
               (['xdotool','key','--window',ids[0],'--delay','40','Return'],2)]
-    for command,timeout in commands:
+    # Give the game time to consume clearing and typing before the next step.
+    for index,(command,timeout) in enumerate(commands):
+        if index:time.sleep(1.0)
         result=subprocess.run(command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=timeout)
         if result.returncode:return False
     return True
