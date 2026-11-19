@@ -4,7 +4,7 @@ No named namespaces, host interfaces, NAT, firewall or host routes are created.
 Namespace FDs pin ownership; the setns helper refuses the host namespace.
 """
 from pathlib import Path
-import ctypes,os,select,shutil,subprocess,sys
+import ctypes,errno,os,select,shutil,socket,subprocess,sys
 from partydeck_i18n import tr
 
 
@@ -94,7 +94,9 @@ class PrivateLAN:
             for index in range(self.count):
                 interface='br0' if index==0 else 'eth0'
                 self.command(index,['ip','route','add','255.255.255.255/32','dev',interface])
-                self.command(index,['ip','route','add','unreachable','default'])
+                # No default route: Linux returns ENETUNREACH, which UMU
+                # recognises as offline. An explicit unreachable route returns
+                # EHOSTUNREACH instead and aborts UMU 1.4.4 before Proton.
                 print(tr('LAN privé J{p0} : {p1} ; Internet désactivé pour cette instance.',p0=index+1,p1=self.address(index)),flush=True)
             return self
         except BaseException:
@@ -116,10 +118,24 @@ class PrivateLAN:
         self.holders=[]
 
 
+def verify_offline():
+    # Same route-only UDP connect used by UMU; no packet payload is sent.
+    try:
+        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as probe:
+            probe.settimeout(3)
+            probe.connect(('1.1.1.1',53))
+    except OSError as error:
+        if error.errno==errno.ENETUNREACH:return
+        raise RuntimeError(tr('LAN privé : erreur réseau {p0}, ENETUNREACH attendu pour UMU.',p0=error.errno)) from error
+    raise RuntimeError(tr('LAN privé : une route Internet est disponible de façon inattendue.'))
+
+
 def verify(count):
     lan=PrivateLAN(count);server=None
     try:
         lan.start()
+        for index in range(count):
+            lan.command(index,[sys.executable,__file__,'_verify-offline'])
         # Prove that two namespaces can own UDP 3658 concurrently and exchange
         # data, before loading any ROM, Wine prefix, graphics or mod.
         code=("import socket\ns=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)\n"
@@ -158,6 +174,7 @@ if __name__=='__main__':
         elif len(sys.argv)>=9 and sys.argv[1]=='_enter-path' and sys.argv[7]=='--':
             enter_path(sys.argv[2],(int(sys.argv[3]),int(sys.argv[4])),
                        (int(sys.argv[5]),int(sys.argv[6])),sys.argv[8:])
+        elif sys.argv[1:]==['_verify-offline']:verify_offline()
         elif sys.argv[1:2]==['verifier']:verify(int(sys.argv[2]) if len(sys.argv)>2 else 2)
         else:raise ValueError('Usage: partydeck_private_lan.py verifier [2|3|4]')
     except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:

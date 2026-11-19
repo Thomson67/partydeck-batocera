@@ -33,3 +33,25 @@ The real UDP verifier and a two-player race starting were confirmed by the
 user on Batocera v44 Wayland with NVIDIA T550. Other hardware and three/four
 player races remain unvalidated. A speed.exe `futex_do_wait` state alone does
 not identify the previous startup blockage.
+
+
+## UMU hors ligne / Offline UMU
+
+UMU 1.4.4 vérifie une route vers `1.1.1.1:53` avec un socket UDP. Il traite
+`ENETUNREACH` comme un accès hors ligne et vérifie le runtime déjà installé,
+mais relance l’exception pour `EHOSTUNREACH`. La route `unreachable default`
+renvoyait cette seconde erreur et empêchait Proton de démarrer.
+
+Le LAN privé ne configure désormais aucune route par défaut. Les routes du
+réseau privé et de diffusion restent présentes, et la vérification hors ligne
+renvoie `ENETUNREACH`. Le vérificateur réseau teste ce comportement avant les
+échanges UDP entre joueurs. Il n’ouvre pas d’accès Internet au jeu. Le runtime
+Steam/UMU nécessaire doit déjà être installé pour un lancement hors ligne.
+
+UMU 1.4.4 uses a route-only UDP connect to 1.1.1.1:53. ENETUNREACH selects its
+offline runtime check; EHOSTUNREACH is re-raised. The previous unreachable
+default route produced EHOSTUNREACH and prevented Proton startup. Private LAN
+now has no default route, retaining only private and broadcast routes. The
+verifier checks the expected ENETUNREACH behavior before player UDP exchanges.
+Internet remains unavailable; the required UMU/Steam runtime must be installed
+before an offline launch.

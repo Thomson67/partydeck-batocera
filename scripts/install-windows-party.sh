@@ -234,6 +234,43 @@ if [[ ${1:-verifier} == installer ]]; then
         die 'Extrayez le paquet complet PartyDeck Batocera, puis lancez scripts/install-windows-party.sh installer.'
 fi
 
+if [[ -f $base/partydeck_storage.py && ${1:-verifier} != party && ${1:-verifier} != coop ]]; then
+    python3 "$base/partydeck_storage.py" _maintenance "$base" ||
+        printf 'Entretien stockage différé ; consultez le configurateur.\n' >&2
+fi
+
+log=$(mktemp "$base/logs/partydeck-$(date +%Y%m%d-%H%M%S)-XXXXXX")
+printf 'Journal : %s\n' "$log"
+exec > >(tee -a "$log") 2>&1
+printf 'Batocera %s\nPartyDeck %s\n' "$(batocera-version)" "$version"
+df -h "$base"
+
+if [[ ! -x $appdir/AppRun ]]; then
+    staging=$(mktemp -d "$base/releases/.partydeck-XXXXXX")
+    trap 'rm -rf -- "$staging"' EXIT
+    curl --fail --show-error --location --retry 2 --connect-timeout 15 --proto '=https' \
+        "https://github.com/partydeck/partydeck/releases/download/$version/$asset" \
+        --output "$staging/$asset"
+    (cd "$staging" && printf '%s  %s\n' "$checksum" "$asset" | sha256sum -c -)
+    chmod 0755 "$staging/$asset"
+    (cd "$staging" && "./$asset" --appimage-extract >/dev/null)
+    [[ -x $staging/AppDir/AppRun && -x $staging/AppDir/bin/umu-run ]] ||
+        die 'Le contenu extrait ne correspond pas au paquet PartyDeck attendu.'
+    rm -- "$staging/squashfs-root"
+    [[ ! -e $release ]] || die "Installation incomplète dans $release."
+    mv -T -- "$staging" "$release"
+    trap - EXIT
+fi
+
+prepare_batocera_umu
+
+# PartyDeck masque /tmp dans chaque instance. Son AppImage est extraite dans
+# un emplacement persistant pour que le lanceur UMU reste accessible.
+export APPDIR="$appdir" APPIMAGE="$release/$asset"
+export XDG_DATA_HOME="$base/data" XDG_CACHE_HOME="$base/cache" USE_HOST_XDG_CACHE_HOME=1
+unset ARGV0
+
+"$appdir/AppRun" --help
 if [[ ${1:-verifier} == installer ]]; then
     staging=$(mktemp -d "$base/.coop-XXXXXX")
     trap 'rm -rf -- "$staging"' EXIT

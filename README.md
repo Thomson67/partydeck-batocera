@@ -129,6 +129,25 @@ Quelques liens de compatibilité, dont l’ancien chemin d’installation et
 dans les préfixes Wine. Les nouveaux lanceurs utilisent uniquement le chemin
 canonique. Les scripts personnalisés ne sont pas réécrits arbitrairement.
 
+## Journaux et UMU
+
+Le journal principal de chaque lancement est créé dans
+`/userdata/system/windows-party/logs/partydeck-<date>-<identifiant>`.
+Les journaux UMU sont séparés par joueur dans
+`runtime/<jeu>/jN/umu-logs/runner-*.log` ; les journaux Proton, lorsqu’activés,
+sont dans le dossier voisin `proton-logs/`.
+
+Le LAN privé est hors ligne : le runtime UMU/Steam nécessaire doit déjà être
+installé. L’absence de route par défaut permet à UMU 1.4.4 de reconnaître ce
+mode hors ligne. Le vérificateur du LAN contrôle aussi ce comportement avant
+les échanges UDP entre joueurs.
+
+**English:** Main launch logs are in `logs/partydeck-*`, per-player UMU logs in
+`runtime/<game>/jN/umu-logs/runner-*.log`, and enabled Proton logs in the adjacent
+`proton-logs/`. Private LAN is offline, so required UMU/Steam runtimes must be
+installed beforehand. Having no default route lets UMU 1.4.4 detect offline mode;
+the private LAN verifier checks this before its same-port UDP exchanges.
+
 ## Développement
 
 Les vérifications automatisées se trouvent dans `tests/` : ces tests de

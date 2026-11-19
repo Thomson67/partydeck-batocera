@@ -83,6 +83,8 @@ EN = {
     'Migration refusée : destination inattendue ({p0}).':'Migration refused: unexpected destination ({p0}).',
     'Migration refusée : deux installations existent.':'Migration refused: two installations exist.',
     'Migration Windows Party terminée ; anciennes données conservées dans archive.':'Windows Party migration complete; previous data retained in archive.',
+    'LAN privé : erreur réseau {p0}, ENETUNREACH attendu pour UMU.':'Private LAN: network error {p0}, expected ENETUNREACH for UMU.',
+    'LAN privé : une route Internet est disponible de façon inattendue.':'Private LAN: an Internet route is unexpectedly available.',
     'LAN privé local (sans Internet)':'Local private LAN (no Internet)',
     'LAN privé : J1 crée le serveur et le salon, J2 le rejoint · sans Internet':'Private LAN: P1 creates the server and lobby, P2 joins · no Internet',
     'Réseau partagé : connexion au LAN du PC':'Shared network: connects to the PC LAN',

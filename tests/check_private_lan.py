@@ -87,7 +87,7 @@ for count in (2,3,4):
         # Every mutation is prefixed with a pinned, private network FD.
         assert all(cmd[:3]==[sys.executable,n.__file__,'_enter'] and cmd[6]=='--' for cmd in commands)
         assert sum('veth' in cmd for cmd in commands)==count-1
-        assert sum('unreachable' in cmd for cmd in commands)==count
+        assert not any('default' in cmd for cmd in commands)  # ENETUNREACH, not EHOSTUNREACH.
         assert all(call.kwargs['pass_fds'] for call in run.call_args_list)
         for i in range(1,count):
             assert [sys.executable,n.__file__,'_enter','200',str(lan.host.st_dev),str(lan.host.st_ino),'--',
@@ -113,3 +113,17 @@ with patch.object(n.shutil,'which',return_value='/bin/tool'),\
     assert close.call_count==2 and all(p.terminate.called for p in holders)
     assert not lan.fds and not lan.holders
 print('LAN privé : topologies 2–4 joueurs, refus de l’espace hôte, descripteurs épinglés et nettoyage après échec vérifiés.')
+
+# UMU 1.4.4 handles ENETUNREACH as offline, but re-raises EHOSTUNREACH.
+# The verifier must detect this regression without ever sending UDP payloads.
+with patch.object(n.socket,'socket') as factory:
+    probe=factory.return_value.__enter__.return_value
+    probe.connect.side_effect=OSError(n.errno.ENETUNREACH,'Network unreachable')
+    n.verify_offline()
+    probe.connect.assert_called_once_with(('1.1.1.1',53))
+    for error in (OSError(n.errno.EHOSTUNREACH,'No route to host'),None):
+        probe.connect.side_effect=error
+        try:n.verify_offline();raise AssertionError('incorrect offline state accepted')
+        except RuntimeError:pass
+    probe.send.assert_not_called();probe.sendto.assert_not_called()
+print('UMU : sonde hors ligne ENETUNREACH, refus de EHOSTUNREACH et absence de route Internet vérifiés.')
