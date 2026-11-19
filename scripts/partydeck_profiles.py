@@ -294,7 +294,7 @@ ES_RUNNER_MARKER = 'Options ES gérées par Windows Party'
 
 
 def install_runner_editor(config_dir):
-    """Add Wine's native runner picker, scoped to the sh/windows-party system."""
+    """Add native Wine settings, scoped to the sh/windows-party system."""
     path=config_dir/'es_features_windows-party.cfg'
     if path.is_symlink() or (path.exists() and ES_RUNNER_MARKER not in path.read_text()):
         raise ValueError(tr('Configuration ES Windows Party personnalisée ; fichier conservé : {p0}',p0=path))
@@ -304,6 +304,10 @@ def install_runner_editor(config_dir):
     system=ET.SubElement(systems,'system',name='windows-party')
     ET.SubElement(system,'feature',name=tr('RUNNER WINE'),value='wine-runner',preset='runners',
         description=tr('Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.'))
+    feature=ET.SubElement(system,'feature',name=tr('ACTIVER HIDRAW'),value='enable_hidraw',
+        description=tr('Accès HID brut de la manette attribuée au joueur. Auto : reprendre le réglage du jeu Windows d’origine.'))
+    ET.SubElement(feature,'choice',name=tr('Désactivé'),value='0')
+    ET.SubElement(feature,'choice',name=tr('Activé'),value='1')
     ET.indent(root,space='  ')
     atomic_write(path,ET.tostring(root,encoding='unicode')+'\n',0o644)
     return path
@@ -330,26 +334,49 @@ def selected_party_runner(rom):
     return None
 
 
-def instrument_runner(source, runner):
+def selected_party_hidraw(rom):
+    binary=shutil.which('batocera-settings-get')
+    if binary is None:return None
+    name=party_entry_name(rom).replace('=','').replace('#','')
+    for key in (f'windows-party["{name}"].enable_hidraw','windows-party.enable_hidraw'):
+        result=subprocess.run([binary,key],capture_output=True,text=True,check=False)
+        if result.returncode!=0 or not isinstance(result.stdout,str):continue
+        value=result.stdout.strip()
+        if not value or value=='auto':continue
+        if value not in ('0','1'):
+            raise ValueError(tr('Réglage HIDRAW Windows Party invalide.'))
+        return value
+    return None
+
+
+def instrument_runner(source, runner, hidraw=None):
     pattern=re.compile(r'(?m)^get_setting\(\) \{[ \t]*$')
     if len(pattern.findall(source))!=1:
         raise RuntimeError(tr('Lanceur Wine non reconnu ; sélection du runner Windows Party refusée.'))
-    override='\n    if [[ "${1:-}" == wine-runner || "${1:-}" == core ]]; then\n'
-    override+="        printf '%s\\n' "+shlex.quote(runner)+'; return 0\n    fi\n'
+    override='\n'
+    if runner is not None:
+        override+='    if [[ "${1:-}" == wine-runner || "${1:-}" == core ]]; then\n'
+        override+="        printf '%s\\n' "+shlex.quote(runner)+'; return 0\n    fi\n'
+    if hidraw is not None:
+        if hidraw not in ('0','1'):raise ValueError(tr('Réglage HIDRAW Windows Party invalide.'))
+        override+='    if [[ "${1:-}" == enable_hidraw ]]; then\n'
+        override+="        printf '%s\\n' "+shlex.quote(hidraw)+'; return 0\n    fi\n'
     return pattern.sub(lambda m:m[0]+override,source)
 
 
 def install_party_runner_hook(rom, player):
     runner=selected_party_runner(rom)
-    if runner is None:return
+    hidraw=selected_party_hidraw(rom)
+    if runner is None and hidraw is None:return
     binary=shutil.which('batocera-wine')
     if binary is None:raise RuntimeError(tr('batocera-wine introuvable.'))
     binary=Path(binary).resolve()
     replacement=player/'batocera-wine-party-runner'
-    atomic_write(replacement,instrument_runner(binary.read_text(),runner),0o755)
+    atomic_write(replacement,instrument_runner(binary.read_text(),runner,hidraw),0o755)
     subprocess.run(['bash','-n',str(replacement)],check=True)
     subprocess.run(['mount','--bind',str(replacement),str(binary)],check=True)
-    print(tr('Windows Party : runner dédié {p0}.',p0=runner),flush=True)
+    if runner is not None:print(tr('Windows Party : runner dédié {p0}.',p0=runner),flush=True)
+    if hidraw is not None:print(tr('Windows Party : HIDRAW={p0}.',p0=hidraw),flush=True)
 
 
 def yad(arguments):

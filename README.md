@@ -47,6 +47,9 @@ Les sources restent dans `/userdata/roms/windows` ; les entrées Windows Party
 sont de petits lanceurs. Les médias de scraping du jeu original sont réutilisés.
 Le runner peut être choisi dans les options ES de Windows Party ; Auto reprend
 celui du jeu Windows d’origine.
+L’option **Activer HIDRAW**, également disponible par jeu, propose Auto / Activé /
+Désactivé. Auto hérite du réglage Windows d’origine. Chaque instance conserve
+uniquement l’accès aux manettes qui lui sont attribuées.
 
 **Paramètres**, en bas de la bibliothèque, propose le choix global de l’écran et
 du GPU. Le GPU du jeu sur Automatique hérite de ce choix. Un écran indisponible
@@ -163,6 +166,9 @@ Windows Party runs one to four Windows game instances on a single Batocera PC.
 It supports `.wine`, `.pc` and `.wsquashfs`, controller-first configuration,
 a virtual keyboard, per-game adapters, separate player saves and shared-screen
 window placement on Xorg/Wayland. Game ROMs and scraped media are reused.
+ES system and per-game options include **Enable HIDRAW** (Auto / Enabled /
+Disabled). Auto inherits the original Windows game's setting. Each instance
+retains access only to its assigned controllers.
 
 Install with the command above. The canonical entry point is
 `/userdata/system/windows-party/windows-party`. Open **Configure Windows Party**

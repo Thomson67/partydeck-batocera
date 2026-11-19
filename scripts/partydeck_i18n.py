@@ -132,6 +132,10 @@ EN = {
     'Contexte privé Most Wanted invalide.':'Invalid private Most Wanted context.',
 
     'RUNNER WINE':'WINE RUNNER',
+    'ACTIVER HIDRAW':'ENABLE HIDRAW',
+    'Accès HID brut de la manette attribuée au joueur. Auto : reprendre le réglage du jeu Windows d’origine.':'Raw HID access for the controller assigned to each player. Auto: inherit the original Windows game setting.',
+    'Réglage HIDRAW Windows Party invalide.':'Invalid Windows Party HIDRAW setting.',
+    'Windows Party : HIDRAW={p0}.':'Windows Party: HIDRAW={p0}.',
     'Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.':'Windows Party runner. Auto: use the original Windows game’s runner.',
     'Configuration ES Windows Party personnalisée ; fichier conservé : {p0}':'Custom Windows Party ES configuration; file retained: {p0}',
     'Runner Windows Party invalide.':'Invalid Windows Party runner.',
