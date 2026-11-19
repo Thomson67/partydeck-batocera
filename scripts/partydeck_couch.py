@@ -84,7 +84,7 @@ def fields(tab, adapter='standard'):
                 ('nfsmw.throttle',tr('Fréquence du serveur LAN'),[1,6,10,30,60]),
                 ('nfsmw.start_delay',tr('Délai entre joueurs (secondes)'),[0,15,30,60]),
                 ('nfsmw.music_j1_only',tr('Musique uniquement pour J1'),[True,False]),
-                ('nfsmw.controller_enter',tr('Valider avec LB + RB / L1 + R1 (Entrée)'),[True,False])]
+                ('nfsmw.controller_enter',tr('LB + RB / L1 + R1 : nom J1–J4 et validation'),[True,False])]
     if adapter == 'l4d2-goldberg':
         if tab==2:
             return [('l4d2.language',tr('Langue du jeu'),list(L4D2_LANGUAGES)),

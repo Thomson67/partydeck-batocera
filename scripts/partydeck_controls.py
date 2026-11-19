@@ -19,7 +19,8 @@ def held(fd):
     return all(keys[code//8] & (1<<(code%8)) for code in (BTN_TL,BTN_TR))
 
 
-def send_enter():
+def send_enter(player):
+    if player not in ('j1','j2','j3','j4'):raise ValueError('Invalid player for Most Wanted naming')
     result=subprocess.run(['xdotool','search','--onlyvisible','--name',
                            '^Need for Speed.*Most Wanted.*$'],
                           capture_output=True,text=True,timeout=2)
@@ -27,25 +28,35 @@ def send_enter():
     if result.returncode or len(ids)!=1 or not ids[0].isdigit():return False
     # --window uses XSendEvent, not global XTEST/uinput. DISPLAY is the inner
     # Gamescope X server inherited by this Wine child, never the ES display.
-    result=subprocess.run(['xdotool','key','--window',ids[0],'--delay','40','Return'],
-                          stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=2)
-    return result.returncode==0
+    # The game's custom field need not implement Ctrl+A. Clear on both sides
+    # of the caret instead; enough for the full name field, without clipboard
+    # access or keyboard-layout-dependent punctuation.
+    commands=[(['xdotool','key','--window',ids[0],'--delay','10',
+                'End',*(['BackSpace']*64),*(['Delete']*64)],3),
+              (['xdotool','type','--window',ids[0],'--delay','40','--',player.upper()],2),
+              (['xdotool','key','--window',ids[0],'--delay','40','Return'],2)]
+    for command,timeout in commands:
+        result=subprocess.run(command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=timeout)
+        if result.returncode:return False
+    return True
 
 
 class Confirmation:
-    def __init__(self,enabled,inputs=Path('/dev/input')):
+    def __init__(self,enabled,inputs=Path('/dev/input'),player='j1'):
+        if player not in ('j1','j2','j3','j4'):raise ValueError('Invalid Most Wanted player')
+        self.player=player
         self.enabled=enabled;self.inputs=inputs;self.stop=threading.Event();self.thread=None
 
     def __enter__(self):
         if self.enabled:
             self.thread=threading.Thread(target=self.run,daemon=True)
             self.thread.start()
-            print(tr('Most Wanted : LB + RB / L1 + R1 envoie Entrée au joueur concerné.'),flush=True)
+            print(tr('Most Wanted : LB + RB / L1 + R1 remplace le champ par {p0} puis valide.',p0=self.player.upper()),flush=True)
         return self
 
     def __exit__(self,*args):
         self.stop.set()
-        if self.thread:self.thread.join(timeout=5)
+        if self.thread:self.thread.join(timeout=8)
 
     def run(self):
         # Only this player's devices exist under /dev/input in the sandbox.
@@ -65,7 +76,7 @@ class Confirmation:
                         current=held(fd)
                         # One Enter per chord, rearmed only after release.
                         if current and not previous:
-                            try:send_enter()
+                            try:send_enter(self.player)
                             except (OSError,subprocess.SubprocessError):pass
                         devices[path]=(fd,current)
                     except OSError:

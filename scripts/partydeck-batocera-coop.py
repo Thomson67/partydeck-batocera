@@ -512,7 +512,7 @@ def _run_wine(original, target, player, saves=None):
             profile=read_profile(base,original)
             confirm=profile.get('adapter')=='nfsmw-lan' and profile['nfsmw']['controller_enter']
     try:
-        with runner_views(player) as views,Confirmation(confirm):
+        with runner_views(player) as views,Confirmation(confirm,player=player.name):
             environment={'env':pressure_vessel_environment(views)} if views else {}
             status = subprocess.run(["batocera-wine", "windows", "play", str(original)],
                                     **environment).returncode

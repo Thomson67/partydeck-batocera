@@ -147,6 +147,8 @@ EN = {
     'MangoHud : profil {p0} ; couches privées {p1}.':'MangoHud: profile {p0}; private layers {p1}.',
     'Valider avec LB + RB / L1 + R1 (Entrée)':'Confirm with LB + RB / L1 + R1 (Enter)',
     'Most Wanted : LB + RB / L1 + R1 envoie Entrée au joueur concerné.':'Most Wanted: LB + RB / L1 + R1 sends Enter to the corresponding player.',
+    'LB + RB / L1 + R1 : nom J1–J4 et validation':'LB + RB / L1 + R1: name J1–J4 and confirm',
+    'Most Wanted : LB + RB / L1 + R1 remplace le champ par {p0} puis valide.':'Most Wanted: LB + RB / L1 + R1 replaces the field with {p0}, then confirms.',
     'Runner propre à Windows Party. Auto : utiliser le runner du jeu Windows d’origine.':'Windows Party runner. Auto: use the original Windows game’s runner.',
     'Configuration ES Windows Party personnalisée ; fichier conservé : {p0}':'Custom Windows Party ES configuration; file retained: {p0}',
     'Runner Windows Party invalide.':'Invalid Windows Party runner.',
