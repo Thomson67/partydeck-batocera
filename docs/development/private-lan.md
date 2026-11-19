@@ -68,8 +68,13 @@ protections UMU étant en lecture seule, un runner directement exposé ainsi
 Windows Party crée des vues OverlayFS temporaires des distributions Proton UMU
 pour chaque joueur. Les fichiers installés sont les couches inférieures,
 les écritures vont dans les couches propres au joueur. La vue reste en lecture
-seule pour les contrôles d’intégrité du wrapper UMU. Elle est déclarée RW dans
-Pressure Vessel, qui expose la distribution privée au processus Proton.
+seule pour les contrôles d’intégrité du wrapper UMU. Une passerelle temporaire vers le lanceur UMU remplace `PROTONPATH` par
+l’alias privé RW après la sélection native du runner. Déclarer le chemin RO
+comme RW ne suffit pas à retirer son attribut de montage : Proton doit utiliser
+l’alias RW lui-même. Le lanceur original est conservé par un bind privé ;
+aucun fichier hôte n’est réécrit. Les alias `runtime/<jeu>/jN/proton-runners/<runner>`
+sont stables entre lancements pour les liens de DLL conservés par Proton.
+Seules les couches d’écriture et le relais sont temporaires.
 Les couches sont démontées et retirées à la fin de la commande native Wine.
 En cas de nettoyage impossible, le chemin est journalisé et conservé.
 Ce n’est pas une copie complète des runners ; les binaires hôtes restent intacts.
@@ -78,8 +83,13 @@ Recent Proton versions open dist.lock for writing unconditionally and may also
 create their default prefix or perform distribution fixups. Windows Party gives
 each player temporary OverlayFS views of UMU Proton distributions. Installed
 files remain the lower layer; writes use player-private upper layers. The view
-is read-only for the UMU wrapper's integrity/protection pass and explicitly
-exported writable to Pressure Vessel for Proton. Views are unmounted and removed
+is read-only for the UMU wrapper's integrity/protection pass. A temporary UMU
+launcher relay changes PROTONPATH to the writable private alias after native
+runner selection. Exporting the read-only path as RW did not clear its mount
+flag. The original UMU zipapp is pinned by a private bind and executed unchanged;
+no host launcher is rewritten. Aliases at `runtime/<game>/jN/proton-runners/<runner>`
+are stable across launches so Proton DLL links never persist a random temporary
+path. Only writable layers and the relay are temporary. Views are unmounted and removed
 after native Wine returns; failed cleanup is logged and retained. Full runner
 copies are not made and host binaries stay unchanged. Actual nested-runtime
 operation still needs validation on Batocera.

@@ -1,7 +1,7 @@
 """Player-local copy-on-write Proton distributions for nested Steam Runtime.
 
 The distribution is read-only to the native UMU wrapper's protection pass.
-Pressure Vessel can bind the private overlay writable inside Steam Runtime.
+UMU receives a separate writable alias before it builds Steam Runtime mounts.
 No shared runner files are made writable or copied in full.
 """
 from contextlib import contextmanager
@@ -14,7 +14,8 @@ from partydeck_i18n import tr
 
 
 @contextmanager
-def runner_views(player,runners=Path('/userdata/system/wine/custom')):
+def runner_views(player,runners=Path('/userdata/system/wine/custom'),
+                 umu=Path('/userdata/system/umu/umu-run')):
     candidates=sorted(path.resolve() for path in runners.glob('*-UMU')
                       if path.is_dir() and (path/'proton').is_file())
     candidates=list(dict.fromkeys(candidates))
@@ -29,21 +30,39 @@ def runner_views(player,runners=Path('/userdata/system/wine/custom')):
         raise RuntimeError(tr('Chemin incompatible avec la vue privée UMU.'))
     area=Path(tempfile.mkdtemp(prefix='.proton-',dir=player))
     mounted=[]
+    aliases={}
     try:
         for index,runner in enumerate(candidates):
             slot=area/str(index)
-            upper,work,view=(slot/name for name in ('upper','work','view'))
-            for path in (upper,work,view):path.mkdir(parents=True)
+            upper,work=(slot/name for name in ('upper','work'))
+            # Proton may persist links into its distribution in the prefix.
+            # Recreate a stable alias each launch, independent of runner order
+            # and temporary upper names; never persist random .proton-* paths.
+            view=player/'proton-runners'/runner.name
+            for path in (upper,work,view):path.mkdir(parents=True,exist_ok=True)
             options=f'lowerdir={runner},upperdir={upper},workdir={work},redirect_dir=on'
             subprocess.run(['mount','-t','overlay','-o',options,'overlay',str(view)],check=True)
             mounted.append(view)
+            aliases[str(runner)]=str(view)
             subprocess.run(['mount','--bind',str(view),str(runner)],check=True)
             mounted.append(runner)
             # Existing UMU protection refuses writable runner mountpoints.
             # Its integrity check sees the unmodified lower distribution.
             subprocess.run(['mount','-o','remount,bind,ro',str(runner)],check=True)
+        # A RW export does not clear a source bind's read-only flag. Preserve
+        # that bind for the wrapper but pass the writable alias to UMU itself.
+        # This runs inside the player's mount namespace and private UMU home.
+        if umu.is_file():
+            original=area/'umu-original.pyz'
+            original.touch()
+            subprocess.run(['mount','--bind',str(umu),str(original)],check=True)
+            mounted.append(original)
+            relay=area/'umu-relay.py'
+            relay.write_text(launcher_relay(original,aliases))
+            subprocess.run(['mount','--bind',str(relay),str(umu)],check=True)
+            mounted.append(umu)
         print(tr('UMU : vues privées temporaires des runners préparées ({p0}).',p0=len(candidates)),flush=True)
-        yield candidates
+        yield list(aliases.values())
     finally:
         clean=True
         for path in reversed(mounted):
@@ -65,3 +84,19 @@ def pressure_vessel_environment(paths,environ=None):
     entries.extend(str(path) for path in paths if str(path) not in entries)
     if paths:env['PRESSURE_VESSEL_FILESYSTEMS_RW']=':'.join(entries)
     return env
+
+
+def launcher_relay(original,aliases):
+    """Redirect only Proton, after native runner choice, then run UMU unchanged.
+
+    The original zipapp is pinned by a private bind before covering its normal
+    path. Neither the installed runner nor the host UMU launcher is rewritten.
+    """
+    return ("import os,runpy,sys\n"
+            f"aliases={aliases!r}\n"
+            "selected=os.path.realpath(os.environ.get('PROTONPATH',''))\n"
+            "if selected in aliases:\n"
+            "    os.environ['PROTONPATH']=aliases[selected]\n"
+            "    print('Windows Party UMU PROTONPATH='+aliases[selected],flush=True)\n"
+            f"sys.argv[0]={str(original)!r}\n"
+            "runpy.run_path(sys.argv[0],run_name='__main__')\n")
