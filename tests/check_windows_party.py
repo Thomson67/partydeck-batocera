@@ -87,4 +87,12 @@ with tempfile.TemporaryDirectory() as folder:
                 else:
                     overlay.assert_called_once_with(game, dedicated/"content")
                 run.assert_called_once_with(["batocera-wine", "windows", "play", str(game)])
+    # Steam Runtime receives RW access to the player-local runner view.
+    import partydeck_umu
+    runner=root/'custom/GE-Proton-UMU'
+    with patch.object(partydeck_umu,'runner_views') as views, patch.object(party,'UMU_HOME',root/'no-umu'), patch.object(party.subprocess,'run',return_value=Mock(returncode=0)) as run:
+        views.return_value.__enter__.return_value=[runner]
+        game=Path('/example/Game.wsquashfs')
+        assert party.run_wine(game,game,player,dedicated)==0
+        assert str(runner) in run.call_args.kwargs['env']['PRESSURE_VESSEL_FILESYSTEMS_RW'].split(':')
 print("Windows Party : système, lancement des ROMs et sauvegardes J1/J2 vérifiés.")

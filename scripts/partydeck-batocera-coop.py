@@ -498,12 +498,18 @@ def _run_wine(original, target, player, saves=None):
         from partydeck_nfsmw import install_hook as install_mw, finish_launch as finish_mw
         nfsmw_result=install_mw(Path(__file__).resolve().parent,original,player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
+    # All UMU distributions receive cheap COW views: native Wine resolves the
+    # selected runner itself, including per-ROM and filename overrides.
+    from partydeck_umu import runner_views,pressure_vessel_environment
     try:
-        status = subprocess.run(["batocera-wine", "windows", "play", str(original)]).returncode
-        if goldberg_result is not None:
-            status=finish_l4d2(goldberg_result,status)
-        if nfsmw_result is not None:
-            status=finish_mw(nfsmw_result,status)
+        with runner_views(player) as views:
+            environment={'env':pressure_vessel_environment(views)} if views else {}
+            status = subprocess.run(["batocera-wine", "windows", "play", str(original)],
+                                    **environment).returncode
+            if goldberg_result is not None:
+                status=finish_l4d2(goldberg_result,status)
+            if nfsmw_result is not None:
+                status=finish_mw(nfsmw_result,status)
     finally:
         if goldberg_result is not None:
             goldberg_result.unlink(missing_ok=True)

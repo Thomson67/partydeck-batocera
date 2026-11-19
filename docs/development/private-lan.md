@@ -55,3 +55,31 @@ now has no default route, retaining only private and broadcast routes. The
 verifier checks the expected ENETUNREACH behavior before player UDP exchanges.
 Internet remains unavailable; the required UMU/Steam runtime must be installed
 before an offline launch.
+
+
+## Distributions Proton privées / Private Proton distributions
+
+Les versions récentes de Proton ouvrent `dist.lock` en écriture même lorsque
+le préfixe modèle existe. Elles peuvent aussi créer `files/share/default_pfx`
+ou appliquer des corrections de distribution. Le dossier hôte et les
+protections UMU étant en lecture seule, un runner directement exposé ainsi
+échoue avant de lancer le jeu.
+
+Windows Party crée des vues OverlayFS temporaires des distributions Proton UMU
+pour chaque joueur. Les fichiers installés sont les couches inférieures,
+les écritures vont dans les couches propres au joueur. La vue reste en lecture
+seule pour les contrôles d’intégrité du wrapper UMU. Elle est déclarée RW dans
+Pressure Vessel, qui expose la distribution privée au processus Proton.
+Les couches sont démontées et retirées à la fin de la commande native Wine.
+En cas de nettoyage impossible, le chemin est journalisé et conservé.
+Ce n’est pas une copie complète des runners ; les binaires hôtes restent intacts.
+
+Recent Proton versions open dist.lock for writing unconditionally and may also
+create their default prefix or perform distribution fixups. Windows Party gives
+each player temporary OverlayFS views of UMU Proton distributions. Installed
+files remain the lower layer; writes use player-private upper layers. The view
+is read-only for the UMU wrapper's integrity/protection pass and explicitly
+exported writable to Pressure Vessel for Proton. Views are unmounted and removed
+after native Wine returns; failed cleanup is logged and retained. Full runner
+copies are not made and host binaries stay unchanged. Actual nested-runtime
+operation still needs validation on Batocera.

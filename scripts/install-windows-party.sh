@@ -219,6 +219,7 @@ if [[ ${1:-verifier} == installer ]]; then
     fi
     source_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
     source_helper="$source_dir/partydeck-batocera-coop.py"
+    [[ -f $source_dir/partydeck_umu.py ]] || die 'Module UMU privé absent / Private UMU module missing.'
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
     [[ -f $source_dir/partydeck_display.py ]] || die 'Module écran/GPU absent / Display/GPU module missing.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
@@ -289,6 +290,7 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_nfsmw.py" "$base/partydeck_nfsmw.py"
     cp -- "$source_dir/partydeck_l4d2.py" "$staging/partydeck_l4d2.py"
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
+    cp -- "$source_dir/partydeck_umu.py" "$base/partydeck_umu.py"
     cp -- "$source_dir/partydeck_migrate.py" "$base/partydeck_migrate.py"
     cp -- "$source_dir/partydeck_display.py" "$staging/partydeck_display.py"
     mv -fT -- "$staging/partydeck_display.py" "$base/partydeck_display.py"
