@@ -305,7 +305,7 @@ with tempfile.TemporaryDirectory() as folder:
     runner=importlib.util.module_from_spec(spec);sys.modules[spec.name]=runner;spec.loader.exec_module(runner)
     for hook_code,native_code,expected in ((1,0,1),(0,0,0),(0,9,9),(0,-11,139)):
         result.write_text(json.dumps(dict(version=1,code=hook_code)))
-        with patch.object(runner,'UMU_HOME',root/'missing-umu'),patch.object(l4d2,'install_hook',return_value=result),\
+        with patch('partydeck_bottles.mount_windows',return_value=[]),patch.object(runner,'UMU_HOME',root/'missing-umu'),patch.object(l4d2,'install_hook',return_value=result),\
              patch.object(runner.subprocess,'run',return_value=Mock(returncode=native_code)):
             assert runner.run_wine(rom,rom,player,root/'private-saves')==expected
         assert not result.exists()

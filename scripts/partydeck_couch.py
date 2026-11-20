@@ -753,9 +753,9 @@ class App:
             self.text(' · '.join(human(d['free']) + tr(' libres sur ') + d['path'] for d in result['disks']),
                       418, 237, 16, (159,213,227), 955)
             c = result['categories']
-            self.text(tr('Persistant {p0} · Runtime {p1} · Installation {p2}', p0=human(c['persistent']), p1=human(c['runtime']), p2=human(c['installation'])),
+            self.text(tr('Sauvegardes {p0} · Bottles {p1} · Runtime {p2}', p0=human(c['persistent']), p1=human(c.get('bottles',0)), p2=human(c['runtime'])),
                       418, 266, 16, width=955)
-            self.text(tr('Caches {p0} · Journaux {p1}', p0=human(c['cache']), p1=human(c['logs'])), 418, 290, 16, width=955)
+            self.text(tr('Caches {p0} · Journaux {p1} · Installation {p2}', p0=human(c['cache']), p1=human(c['logs']), p2=human(c['installation'])), 418, 290, 16, width=955)
         else:
             self.text(tr('Analyse du disque en cours…'), 418, 221, 20, width=955)
         rows = [('auto_clean',tr('Entretien automatique')), ('cache_mib',tr('Caches cumulés (Mio)')),
@@ -783,7 +783,7 @@ class App:
                 y = 648+index*45
                 self.text(game['name'],430,y,20,width=730)
                 self.text(human(game['total']),1200,y,20,width=180)
-                self.text(tr('Persistant {p0} · Runtime {p1} · Caches {p2} · Logs {p3}', p0=human(game['persistent']), p1=human(game['runtime']), p2=human(game['cache']), p3=human(game['logs'])),
+                self.text(tr('Sauvegardes {p0} · Bottles {p1} · Travail {p2} · Caches/logs {p3}', p0=human(game['persistent']), p1=human(game.get('bottles',0)), p2=human(game['runtime']), p3=human(game['cache']+game['logs'])),
                           430,y+25,16,(148,169,191),945)
 
     def volume(self, key):

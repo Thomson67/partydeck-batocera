@@ -71,21 +71,23 @@ with tempfile.TemporaryDirectory() as folder:
     mappings = {str(host/"windows"): "saves", str(host/"bottles"): "bottles",
                 str(host/"cache"): "cache"}
     for index in (1, 2):
-        player = root / "runtime" / f"j{index}"
+        player = root / "runtime" / ("a"*16) / f"j{index}"
         dedicated = saves / "Game" / f"j{index}"
-        with patch.object(party, "WRITABLE", mappings), patch.object(party, "UMU_HOME", root/"no-umu"):
+        with patch.object(party, "WRITABLE", mappings), patch.object(party, "UMU_HOME", root/"no-umu"), patch("partydeck_bottles.ROOT",root/"bottles"):
+            from partydeck_bottles import location
+            area=location(player)
             binds = list(party.player_paths(player, dedicated))
         assert ("--bind", str(dedicated/"windows"), str(host/"windows")) in binds
-        assert ("--bind", str(dedicated/"prefixes"), str(host/"bottles")) in binds
+        assert ("--bind", str(area/"prefixes"), str(host/"bottles")) in binds
         assert ("--bind", str(player/"cache"), str(host/"cache")) in binds
         for suffix in (".wine", ".pc", ".wsquashfs"):
             game = Path("/example/Game" + suffix)
-            with patch.object(party, "UMU_HOME", root/"no-umu"), patch.object(party, "mount_overlay") as overlay, patch.object(party.subprocess, "run", return_value=Mock(returncode=0)) as run:
+            with patch.object(party, "UMU_HOME", root/"no-umu"), patch.object(party, "mount_overlay") as overlay, patch("partydeck_bottles.ROOT",root/"bottles"), patch.object(party.subprocess, "run", return_value=Mock(returncode=0)) as run:
                 assert party.run_wine(game, game, player, dedicated) == 0
                 if suffix == ".wsquashfs":
                     overlay.assert_not_called()
                 else:
-                    overlay.assert_called_once_with(game, dedicated/"content")
+                    overlay.assert_called_once_with(game, area/"content")
                 run.assert_called_once_with(["batocera-wine", "windows", "play", str(game)])
     # Steam Runtime receives RW access to the player-local runner view.
     import partydeck_umu

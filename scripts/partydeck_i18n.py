@@ -380,6 +380,41 @@ EN = {
 }
 
 
+EN.update({
+    'Protection de préfixe redirigée : {p0}': 'Prefix protection is redirected: {p0}',
+    'Version de protection UMU non reconnue : {p0}': 'Unrecognized UMU protection version: {p0}',
+    'Intégrité de la protection UMU invalide : {p0}': 'Invalid UMU protection integrity: {p0}',
+
+    'La copie privée des bottles n’est pas isolée.': 'Private bottle writes are not isolated.',
+    'Le disque des bottles ne permet pas la copie privée Windows. Aucune migration effectuée.': 'The bottle filesystem does not support private Windows copy-on-write. No migration was performed.',
+
+    'Ancien dossier de bottle redirigé : {p0}': 'Legacy bottle directory is redirected: {p0}',
+    'Archive modifiée pendant la préparation : {p0}': 'Archive changed during preparation: {p0}',
+    'Base Windows absente : {p0}': 'Windows base is missing: {p0}',
+    'Base Windows incohérente : {p0}': 'Inconsistent Windows base: {p0}',
+    'Bottle encore montée : {p0}': 'Bottle is still mounted: {p0}',
+    'Bottle migrée absente : {p0}': 'Migrated bottle is missing: {p0}',
+    'Bottle modifiée pendant la mutualisation : {p0}': 'Bottle changed during deduplication: {p0}',
+    'Caches {p0} · Journaux {p1} · Installation {p2}': 'Caches {p0} · Logs {p1} · Installation {p2}',
+    'Chemin incompatible avec la bottle privée.': 'Path is incompatible with the private bottle.',
+    'Deux dossiers Windows existent ; données conservées : {p0}': 'Two Windows directories exist; data was preserved: {p0}',
+    'Deux dossiers de bottle existent ; fusion automatique refusée : {p0}': 'Two bottle directories exist; automatic merge refused: {p0}',
+    'Dossier Windows privé absent : {p0}': 'Private Windows directory is missing: {p0}',
+    'Dossier de bottle invalide : {p0}': 'Invalid bottle directory: {p0}',
+    'Dossier technique redirigé : {p0}': 'Technical directory is redirected: {p0}',
+    'Déplacement de bottle impossible ; données conservées : {p0}': 'Cannot move bottle; data was preserved: {p0}',
+    'Extraction de la base Windows impossible : {p0}': 'Cannot extract Windows base: {p0}',
+    'Fichier commun de bottle altéré : {p0}': 'Shared bottle file was altered: {p0}',
+    'Identité de bottle Windows Party invalide.': 'Invalid Windows Party bottle identity.',
+    'Migration de bottle incohérente : {p0}': 'Inconsistent bottle migration: {p0}',
+    'Optimisation des bottles différée : {p0}': 'Bottle optimization deferred: {p0}',
+    'Sauvegardes {p0} · Bottles {p1} · Runtime {p2}': 'Saves {p0} · Bottles {p1} · Runtime {p2}',
+    'Sauvegardes {p0} · Bottles {p1} · Travail {p2} · Caches/logs {p3}': 'Saves {p0} · Bottles {p1} · Runtime {p2} · Caches/logs {p3}',
+    'Vue Windows incohérente : {p0}': 'Inconsistent Windows view: {p0}',
+    'Vérification de bottle échouée : {p0}': 'Bottle verification failed: {p0}',
+})
+
+
 def message_body(message):
     """Separate legacy Yad labels from their CLI prefixes and field types."""
     match = re.match(r'^(--(?:field|button|text|file-filter|column)=)(.*?)(:(?:CB|CHK|NUM|[0-9]+))?$',message,re.S)

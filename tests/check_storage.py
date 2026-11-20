@@ -155,6 +155,7 @@ with tempfile.TemporaryDirectory() as directory:
     launcher.write_text(script.read_text().replace("base='/userdata/system/windows-party'", f"base='{base}'"))
     (base/'partydeck_storage.py').write_text(Path(storage.__file__).read_text())
     (base/'partydeck_i18n.py').write_text((Path(storage.__file__).parent/'partydeck_i18n.py').read_text())
+    (base/'partydeck_bottles.py').write_text((Path(storage.__file__).parent/'partydeck_bottles.py').read_text())
     bin_dir = root/'bin'
     bin_dir.mkdir()
     batocera = bin_dir/'batocera-version'

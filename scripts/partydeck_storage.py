@@ -268,7 +268,8 @@ def prepare_launch(base):
 
 def disks(base, saves):
     seen = set()
-    for root in (Path(base), Path(saves)):
+    from partydeck_bottles import ROOT as bottles
+    for root in (Path(base), Path(saves), bottles):
         while not root.exists():
             root = root.parent
         dev = root.stat().st_dev
@@ -322,7 +323,11 @@ def snapshot(base, saves=None):
                 total += occupied(info)
         return total
 
-    categories = dict(cache=0, logs=0, persistent=0, runtime=0, installation=0)
+    from partydeck_bottles import ROOT as bottles_root
+    categories = dict(cache=0, logs=0, persistent=0, runtime=0, installation=0, bottles=0)
+    # Count shared objects before player manifests: one physical allocation,
+    # attributed to the global bottle total rather than to the first game.
+    categories['bottles'] = size(bottles_root/'objects') + size(bottles_root/'seeds')
     games, mapped = [], set()
     for profile in sorted((base / 'profiles').glob('*.json')):
         try:
@@ -339,10 +344,11 @@ def snapshot(base, saves=None):
                 logs += sum(size(player / item) for item in ('logs', 'umu-logs', 'proton-logs'))
             persistent = size(saves / name)
             runtime = size(base / 'runtime' / digest)
-            row = dict(name=rom.stem, cache=cache, logs=logs, persistent=persistent, runtime=runtime)
-            row['total'] = cache + logs + persistent + runtime
+            bottles = size(bottles_root/'players'/digest)
+            row = dict(name=rom.stem, cache=cache, logs=logs, persistent=persistent, runtime=runtime, bottles=bottles)
+            row['total'] = cache + logs + persistent + runtime + bottles
             games.append(row)
-            for key in ('cache', 'logs', 'persistent', 'runtime'):
+            for key in ('cache', 'logs', 'persistent', 'runtime', 'bottles'):
                 categories[key] += row[key]
         except (OSError, ValueError, KeyError, TypeError):
             continue
@@ -351,6 +357,7 @@ def snapshot(base, saves=None):
     categories['persistent'] += size(saves)
     for mode in ('runtime', 'coop'):
         categories['runtime'] += size(base / mode)
+    categories['bottles'] += size(bottles_root)
     categories['installation'] = size(base)
     return dict(categories=categories, total=sum(categories.values()),
                 games=sorted(games, key=lambda g: g['total'], reverse=True),

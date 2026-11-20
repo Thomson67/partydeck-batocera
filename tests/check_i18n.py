@@ -194,3 +194,9 @@ for language in ('fr','en'):
     assert lang.tr('GPU par défaut')==('GPU par défaut' if language=='fr' else 'Default GPU')
     assert output_label([Output('DP-4',(1920,0,1920,1080))],'DP-4')=='DP-4 · 1920×1080 · 1920,0'
     assert ('unavailable' if language=='en' else 'indisponible') in output_label([],'eDP-1')
+
+# Bottle storage surfaces are available in both languages.
+for locale,label in (('fr','Sauvegardes'),('en','Saves')):
+    lang.set_language(locale)
+    assert lang.tr('Sauvegardes {p0} · Bottles {p1} · Runtime {p2}',p0=1,p1=2,p2=3).startswith(label)
+    assert lang.tr('Bottle encore montée : {p0}',p0='test').startswith('Bottle encore' if locale=='fr' else 'Bottle is still')

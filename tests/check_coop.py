@@ -95,6 +95,7 @@ for split, second_position, inputs, shared, party, virtual in [
         def mock(obj, attr, **kwargs):
             return stack.enter_context(patch.object(obj, attr, **kwargs))
         base = Path(temp)
+        stack.enter_context(patch("partydeck_bottles.ROOT",base/"bottles"))
         game = base / "Game.wsquashfs"
         if party:
             profile = defaults(game)

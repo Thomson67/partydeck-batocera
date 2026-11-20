@@ -223,6 +223,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_mangohud.py && -f $source_dir/partydeck_controls.py ]] || die 'Modules Windows Party absents / Windows Party modules missing.'
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
     [[ -f $source_dir/partydeck_display.py ]] || die 'Module écran/GPU absent / Display/GPU module missing.'
+    [[ -f $source_dir/partydeck_bottles.py ]] || die 'Module bottles absent / Bottles module missing.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
     [[ -f $source_dir/partydeck_borderlands2.py ]] || die 'Module Borderlands 2 absent du paquet.'
     [[ -f $source_dir/partydeck_sm64coopdx.py && -f $source_dir/../templates/sm64coopdx-common.txt ]] || die 'Profil SM64CoopDX absent du paquet.'
@@ -297,6 +298,8 @@ if [[ ${1:-verifier} == installer ]]; then
     cp -- "$source_dir/partydeck_migrate.py" "$base/partydeck_migrate.py"
     cp -- "$source_dir/partydeck_display.py" "$staging/partydeck_display.py"
     mv -fT -- "$staging/partydeck_display.py" "$base/partydeck_display.py"
+    cp -- "$source_dir/partydeck_bottles.py" "$staging/partydeck_bottles.py"
+    mv -fT -- "$staging/partydeck_bottles.py" "$base/partydeck_bottles.py"
     cp -- "$source_dir/partydeck_storage.py" "$staging/partydeck_storage.py"
     mv -fT -- "$staging/partydeck_storage.py" "$base/partydeck_storage.py"
     cp -- "$source_dir/partydeck_catalog.py" "$staging/partydeck_catalog.py"

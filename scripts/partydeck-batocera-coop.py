@@ -351,7 +351,11 @@ def player_paths(player, saves=None):
     for destination, relative in paths.items():
         Path(destination).mkdir(parents=True, exist_ok=True)
         if saves is not None and relative in {"saves", "bottles"}:
-            source = saves / ("windows" if relative == "saves" else "prefixes")
+            if relative == "saves":
+                source = saves / "windows"
+            else:
+                from partydeck_bottles import location
+                source = location(player) / "prefixes"
         else:
             source = player / relative
         source.mkdir(parents=True, exist_ok=True)
@@ -388,6 +392,10 @@ def sandbox_arguments(player, devices, hidraw=Path("/sys/class/hidraw"), saves=N
     if saves is not None:
         saves.mkdir(parents=True, exist_ok=True)
         args.extend(["--bind", str(saves), str(saves)])
+        from partydeck_bottles import location
+        area = location(player)
+        area.mkdir(parents=True, exist_ok=True)
+        args.extend(["--bind", str(area), str(area)])
     for key in NATIVE_GRAPHICS_ENV:
         if key in os.environ:
             args.extend(["--setenv", key, os.environ[key]])
@@ -474,8 +482,12 @@ def run_wine(original, target, player, saves=None):
 def _run_wine(original, target, player, saves=None):
     goldberg_result=None
     nfsmw_result=None
+    windows_views=[]
+    if saves is not None:
+        from partydeck_bottles import location, mount_windows
+        windows_views=mount_windows(player)
     if original.suffix.lower() != ".wsquashfs":
-        mount_overlay(target, (saves if saves is not None else player) / "content")
+        mount_overlay(target, (location(player) if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
         mount_overlay(UMU_HOME, player / "umu")
         for name in UMU_PRIVATE:
@@ -513,7 +525,11 @@ def _run_wine(original, target, player, saves=None):
             confirm=profile.get('adapter')=='nfsmw-lan' and profile['nfsmw']['controller_enter']
     try:
         with runner_views(player) as views,Confirmation(confirm,player=player.name):
-            environment={'env':pressure_vessel_environment(views)} if views else {}
+            if windows_views:
+                from partydeck_bottles import adapt_prefix_isolation
+                adapt_prefix_isolation(views,windows_views)
+            exports=[*views,*windows_views]
+            environment={'env':pressure_vessel_environment(exports)} if exports else {}
             status = subprocess.run(["batocera-wine", "windows", "play", str(original)],
                                     **environment).returncode
             if goldberg_result is not None:
@@ -712,9 +728,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     if probe.returncode:
         raise RuntimeError("Bubblewrap ne peut pas initialiser l’espace de noms Wine.")
     print("Vérification Bubblewrap Wine OK.", flush=True)
+    if party:
+        from partydeck_bottles import ROOT as bottles_root,regular_directory
+        regular_directory(bottles_root)
+        helper=Path(__file__).resolve().with_name('partydeck_bottles.py')
+        bottle_probe=subprocess.run([*bubblewrap_command(app),*MOUNT_CAPS,
+            "--ro-bind","/","/","--bind",str(bottles_root),str(bottles_root),
+            "--unshare-pid","--proc","/proc","--",sys.executable,str(helper),"_probe"])
+        if bottle_probe.returncode:
+            raise RuntimeError(tr('Le disque des bottles ne permet pas la copie privée Windows. Aucune migration effectuée.'))
     game_id = hashlib.sha256(os.fsencode(original)).hexdigest()[:16]
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
     processes, states = [], []
+    bottle_players=[]
     virtual_watcher=None
     network=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
@@ -737,6 +763,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             player = base / ("runtime" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
             player.mkdir(parents=True, exist_ok=True)
+            if saves is not None:
+                from partydeck_bottles import prepare
+                saves.mkdir(parents=True, exist_ok=True)
+                prepare(player,saves,original,target)
+                bottle_players.append((player,saves))
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
             state = player/f'session-{uuid.uuid4().hex}.json'
             processes.append(start_player(app, player, original, target, devices, rectangle,
@@ -816,6 +847,18 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 finally:
                     if network is not None:network.close()
         finally:
+            # All Wine namespaces must be gone before touching physical uppers.
+            # A failed optimization never masks the game exit or removes saves.
+            if bottle_players:
+                try:
+                    from partydeck_storage import ensure_idle
+                    from partydeck_bottles import prepare,collect_objects
+                    ensure_idle(base)
+                    for player,saves in bottle_players:
+                        prepare(player,saves,original,target)
+                    collect_objects()
+                except (OSError,RuntimeError,ValueError,subprocess.SubprocessError) as error:
+                    print(tr('Optimisation des bottles différée : {p0}',p0=error),flush=True)
             for path in states:
                 path.unlink(missing_ok=True)
             for signum,handler in handlers.items():
