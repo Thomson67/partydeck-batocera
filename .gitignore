@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 plugins/HKMP/bin/
 plugins/HKMP/obj/
+plugins/NativeWide/bin/
+plugins/NativeWide/obj/
+plugins/NativeWide/tests/bin/
+plugins/NativeWide/tests/obj/
+
+plugins/HKMultiplayer/bin/
+plugins/HKMultiplayer/obj/

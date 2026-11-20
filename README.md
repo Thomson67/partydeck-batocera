@@ -1,5 +1,9 @@
 # Windows Party pour Batocera
 
+Profil de test **Hollow Knight / HKMultiplayer 0.36.2** : connexion et code
+automatiques, entrée native désactivée avec HIDRAW conservé.
+Voir [le guide](docs/HOLLOW_KNIGHT_HKMULTIPLAYER.md).
+
 Lancer plusieurs instances d’un jeu Windows sur un seul PC, avec des contrôles
 attribués à chaque joueur et des fenêtres disposées en écran partagé.
 

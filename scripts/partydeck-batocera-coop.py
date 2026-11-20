@@ -475,6 +475,7 @@ def _run_wine(original, target, player, saves=None):
     goldberg_result=None
     nfsmw_result=None
     hkmp_result=None
+    hkmultiplayer_result=None
     if original.suffix.lower() != ".wsquashfs":
         mount_overlay(target, (saves if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
@@ -502,6 +503,8 @@ def _run_wine(original, target, player, saves=None):
         nfsmw_result=install_mw(Path(__file__).resolve().parent,original,player)
         from partydeck_hkmp import install_hook as install_hkmp, finish_launch as finish_hkmp
         hkmp_result=install_hkmp(Path(__file__).resolve().parent,original,player)
+        from partydeck_hkmultiplayer import install_hook as install_multi, finish_launch as finish_multi
+        hkmultiplayer_result=install_multi(Path(__file__).resolve().parent,original,player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     # All UMU distributions receive cheap COW views: native Wine resolves the
     # selected runner itself, including per-ROM and filename overrides.
@@ -525,6 +528,8 @@ def _run_wine(original, target, player, saves=None):
                 status=finish_mw(nfsmw_result,status)
             if hkmp_result is not None:
                 status=finish_hkmp(hkmp_result,status)
+            if hkmultiplayer_result is not None:
+                status=finish_multi(hkmultiplayer_result,status)
     finally:
         if goldberg_result is not None:
             goldberg_result.unlink(missing_ok=True)
@@ -532,6 +537,8 @@ def _run_wine(original, target, player, saves=None):
             nfsmw_result.unlink(missing_ok=True)
         if hkmp_result is not None:
             hkmp_result.unlink(missing_ok=True)
+        if hkmultiplayer_result is not None:
+            hkmultiplayer_result.unlink(missing_ok=True)
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)
     return 128 - status if status < 0 else status
 
@@ -546,7 +553,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp'):
+            if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if not shared_keyboard_mouse:
         args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])
@@ -687,6 +694,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             profile=read_profile(base, original)
             keyboard_player = profile.get("keyboard_player", True)
             if profile.get('gpu','auto')!='auto':gpu=profile['gpu']
+    if profile and profile.get('adapter')=='hollowknight-hkmultiplayer':
+        from partydeck_hkmultiplayer import session_code
+        os.environ['PARTYDECK_HKMULTIPLAYER_CODE']=session_code()
     if gpu=='nvidia':
         for key in ('VK_DRIVER_FILES','VK_ICD_FILENAMES','DRI_PRIME','MESA_VK_DEVICE_SELECT'):
             os.environ.pop(key,None)

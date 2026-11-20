@@ -24,7 +24,8 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('sm64coopdx', 'SM64CoopDX · profil commun', 'sm64coopdx'),
           CommonGame('l4d2', 'Left 4 Dead 2 · profil commun', 'l4d2-goldberg'),
           CommonGame('nfsmw','Most Wanted 2005 · LAN expérimental','nfsmw-lan'),
-          CommonGame('hkmp','Hollow Knight · coop HKMP','hollowknight-hkmp'))
+          CommonGame('hkmp','Hollow Knight · coop HKMP','hollowknight-hkmp'),
+          CommonGame('hkmultiplayer','Hollow Knight · coop HKMultiplayer','hollowknight-hkmultiplayer'))
 
 
 def is_rom(path):
@@ -44,6 +45,8 @@ def recipe_for(rom, adapter=None):
     from partydeck_l4d2 import matches as matches_l4d2
     from partydeck_nfsmw import matches as matches_mw
     from partydeck_hkmp import matches as matches_hkmp
+    from partydeck_hkmultiplayer import matches as matches_multi
+    if adapter is None and matches_multi(rom):return COMMON[6]
     if adapter is not None:
         return next((r for r in COMMON if r.adapter == adapter), None)
     return COMMON[0] if matches_soh(rom) else COMMON[1] if matches_bl2(rom) else COMMON[2] if matches_sm64(rom) else COMMON[3] if matches_l4d2(rom) else COMMON[4] if matches_mw(rom) else COMMON[5] if matches_hkmp(rom) else None
