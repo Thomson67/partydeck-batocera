@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory() as temp:
     assert d.settings(base)==d.DEFAULTS
     with patch('partydeck_couch.discover_outputs',return_value=outputs):
         app=App(base,windowed=True)
-        app.library=len(app.model.rows)+1;app.action('ok')
+        app.library=len(app.model.rows);app.action('ok')
         assert app.desktop_open and app.help_context()=='desktop'
         app.action('right')
         assert d.settings(base)['output']=='DP-7'

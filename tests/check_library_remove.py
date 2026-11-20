@@ -32,7 +32,8 @@ with tempfile.TemporaryDirectory() as folder:
     assert not entry.exists() and not profiles.profile_path(base,solo).exists()
     assert (solo/'game.exe').read_bytes()==b'ORIGINAL' and save.read_bytes()==b'SAVE'
     assert solo not in model.rows
-    # A common recipe remains visible and remembers options, without auto-linking.
+    # A removed recipe stays in the separate catalogue with its options,
+    # without reappearing in the personal library.
     for recipe,title in ((COMMON[0],'Ship of Harkinian'),(COMMON[1],'Borderlands 2')):
         game=windows/(title+'.wsquashfs');game.write_bytes(b'ROM')
         model=Model(base,windows=windows);model.select(game,recipe)
@@ -44,7 +45,7 @@ with tempfile.TemporaryDirectory() as folder:
         model.remove(roms)
         assert game.read_bytes()==b'ROM' and not entry.exists()
         assert recipe.id in unlinked(base)
-        assert any(isinstance(p,CommonGame) and p.id==recipe.id for p in model.rows)
+        assert any(isinstance(p,CommonGame) and p.id==recipe.id for p in model.catalog_rows())
         assert game not in model.rows
         again=Model(base,windows=windows)
         assert game not in again.rows  # Detection cannot undo an explicit unlink.
@@ -116,9 +117,9 @@ with tempfile.TemporaryDirectory() as folder:
         # Restore a managed entry for this common game before confirmation.
         launcher(base,game,roms)
         app.action('ok')
-    assert app.removal is None and app.model.rom is None
+    assert app.removal is None and app.model.rom != game
     assert game.exists() and save.read_bytes()==b'SAVE'
-    assert any(isinstance(p,CommonGame) and p.id=='borderlands2' for p in app.model.rows)
+    assert any(isinstance(p,CommonGame) and p.id=='borderlands2' for p in app.model.catalog_rows())
     app.pg.quit()
 
 print('Bibliothèque : retrait, dissociation, options conservées, reliaison, annulation et protection des fichiers utilisateur vérifiés.')

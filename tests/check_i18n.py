@@ -221,3 +221,13 @@ for language,controller,world in (
         for key,label,choices in fields(tab,'hollowknight-hkmultiplayer'):
             if language=='en':assert label not in lang.EN, (key,label)
 lang.set_language('fr')
+
+# Explicit library-add choices and cover fallback follow the same language.
+for language,title,manual,cover in (
+        ('fr','Depuis le catalogue','Manuellement','Jaquette indisponible'),
+        ('en','From the catalogue','Manually','Cover unavailable')):
+    lang.set_language(language)
+    assert lang.tr('Depuis le catalogue')==title
+    assert lang.tr('Manuellement')==manual
+    assert lang.tr('Jaquette indisponible')==cover
+lang.set_language('fr')

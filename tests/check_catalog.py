@@ -16,8 +16,8 @@ with tempfile.TemporaryDirectory() as folder:
     windows = root/'windows'; windows.mkdir()
     base = root/'install'
     model = Model(base, windows=windows)
-    assert len(model.rows) == len(COMMON) and isinstance(model.rows[0], CommonGame)
-    model.select(model.rows[0]); assert model.rom is None and model.data is None
+    assert model.rows == [] and len(model.catalog_rows()) == len(COMMON)
+    model.select(model.catalog_rows()[0]); assert model.rom is None and model.data is None
     assert not (base/'profiles').exists()
     assert not matches_soh(Path('Ocarina of Time 3D.wsquashfs'))
     for suffix in ('.wine','.pc','.wsquashfs'):
@@ -25,28 +25,30 @@ with tempfile.TemporaryDirectory() as folder:
         rom.touch() if suffix == '.wsquashfs' else rom.mkdir()
         assert discover(windows) == (rom,)
         model = Model(base, windows=windows)
-        assert [p for p in model.rows if not isinstance(p,CommonGame)] == [rom]
-        model.select(rom); assert model.data['adapter'] == 'soh-anchor'
+        assert model.rows == []
+        model.select(rom,COMMON[0]); assert model.data['adapter'] == 'soh-anchor'
         rom.unlink() if rom.is_file() else rom.rmdir()
     a=windows/'SoH.wsquashfs'; b=windows/'Ship of Harkinian.pc'; a.touch();b.mkdir()
     model=Model(base, windows=windows)
-    assert isinstance(model.rows[0],CommonGame) and len(model.rows[0].matches)==2
+    assert model.rows==[] and len(model.catalog_rows()[0].matches)==2
     a.unlink();b.rmdir()
     def create_app():
         with patch('partydeck_couch.Model',side_effect=lambda base,rom=None:Model(base,rom,windows=windows)):
             return App(base,windowed=True)
     app=create_app()
-    app.action('ok'); assert app.missing is not None
+    def from_catalog():
+        app.action('add');app.action('ok');app.action('ok')
+    from_catalog(); assert app.missing is not None
     app.action('back'); assert app.missing is None and 'disposer du jeu' in app.notice
     assert not (base/'profiles').exists()
-    app.action('ok'); app.action('ok')
+    from_catalog();app.action('ok')
     assert app.browser==windows and app.pending_common is not None
     app.action('back'); assert app.browser is None and app.pending_common is None
     # Manual linking works for every supported format, without writing any game data.
     for suffix in ('.wine','.pc','.wsquashfs'):
         rom=windows/('My custom title'+suffix)
         rom.touch() if suffix=='.wsquashfs' else rom.mkdir()
-        app.action('ok'); app.action('ok')
+        from_catalog();app.action('ok')
         app.row=app.browser_rows.index(rom); app.action('ok')
         assert app.model.rom==rom and app.model.data['adapter']=='soh-anchor'
         assert not profile_path(base,rom).exists()

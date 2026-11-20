@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as directory:
     rom.touch()
     save_profile(base, rom, defaults(rom))
     app = App(base, windowed=True)
-    while app.library < len(app.model.rows):
+    while app.library < len(app.model.rows)+1:
         app.action('down')
     app.action('ok')
     assert app.storage_open and app.help_context() == 'storage'

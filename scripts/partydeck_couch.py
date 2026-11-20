@@ -12,7 +12,7 @@ import time
 import xml.etree.ElementTree as ET
 
 from partydeck_profiles import (defaults, read_profile, save_profile, profile_path,
-                               validate, ROM_TYPES, remove_profile, atomic_write)
+                               validate, ROM_TYPES, remove_profile, atomic_write, source_scrape, absolute_path)
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOLUME_FIELDS
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
@@ -50,7 +50,7 @@ def context_hints(context, mode, has_tabs=True):
         return [('ok',tr('Confirmer')), ('back',tr('Annuler'))]
     if context == 'storage-error':
         return [('back',tr('Fermer'))]
-    if context == 'desktop':
+    if context in ('desktop','add','catalog'):
         return [('ok',tr('Choisir')), ('back',tr('Retour'))]
     if context == 'storage':
         return [('ok',tr('Choisir')), ('back',tr('Retour')), ('tabs',tr('Jeux par taille'))]
@@ -237,8 +237,6 @@ class Model:
         self.base, self.rom = Path(base), rom
         self.windows = windows
         self.selected = rom
-        self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
-                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi)}
         self.common_for_rom = {}
         self.data = None
         self.saved = None
@@ -251,32 +249,28 @@ class Model:
     def reload(self):
         self.rows = []
         self.common_for_rom = {}
-        registered = set()
+        linked_sources = set()
         for path in sorted((self.base / 'profiles').glob('*.json')):
             data = json.loads(path.read_text())
             rom = Path(data['rom'])
             validate(data, rom)
+            source = rom.resolve()
+            if source in linked_sources:
+                continue
+            linked_sources.add(source)
             recipe = recipe_for(rom,data.get('adapter')) or recipe_for(rom)
-            if recipe:
-                registered.add(recipe.id)
             if recipe and data.get('adapter') == recipe.adapter:
                 self.common_for_rom[rom] = recipe
             if self.filter.casefold() in rom.stem.casefold():
                 self.rows.append(rom)
-        detached = unlinked(self.base)
-        for recipe in COMMON:
-            if recipe.id in registered:
-                continue
-            found = self.detected[recipe.id]
-            if len(found) == 1 and recipe.id not in detached:
-                rom = found[0]
-                self.common_for_rom[rom] = recipe
-                if self.filter.casefold() in (rom.stem + tr(recipe.name)).casefold():
-                    self.rows.append(rom)
-            elif self.filter.casefold() in tr(recipe.name).casefold():
-                self.rows.append(CommonGame(recipe.id, recipe.name, recipe.adapter, found))
-        self.rows.sort(key=lambda p: (isinstance(p,CommonGame),
-                      str(next(i for i,r in enumerate(COMMON) if r.id==p.id)) if isinstance(p,CommonGame) else p.stem.casefold()))
+        self.rows.sort(key=lambda p:p.stem.casefold())
+
+    def catalog_rows(self):
+        windows = self.windows
+        self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
+                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi)}
+        return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
+                for recipe in COMMON]
 
     def select(self, rom, common=None):
         self.selected = rom
@@ -512,15 +506,8 @@ class App:
         self.screen = pg.display.set_mode((1280, 800) if windowed else (0, 0), 0 if windowed else pg.FULLSCREEN)
         pg.display.set_caption(tr('Windows Party · Configurateur'))
         pg.mouse.set_visible(False)
-        self.canvas = pg.Surface((1440, 900))
         self.panels = {}
-        self.background = pg.Surface((1440, 900))
-        for y in range(900):
-            pg.draw.line(self.background, (10+y//130, 14+y//140, 25+y//70), (0, y), (1440, y))
-        for x in range(-900, 1600, 80):
-            pg.draw.line(self.background, (20, 27, 43), (x, 900), (x+650, 0))
-        pg.draw.polygon(self.background, (22, 45, 61), [(0,0),(450,0),(290,7),(0,7)])
-        pg.draw.polygon(self.background, (60, 30, 82), [(1440,900),(1000,900),(1160,892),(1440,892)])
+        self.resize_layout(self.screen.get_size())
         self.fonts = {s: pg.font.SysFont('DejaVu Sans', s) for s in (16, 20, 24, 28, 36)}
         self.clock = pg.time.Clock()
         self.model = Model(base, rom)
@@ -557,6 +544,10 @@ class App:
         self.missing = None
         self.removal = None
         self.pending_common = None
+        self.add_menu = None
+        self.add_mode = None
+        self.catalog_picker = None
+        self.catalog_index = 0
         self.desktop_open = False
         self.desktop_row = 0
         self.desktop_config = None
@@ -569,6 +560,8 @@ class App:
         self.launch_pending = False
         self.launch_error = None
         self.storage_config = None
+        self.cover_key = None
+        self.cover_image = None
         self.logo = None
         logo = Path(base) / 'assets/windows-party.png'
         if logo.exists():
@@ -582,6 +575,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'nfsmw-lan':return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
@@ -598,14 +592,126 @@ class App:
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows
 
+    def resize_layout(self, size):
+        self.layout_target = tuple(size)
+        width, height = size
+        if width / height >= 1440 / 900:
+            logical_width, logical_height = round(900 * width / height), 900
+        else:
+            logical_width, logical_height = 1440, round(1440 * height / width)
+        self.canvas = self.pg.Surface((logical_width, logical_height))
+        self.background = self.pg.Surface(self.canvas.get_size())
+        self.panels.clear()
+        for y in range(logical_height):
+            row = round(y * 900 / logical_height)
+            self.pg.draw.line(self.background, (10+row//130,14+row//140,25+row//70),
+                              (0,y),(logical_width,y))
+        for x in range(-900,logical_width+160,80):
+            self.pg.draw.line(self.background,(20,27,43),(x,logical_height),(x+650,0))
+        self.pg.draw.polygon(self.background,(22,45,61),[(0,0),(450,0),(290,7),(0,7)])
+        self.pg.draw.polygon(self.background,(60,30,82),
+            [(logical_width,logical_height),(logical_width-440,logical_height),
+             (logical_width-280,logical_height-8),(logical_width,logical_height-8)])
+
+    def layout_x(self, x):
+        extra = self.canvas.get_width()-1440
+        library_extra = min(260,round(extra*.65))
+        if x <= 24:
+            return round(x)
+        if x <= 364:
+            return round(24+(x-24)*(340+library_extra)/340)
+        if x <= 386:
+            return round(x+library_extra)
+        if x <= 1416:
+            return round(386+library_extra+(x-386)*(1030+extra-library_extra)/1030)
+        return round(x+extra)
+
+    def layout_point(self, x, y):
+        return self.layout_x(x),round(y*self.canvas.get_height()/900)
+
+    def layout_rect(self, rect):
+        x,y,w,h = rect
+        left,top = self.layout_point(x,y)
+        right,bottom = self.layout_point(x+w,y+h)
+        return left,top,right-left,bottom-top
+
+    def selected_cover(self):
+        rom = self.model.rom
+        if rom == self.cover_key:
+            return self.cover_image
+        self.cover_key,self.cover_image = rom,None
+        if rom is None:
+            return None
+        try:
+            found = source_scrape(rom,{})
+            candidates = []
+            if found is not None:
+                folder,game = found
+                for tag in ('boxart','box2d'):
+                    value = game.findtext(tag)
+                    if value:
+                        candidates.append(absolute_path(value,folder))
+            for folder in (rom.parent, *( [found[0]] if found is not None else [])):
+                for subdir in ('media/box2d','media/boxart','images','media/images'):
+                    for suffix in ('-boxart.png','-box2d.png','.png'):
+                        candidates.append(folder/subdir/(rom.stem+suffix))
+            if found is not None:
+                for tag in ('image','thumbnail'):
+                    value = found[1].findtext(tag)
+                    if value:
+                        candidates.append(absolute_path(value,found[0]))
+            for path in dict.fromkeys(candidates):
+                if path.is_file():
+                    try:
+                        self.cover_image = self.pg.image.load(str(path)).convert_alpha()
+                        break
+                    except (OSError,self.pg.error):
+                        continue
+        except (OSError,ValueError,ET.ParseError):
+            pass
+        return self.cover_image
+
+    def draw_cover(self):
+        self.box((38,493,312,207),(12,19,31))
+        image = self.selected_cover()
+        if image is None:
+            self.text(tr('Jaquette indisponible'),60,584,16,(142,160,184),270)
+            return
+        target = self.pg.Rect(self.layout_rect((46,499,296,195)))
+        factor = min(target.width/image.get_width(),target.height/image.get_height())
+        size = (max(1,round(image.get_width()*factor)),max(1,round(image.get_height()*factor)))
+        surface = self.pg.transform.smoothscale(image,size)
+        self.canvas.blit(surface,surface.get_rect(center=target.center))
+
+    def library_title(self, value, x, y, width):
+        # Smaller type plus two lines keeps long game names readable without
+        # stretching glyphs or borrowing space from the settings pane.
+        font = self.fonts[16]
+        available = self.layout_x(x+width)-self.layout_x(x)
+        value = str(value)
+        if font.size(value)[0] <= available:
+            self.text(value,x,y+3,16,width=width)
+            return
+        cut = len(value)
+        while cut > 1 and font.size(value[:cut])[0] > available:
+            cut -= 1
+        space = value.rfind(' ',0,cut+1)
+        if space > cut//2:
+            cut = space
+        self.text(value[:cut].rstrip(),x,y-2,16,width=width)
+        self.text(value[cut:].lstrip(),x,y+18,16,width=width)
+
     def text(self, value, x, y, size=24, color=(228, 234, 247), width=1000):
         font = self.fonts[size]
+        width = self.layout_x(x+width)-self.layout_x(x)
+        x,y = self.layout_point(x,y)
         value = str(value)
         while value and font.size(value)[0] > width:
             value = value[:-2] + '…' if len(value) > 2 else ''
         self.canvas.blit(font.render(value, True, color), (x, y))
 
     def box(self, rect, color, border=None):
+        rect = self.layout_rect(rect)
         x, y, w, h = rect
         key = (w, h, color)
         if key not in self.panels:
@@ -630,7 +736,7 @@ class App:
         ps = self.input_mode == 'ps'
         colors = {'ok':(95,216,164), 'back':(255,121,126), 'save':(111,177,255), 'search':(242,208,109)}
         color = colors.get(action, (167,187,219))
-        center = (x+16, y+16)
+        center = self.layout_point(x+16,y+16)
         if self.input_mode == 'keyboard':
             badge = control_label(action, 'keyboard')
             badge_width = self.fonts[16].size(badge)[0]+18
@@ -641,14 +747,14 @@ class App:
             draw.circle(self.canvas, color, center, 16, 2)
             if ps:
                 if action == 'ok':
-                    draw.line(self.canvas, color, (x+10,y+10), (x+22,y+22), 3)
-                    draw.line(self.canvas, color, (x+22,y+10), (x+10,y+22), 3)
+                    draw.line(self.canvas, color, self.layout_point(x+10,y+10), self.layout_point(x+22,y+22), 3)
+                    draw.line(self.canvas, color, self.layout_point(x+22,y+10), self.layout_point(x+10,y+22), 3)
                 elif action == 'back':
                     draw.circle(self.canvas, color, center, 8, 2)
                 elif action == 'save':
-                    draw.rect(self.canvas, color, (x+8,y+8,16,16), 2)
+                    draw.rect(self.canvas, color, self.layout_rect((x+8,y+8,16,16)), 2)
                 else:
-                    draw.polygon(self.canvas, color, [(x+16,y+6),(x+25,y+23),(x+7,y+23)], 2)
+                    draw.polygon(self.canvas, color, [self.layout_point(x+16,y+6),self.layout_point(x+25,y+23),self.layout_point(x+7,y+23)], 2)
             else:
                 self.text({'ok':'A','back':'B','save':'X','search':'Y'}[action], x+9, y+3, 20, color, 25)
         else:
@@ -661,7 +767,7 @@ class App:
 
     def help_context(self):
         return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
-                'keyboard' if self.keyboard else 'browser' if self.browser is not None else
+                'keyboard' if self.keyboard else 'add' if self.add_menu is not None else 'catalog' if self.catalog_picker is not None else 'browser' if self.browser is not None else
                 'desktop' if self.desktop_open else 'storage' if self.storage_open else 'main')
 
     def open_desktop(self):
@@ -839,12 +945,12 @@ class App:
         value = self.volume(key)
         inherited = get(self.model.data, key) == ''
         draw = self.pg.draw
-        draw.rect(self.canvas, (9,15,26), (x,y+15,260,10), border_radius=5)
+        draw.rect(self.canvas, (9,15,26), self.layout_rect((x,y+15,260,10)), border_radius=5)
         if value:
-            draw.rect(self.canvas, (72,200,225) if selected else (78,124,153), (x,y+15,max(5,int(260*value/100)),10), border_radius=5)
+            draw.rect(self.canvas, (72,200,225) if selected else (78,124,153), self.layout_rect((x,y+15,max(5,int(260*value/100)),10)), border_radius=5)
         knob = x + int(260*value/100)
-        draw.circle(self.canvas, (15,25,39), (knob,y+20), 12)
-        draw.circle(self.canvas, (190,236,247) if selected else (136,164,192), (knob,y+20), 9, 2 if inherited else 0)
+        draw.circle(self.canvas, (15,25,39), self.layout_point(knob,y+20), 12)
+        draw.circle(self.canvas, (190,236,247) if selected else (136,164,192), self.layout_point(knob,y+20), 9, 2 if inherited else 0)
         self.text(f'{value} %', x+280, y+4, 20, (174,224,236), 95)
         if inherited:
             self.text('BASE' if key.startswith('sm64coopdx.') else 'JSON', x+365, y+8, 16, (129,153,182), 50)
@@ -946,9 +1052,30 @@ class App:
         if not is_rom(rom):
             self.toast(tr('Choisissez un dossier .wine/.pc ou un fichier .wsquashfs existant.'))
             return
+        manual_new = self.add_mode == 'manual' and not profile_path(self.model.base,rom).exists()
         self.model.select(rom, self.pending_common)
+        if manual_new:
+            self.model.data['adapter'] = 'standard'
+            self.model.common_for_rom.pop(rom,None)
+            self.model.saved = copy.deepcopy(self.model.data)
         self.pending_common = None
+        self.add_mode = None
         self.pane, self.tab, self.row = 'settings', 0, 0
+
+    def open_add(self):
+        self.add_menu = 0
+        self.catalog_picker = None
+        self.pending_common = None
+        self.add_mode = None
+
+    def choose_catalog(self, recipe):
+        self.catalog_picker = None
+        self.add_mode = 'catalog'
+        self.pending_common = recipe
+        if len(recipe.matches) == 1:
+            self.select_game(recipe.matches[0])
+        else:
+            self.missing = recipe
 
     def action(self, action):
         if self.launch_pending and action in ('back','quit'):
@@ -969,6 +1096,7 @@ class App:
             self.keyboard = None
             self.pg.key.stop_text_input()
             self.browser, self.missing = None, None
+            self.add_menu = self.catalog_picker = self.add_mode = self.pending_common = None
             self.removal = None
             self.launch_requested = False
             self.switch(lambda: setattr(self, 'running', False))
@@ -983,13 +1111,37 @@ class App:
             if action in ('ok', 'back'):
                 self.launch_error = None
             return
+        if self.add_menu is not None:
+            if action in ('up','down','left','right'):
+                self.add_menu = 1-self.add_menu
+            elif action == 'back':
+                self.add_menu = None
+            elif action == 'ok':
+                choice = self.add_menu
+                self.add_menu = None
+                if choice == 0:
+                    self.catalog_picker = self.model.catalog_rows()
+                    self.catalog_index = 0
+                else:
+                    self.add_mode = 'manual'
+                    self.browse(self.model.windows)
+            return
+        if self.catalog_picker is not None:
+            if action in ('up','down'):
+                self.catalog_index = (self.catalog_index+(1 if action=='down' else -1))%len(self.catalog_picker)
+            elif action == 'back':
+                self.catalog_picker = None
+                self.add_menu = 0
+            elif action == 'ok':
+                self.choose_catalog(self.catalog_picker[self.catalog_index])
+            return
         if self.missing is not None:
             if action == 'ok':
                 self.pending_common = self.missing
                 self.missing = None
                 self.browse(self.model.windows)
             elif action == 'back':
-                self.missing = None
+                self.missing = self.pending_common = self.add_mode = None
                 self.toast(tr('Vous devez disposer du jeu avant d’utiliser ce profil commun.'))
             return
         if self.keyboard:
@@ -1016,6 +1168,7 @@ class App:
             if action == 'back':
                 self.browser = None
                 self.row = 0
+                self.add_mode = None
                 if self.pending_common is not None:
                     self.pending_common = None
                     self.toast(tr('Ajout annulé : vous devez d’abord disposer du jeu.'))
@@ -1032,7 +1185,7 @@ class App:
                     self.browse(path)
             return
         if action == 'add':
-            self.switch(self.browse)
+            self.switch(self.open_add)
         elif action == 'save':
             if self.save() and self.model.rom and self.single:
                 self.accepted, self.running = True, False
@@ -1058,9 +1211,9 @@ class App:
                 select() if index >= len(self.model.rows) else self.switch(select)
             elif action in ('ok', 'right'):
                 if self.library == len(self.model.rows):
-                    self.open_storage()
-                elif self.library == len(self.model.rows)+1:
                     self.open_desktop()
+                elif self.library == len(self.model.rows)+1:
+                    self.open_storage()
                 elif isinstance(self.model.selected, CommonGame):
                     self.missing = self.model.selected
                 elif self.model.data:
@@ -1124,6 +1277,8 @@ class App:
 
     def draw(self):
         self.poll_storage()
+        if self.layout_target != self.screen.get_size():
+            self.resize_layout(self.screen.get_size())
         if self.tab not in self.available_tabs():
             self.tab, self.row = 0, 0
         self.canvas.blit(self.background, (0,0))
@@ -1133,24 +1288,27 @@ class App:
         if self.logo is not None:
             factor = min(260/self.logo.get_width(), 76/self.logo.get_height())
             self.canvas.blit(self.pg.transform.smoothscale(self.logo,
-                             (int(self.logo.get_width()*factor), int(self.logo.get_height()*factor))), (1110, 35))
+                             (int(self.logo.get_width()*factor), int(self.logo.get_height()*factor))), self.layout_point(1110,35))
         else:
             self.text(tr('CONFIGURATEUR'), 1100, 60, 20, (117, 213, 230), 280)
         self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open and not self.desktop_open else None)
         self.text(tr('BIBLIOTHÈQUE'), 46, 163, 20, (122, 209, 229))
         start_label = control_label('add', self.input_mode)
         self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 201, 16, (160, 174, 199))
-        offset = max(0, min(self.library, len(self.model.rows)-1) - 7)
-        for i, rom in enumerate(self.model.rows[offset:offset+9], offset):
+        visible = 5 if self.model.rom is not None else 9
+        offset = max(0,min(self.library,len(self.model.rows)-1)-visible+1)
+        for i, rom in enumerate(self.model.rows[offset:offset+visible], offset):
             y = 246 + (i-offset)*50
-            selected = self.model.selected == rom and self.library < len(self.model.rows)
+            selected = self.library == i
             if selected:
                 self.box((38, y-7, 312, 45), (35, 75, 94), (72, 202, 222))
-            self.text(rom.stem, 50, y, 20, width=284)
-        self.box((38,750,312,36), (35,75,94) if self.library == len(self.model.rows) else (29,39,55),
-                 (72,202,222) if self.library == len(self.model.rows) else None)
+            self.library_title(rom.stem,50,y,284)
+        if self.model.rom is not None:
+            self.draw_cover()
+        self.box((38,750,312,36), (35,75,94) if self.library == len(self.model.rows)+1 else (29,39,55),
+                 (72,202,222) if self.library == len(self.model.rows)+1 else None)
         self.text(tr('STOCKAGE'),50,758,16,width=284)
-        selected=self.library==len(self.model.rows)+1
+        selected=self.library==len(self.model.rows)
         self.box((38,708,312,36),(35,75,94) if selected else (29,39,55),(72,202,222) if selected else None)
         self.text(tr('PARAMÈTRES'),50,716,16,width=284)
         self.box((386, 142, 1030, 652), (20, 25, 40), (76,197,219) if self.storage_open or self.desktop_open else None)
@@ -1178,7 +1336,7 @@ class App:
                     title = tr('Image') if i == 1 and self.model.data.get('adapter') == 'borderlands2' else tr(TABS[i])
                 self.box((416+position*tab_width, 248, tab_width-13, 45), (41, 102, 127) if i == self.tab else (29, 36, 54))
                 if i == self.tab:
-                    self.pg.draw.line(self.canvas, (100,222,237), (430+position*tab_width,291), (416+(position+1)*tab_width-27,291), 3)
+                    self.pg.draw.line(self.canvas, (100,222,237), self.layout_point(430+position*tab_width,291), self.layout_point(416+(position+1)*tab_width-27,291), 3)
                 self.text(title, 434+position*tab_width, 258, 20,width=tab_width-40)
             if self.tab:
                 subtitle = (tr('Borderlands 2 · affichage automatique · VSync et PhysX indépendants') if self.model.data['adapter'] == 'borderlands2' else
@@ -1206,7 +1364,7 @@ class App:
                 y = 348+(i-offset)*57
                 if i == self.row and self.pane == 'settings':
                     self.box((410, y-6, 986, 51), (41, 65, 91), (90, 210, 229))
-                    self.pg.draw.rect(self.canvas, (118,224,241), (412,y+3,4,33), border_radius=2)
+                    self.pg.draw.rect(self.canvas, (118,224,241), self.layout_rect((412,y+3,4,33)), border_radius=2)
                 self.text(title, 430, y+5, 20, width=500)
                 if '.volumes.' in key:
                     self.slider(key, 958, y, i == self.row and self.pane == 'settings')
@@ -1272,6 +1430,27 @@ class App:
                 if i == self.row:
                     self.box((180, y-4, 1080, 45), (39, 80, 103))
                 self.text(tr('.. / retour au dossier parent') if i == 0 else path.name + (' /' if path.is_dir() else ''), 200, y, 20, width=1030)
+        if self.add_menu is not None:
+            self.box((200,260,1040,330),(25,34,52),(91,207,228))
+            self.text(tr('AJOUTER UN JEU'),230,287,28,width=980)
+            for index,(title,hint) in enumerate((
+                (tr('Depuis le catalogue'),tr('Utiliser un profil prédéfini')),
+                (tr('Manuellement'),tr('Choisir un jeu sans profil prédéfini')))):
+                y = 360+index*100
+                self.box((225,y-10,990,82),(39,80,103) if index==self.add_menu else (29,39,55),
+                         (72,202,222) if index==self.add_menu else None)
+                self.text(title,250,y,24,width=920)
+                self.text(hint,250,y+35,16,(160,184,204),920)
+        if self.catalog_picker is not None:
+            self.box((160,150,1120,640),(25,34,52),(91,207,228))
+            self.text(tr('CATALOGUE · PROFILS PRÉDÉFINIS'),195,178,28,width=1040)
+            self.text(tr('Choisissez un profil, puis le fichier de votre jeu.'),195,225,16,width=1040)
+            offset = max(0,self.catalog_index-7)
+            for index,recipe in enumerate(self.catalog_picker[offset:offset+8],offset):
+                y = 285+(index-offset)*55
+                self.box((180,y-6,1080,46),(39,80,103) if index==self.catalog_index else (29,39,55),
+                         (72,202,222) if index==self.catalog_index else None)
+                self.text(tr(recipe.name),200,y,20,width=1030)
         if self.keyboard:
             k = self.keyboard
             self.box((200, 180, 1040, 600), (25, 34, 52), (91, 207, 228))
@@ -1312,11 +1491,8 @@ class App:
             self.box((100, 743, 1240, 57), (48, 73, 91))
             self.text(self.notice, 120, 759, 20, width=1200)
         target = self.screen.get_rect()
-        size = self.canvas.get_size()
-        scale = min(target.width/size[0], target.height/size[1])
-        surface = self.pg.transform.smoothscale(self.canvas, (int(size[0]*scale), int(size[1]*scale)))
-        self.screen.fill((8, 10, 18))
-        self.screen.blit(surface, surface.get_rect(center=target.center))
+        surface = self.pg.transform.smoothscale(self.canvas,target.size)
+        self.screen.blit(surface,(0,0))
         self.pg.display.flip()
 
     def run(self, single=False):

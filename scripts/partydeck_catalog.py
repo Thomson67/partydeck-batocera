@@ -24,8 +24,8 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('sm64coopdx', 'SM64CoopDX · profil commun', 'sm64coopdx'),
           CommonGame('l4d2', 'Left 4 Dead 2 · profil commun', 'l4d2-goldberg'),
           CommonGame('nfsmw','Most Wanted 2005 · LAN expérimental','nfsmw-lan'),
-          CommonGame('hkmp','Hollow Knight · coop HKMP','hollowknight-hkmp'),
-          CommonGame('hkmultiplayer','Hollow Knight · coop HKMultiplayer','hollowknight-hkmultiplayer'))
+          CommonGame('hkmp','Hollow Knight · HKMP (ancienne version)','hollowknight-hkmp'),
+          CommonGame('hkmultiplayer','Hollow Knight · HKMultiplayer 0.36.2','hollowknight-hkmultiplayer'))
 
 
 def is_rom(path):

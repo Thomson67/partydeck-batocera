@@ -430,6 +430,19 @@ EN = {
 
 
 EN.update({
+    'Hollow Knight · HKMP (ancienne version)': 'Hollow Knight · HKMP (legacy version)',
+    'Hollow Knight · HKMultiplayer 0.36.2': 'Hollow Knight · HKMultiplayer 0.36.2',
+
+    'Jaquette indisponible': 'Cover unavailable',
+
+    'AJOUTER UN JEU': 'ADD A GAME',
+    'Depuis le catalogue': 'From the catalogue',
+    'Utiliser un profil prédéfini': 'Use a predefined profile',
+    'Manuellement': 'Manually',
+    'Choisir un jeu sans profil prédéfini': 'Choose a game without a predefined profile',
+    'CATALOGUE · PROFILS PRÉDÉFINIS': 'CATALOGUE · PREDEFINED PROFILES',
+    'Choisissez un profil, puis le fichier de votre jeu.': 'Choose a profile, then your game file.',
+
     'Protection de préfixe redirigée : {p0}': 'Prefix protection is redirected: {p0}',
     'Version de protection UMU non reconnue : {p0}': 'Unrecognized UMU protection version: {p0}',
     'Intégrité de la protection UMU invalide : {p0}': 'Invalid UMU protection integrity: {p0}',
