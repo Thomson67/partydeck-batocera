@@ -7,6 +7,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import resource
 import shutil
 import shlex
 import signal
@@ -559,6 +560,23 @@ def _run_wine(original, target, player, saves=None):
     return 128 - status if status < 0 else status
 
 
+def run_compositor(command):
+    # ES can pass a low soft limit to its ports. Raise it in the freshly
+    # spawned child only, before Gamescope creates Vulkan/Wayland descriptors.
+    # Keep the host hard limit and any already higher soft limit untouched.
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target = 65536 if hard == resource.RLIM_INFINITY else min(65536, hard)
+    if soft != resource.RLIM_INFINITY and soft < target:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+        except (OSError, ValueError) as error:
+            print(tr('Gamescope : relèvement de la limite de fichiers impossible : {p0}',p0=error),flush=True)
+    current, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print(tr('Gamescope : fichiers ouverts autorisés {p0} → {p1} (maximum {p2}).',
+             p0=soft,p1=current,p2=hard),flush=True)
+    os.execv(command[0], command)
+
+
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0):
     _, _, width, height = rectangle
@@ -599,7 +617,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
     # Gamescope, outer X11/Wayland, GPU and desktop services stay on the host.
     # Only its Wine child enters the private network before Bubblewrap.
-    return subprocess.Popen(args,env=environment,start_new_session=True,stdin=subprocess.DEVNULL)
+    return subprocess.Popen([sys.executable,helper,"_gamescope",*args],env=environment,
+                            start_new_session=True,stdin=subprocess.DEVNULL)
 
 
 def stop_players(processes, timeout=5):
@@ -883,6 +902,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
 
 
 def main():
+    if len(sys.argv) > 2 and sys.argv[1] == "_gamescope":
+        run_compositor(sys.argv[2:])
+        return 0
     if sys.argv[1:] == ["install-system"]:
         install_system()
         return 0

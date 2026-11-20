@@ -241,3 +241,11 @@ for language,label in (('fr','Lancer'),('en','Launch')):
     lang.set_language(language)
     assert lang.tr('Lancer')==label
 lang.set_language('fr')
+
+for language,expected in (
+        ('fr','Gamescope : fichiers ouverts autorisés 1024 → 65536 (maximum 1048576).'),
+        ('en','Gamescope: open-file limit 1024 → 65536 (hard limit 1048576).')):
+    lang.set_language(language)
+    assert lang.tr('Gamescope : fichiers ouverts autorisés {p0} → {p1} (maximum {p2}).',
+                   p0=1024,p1=65536,p2=1048576)==expected
+lang.set_language('fr')

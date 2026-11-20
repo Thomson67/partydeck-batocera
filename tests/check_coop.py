@@ -16,6 +16,39 @@ coop = importlib.util.module_from_spec(spec)
 sys.modules["coop"] = coop
 spec.loader.exec_module(coop)
 
+# A low inherited ES limit is raised only in the exec child. Respect a lower
+# hard limit, preserve higher/unlimited limits, and tolerate denied changes.
+for soft,hard,expected in ((1024,1048576,65536),(1024,4096,4096),
+                           (131072,1048576,131072),(-1,-1,-1),(1024,-1,65536)):
+    with patch.object(coop.resource,'getrlimit',side_effect=[(soft,hard),(expected,hard)]), \
+         patch.object(coop.resource,'setrlimit') as change, \
+         patch.object(coop.os,'execv') as execute:
+        coop.run_compositor(['/bin/compositor','argument with spaces'])
+        if expected!=soft:
+            change.assert_called_once_with(coop.resource.RLIMIT_NOFILE,(expected,hard))
+        else:change.assert_not_called()
+        execute.assert_called_once_with('/bin/compositor',['/bin/compositor','argument with spaces'])
+with patch.object(coop.resource,'getrlimit',return_value=(1024,65536)), \
+     patch.object(coop.resource,'setrlimit',side_effect=PermissionError('denied')), \
+     patch.object(coop.os,'execv') as execute:
+    coop.run_compositor(['/bin/compositor'])
+    execute.assert_called_once()
+
+# Exercise actual fork/exec inheritance without changing this test's limits.
+import json
+import subprocess
+before=coop.resource.getrlimit(coop.resource.RLIMIT_NOFILE)
+for hard in (4096,65536):
+    if before[1]!=coop.resource.RLIM_INFINITY and before[1]<hard:continue
+    bootstrap=('import os,resource,sys; '
+               f'resource.setrlimit(resource.RLIMIT_NOFILE,(1024,{hard})); '
+               'os.execv(sys.executable,[sys.executable,*sys.argv[1:]])')
+    probe='import json,resource; print(json.dumps(resource.getrlimit(resource.RLIMIT_NOFILE)))'
+    result=subprocess.run([sys.executable,'-c',bootstrap,str(path),'_gamescope',
+                           sys.executable,'-c',probe],capture_output=True,text=True,check=True)
+    assert json.loads(result.stdout.splitlines()[-1])==[hard,hard],result.stdout
+assert coop.resource.getrlimit(coop.resource.RLIMIT_NOFILE)==before
+
 pad, another, keyboard, mouse = [
     coop.Device(Path(f"/dev/input/event{i}"), category, "", Path(f"/sys/mock/{i}"))
     for i, category in enumerate((coop.GAMEPADS, coop.GAMEPADS, coop.KEYBOARDS, coop.MICE))
@@ -77,7 +110,8 @@ with tempfile.TemporaryDirectory() as temp, patch.object(coop, "sandbox_argument
     network.address.return_value='192.168.247.11'
     coop.start_player(base,base/'j1',game,game,[pad],(0,0,1920,540),'private-j1',network=network)
     command=popen.call_args.args[0]
-    assert command[:2]==[str(base/'AppRun'),'gamescope-kbm']
+    assert command[:3]==[sys.executable,str(path),'_gamescope']
+    assert command[3:5]==[str(base/'AppRun'),'gamescope-kbm']
     child=network.child_prefix.return_value
     assert command[command.index('sh')+1:command.index('sh')+1+len(child)]==child
     assert 'pass_fds' not in popen.call_args.kwargs

@@ -41,6 +41,20 @@ Fermez les jeux et le configurateur avant installation ou migration.
 Après installation, actualisez les listes de jeux d’EmulationStation. Le système
 **Windows Party** contient le configurateur et les jeux ajoutés.
 
+Au démarrage de chaque Gamescope, la limite souple de fichiers ouverts est relevée
+jusqu’à 65 536, dans la limite du maximum système existant. La modification reste
+dans le processus du joueur et ses descendants ; EmulationStation et la
+configuration système ne sont pas modifiés. Les limites avant/après figurent
+dans le journal. Cette protection vise les erreurs « Too many open files » ;
+une fuite persistante de descripteurs dans le compositeur demande un diagnostic
+supplémentaire et n’est pas corrigée par ce relèvement.
+
+Each Gamescope child raises its soft open-file limit to at least 65,536 when
+the existing hard limit allows it, preserving already higher limits. ES and
+system settings are unchanged. The log records the inherited and effective
+limits. This guards against low inherited limits; it does not fix a persistent
+descriptor leak in the compositor.
+
 ## Utilisation
 
 ```bash

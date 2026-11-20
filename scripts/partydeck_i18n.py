@@ -62,6 +62,8 @@ def get_language():
 
 
 EN = {
+    'Gamescope : relèvement de la limite de fichiers impossible : {p0}': 'Gamescope: could not raise the open-file limit: {p0}',
+    'Gamescope : fichiers ouverts autorisés {p0} → {p1} (maximum {p2}).': 'Gamescope: open-file limit {p0} → {p1} (hard limit {p2}).',
     'Réglages HKMultiplayer invalides.': 'Invalid HKMultiplayer settings.',
     'Code de session HKMultiplayer invalide.': 'Invalid HKMultiplayer session code.',
     'HKMultiplayer.dll absent ; installez HKMultiplayerMOD 0.36.2 et son API.': 'HKMultiplayer.dll missing; install HKMultiplayerMOD 0.36.2 and its API.',
