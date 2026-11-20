@@ -348,7 +348,9 @@ if [[ ${1:-verifier} == installer ]]; then
     chmod 0755 "$temporary_launcher"
     mv -fT -- "$temporary_launcher" "$launcher"
     trap - EXIT
-    python3 "$base/partydeck_migrate.py" finalize "$base" /userdata/system/partydeck-test /userdata/roms/windows-party "$ports_dir" 9>&-
+    # Finalization borrows the installer's already-held lock by identity.
+    # Unlike game helpers it must inherit fd 9 to avoid locking itself out.
+    python3 "$base/partydeck_migrate.py" finalize "$base" /userdata/system/partydeck-test /userdata/roms/windows-party "$ports_dir"
     python3 "$coop_helper" install-system 9>&-
     python3 "$profiles_helper" installer "$base" 9>&-
     python3 "$base/partydeck_theme.py" "$base" 9>&-

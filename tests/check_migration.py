@@ -32,9 +32,17 @@ with tempfile.TemporaryDirectory() as temp:
  assert not test.exists() and (new/'archive/legacy/Test LAN NFS.sh').is_file()
  assert not gui.exists() and (new/'archive/legacy/PartyDeck - Test.sh').is_file()
  assert shlex.split(launcher.read_text().splitlines()[2])[1]==str(new/'windows-party')
- subprocess.run(['bash','-c','exec 9>"$1/session.lock"; flock -n 9; "$2" "$3" finalize "$1" "$4" "$5" "$6"',
-                 'migration',str(new),sys.executable,str(Path(__file__).resolve().parents[1]/'scripts/partydeck_migrate.py'),
-                 str(old),str(roms),str(ports)],check=True,timeout=10,capture_output=True)
+ # Execute the installer's actual finalization command with its session lock
+ # held. The migrator borrows fd 9; closing it here makes it lock itself out.
+ scripts=Path(__file__).resolve().parents[1]/'scripts'
+ for module in ('partydeck_migrate.py','partydeck_i18n.py'):
+  (new/module).write_bytes((scripts/module).read_bytes())
+ install_line=next(line.strip() for line in (scripts/'install-windows-party.sh').read_text().splitlines()
+                   if line.strip().startswith('python3 "$base/partydeck_migrate.py" finalize'))
+ install_line=install_line.replace('/userdata/system/partydeck-test','"$legacy"').replace('/userdata/roms/windows-party','"$roms"')
+ subprocess.run(['bash','-c',
+                 'base=$1; legacy=$2; roms=$3; ports_dir=$4; exec 9>"$base/session.lock"; flock -n 9 || exit 1; '+install_line,
+                 'migration',str(new),str(old),str(roms),str(ports)],check=True,timeout=10,capture_output=True)
  finalize(new,old,roms,ports);migrate_root(old,new)  # Re-running cannot clobber archives or data.
  assert (new/'archive/legacy/partydeck-test').read_bytes()==b'OLD PROGRAM'
  # Refuse merges instead of picking one of two existing installations.
