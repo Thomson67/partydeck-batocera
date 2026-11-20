@@ -18,6 +18,8 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
+from partydeck_hkmp import defaults as hkmp_defaults, matches as matches_hkmp
+from partydeck_hkmultiplayer import defaults as multi_defaults, matches as matches_multi, HOST_CHOICES
 from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2, LANGUAGES as L4D2_LANGUAGES
 from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
@@ -77,7 +79,38 @@ def fields(tab, adapter='standard'):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan'])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer'])]
+    if adapter == 'hollowknight-hkmultiplayer':
+        if tab == 1:
+            return [('hkmultiplayer.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
+                    ('hkmultiplayer.port',tr('Port du serveur HKMultiplayer'),None),
+                    *[(f'hkmultiplayer.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]]
+        if tab == 2:
+            return [('hkmultiplayer.world',tr('Monde coop à ouvrir'),['latest','named']),
+                    ('hkmultiplayer.world_name',tr('Nom du monde coop'),None),
+                    ('hkmultiplayer.host.revive',tr('Réanimer les coéquipiers'),[1,0]),
+                    ('hkmultiplayer.host.reviveSeconds',tr('Durée de réanimation (secondes)'),[1,2,3,5]),
+                    ('hkmultiplayer.host.reviveSoul',tr('Âme nécessaire pour réanimer'),[0,33,66,99]),
+                    ('hkmultiplayer.host.sharedMap',tr('Carte explorée partagée'),[1,0]),
+                    ('hkmultiplayer.host.stagTogether',tr('Voyager ensemble en scarabée'),[1,0])]
+        return [('hkmultiplayer.fix_controllers',tr('Désactiver l’entrée native · conserver HIDRAW'),[True,False]),
+                ('hkmultiplayer.ultrawide',tr('Adapter la caméra à chaque écran'),[True,False]),
+                ('hkmultiplayer.host.showNames',tr('Afficher les noms des joueurs'),[1,0]),
+                ('hkmultiplayer.host.showPartnerHealth',tr('Afficher la vie des coéquipiers'),[1,0]),
+                ('hkmultiplayer.host.bossHealth',tr('Multiplicateur de PV des boss'),list(HOST_CHOICES['bossHealth'])),
+                ('hkmultiplayer.host.enemyHealth',tr('Multiplicateur de PV des ennemis'),list(HOST_CHOICES['enemyHealth']))]
+    if adapter == 'hollowknight-hkmp':
+        if tab == 1:
+            return [('hkmp.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
+                    ('hkmp.port',tr('Port du serveur HKMP'),None),
+                    *[(f'hkmp.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]]
+        return [('hkmp.pvp',tr('Dégâts entre joueurs (PvP)'),[False,True]),
+                ('hkmp.body_damage',tr('Dégâts par contact entre joueurs'),[False,True]),
+                ('hkmp.map_icons',tr('Joueurs toujours visibles sur la carte'),[True,False]),
+                ('hkmp.display_names',tr('Afficher les noms des joueurs'),[True,False]),
+                ('hkmp.skins',tr('Autoriser les skins HKMP'),[True,False]),
+                ('hkmp.enemy_health',tr('PV partagés des ennemis · ESoulLink'),['keep','on','off']),
+                ('hkmp.enemy_ghosts',tr('Fantômes des ennemis · GhostHunter'),['keep','on','off'])]
     if adapter == 'nfsmw-lan':
         return [('nfsmw.private_lan',tr('LAN privé local (sans Internet)'),[True,False]),
                 ('nfsmw.host',tr('IP LAN du PC (auto : détection)'),None),
@@ -165,7 +198,13 @@ def label_value(key, value):
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
-        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental')}.get(value, value)
+        return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental'),'hollowknight-hkmp':'Hollow Knight / HKMP','hollowknight-hkmultiplayer':'Hollow Knight / HKMultiplayer'}.get(value, value)
+    if key == 'hkmultiplayer.world':
+        return tr('Dernier monde joué' if value=='latest' else 'Monde portant ce nom')
+    if key.startswith('hkmultiplayer.host.') and key.split('.')[-1] in ('revive','sharedMap','stagTogether','showNames','showPartnerHealth'):
+        return tr('Activé' if value else 'Désactivé')
+    if key in ('hkmp.enemy_health','hkmp.enemy_ghosts'):
+        return tr({'keep':'Conserver','on':'Activé','off':'Désactivé'}[value])
     if key == 'l4d2.language':
         return tr(L4D2_LANGUAGES[value])
     if key == 'sm64coopdx.language':
@@ -199,7 +238,7 @@ class Model:
         self.windows = windows
         self.selected = rom
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
-                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw)}
+                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi)}
         self.common_for_rom = {}
         self.data = None
         self.saved = None
@@ -263,6 +302,8 @@ class Model:
         self.data.setdefault('sm64coopdx', sm64_defaults())
         self.data.setdefault('l4d2',l4d2_defaults())
         self.data.setdefault('nfsmw',mw_defaults())
+        self.data.setdefault('hkmp',hkmp_defaults())
+        self.data.setdefault('hkmultiplayer',multi_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
@@ -287,6 +328,8 @@ class Model:
         if stored.get('adapter') != 'l4d2-goldberg':
             stored.pop('l4d2',None)
         if stored.get('adapter') != 'nfsmw-lan':stored.pop('nfsmw',None)
+        if stored.get('adapter') != 'hollowknight-hkmp':stored.pop('hkmp',None)
+        if stored.get('adapter') != 'hollowknight-hkmultiplayer':stored.pop('hkmultiplayer',None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'windows-party'), 'ajouter', str(self.rom),
@@ -539,6 +582,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'nfsmw-lan':return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
@@ -1063,11 +1107,13 @@ class App:
                         self.toast(tr('Joueurs sur manettes ; clavier/souris disponible dans la fenêtre active pour les menus.'))
                 elif action == 'ok':
                     def update(text):
-                        result = int(text) if (key == 'anchor.port' or ('.volumes.' in key and text.strip())) else text
+                        result = int(text) if (key in ('anchor.port','hkmp.port','hkmultiplayer.port') or ('.volumes.' in key and text.strip())) else text
                         if '.volumes.' in key and text.strip() and not 0 <= result <= 100:
                             raise ValueError(tr('Volume : de 0 à 100 %, ou vide pour le JSON commun.'))
                         if key == 'anchor.port' and not 1024 < result < 65535:
                             raise ValueError(tr('Port : de 1025 à 65534.'))
+                        if key in ('hkmp.port','hkmultiplayer.port') and not 1024 <= result <= 65535:
+                            raise ValueError(tr('Réglages Hollow Knight HKMP invalides.'))
                         put(self.model.data, key, result)
                     self.edit(title, value, update)
 
@@ -1120,6 +1166,10 @@ class App:
             for position, i in enumerate(self.available_tabs()):
                 if self.model.data.get('adapter') == 'sm64coopdx':
                     title = tr(('Session','Graphismes','Gameplay','Options','Son')[i])
+                elif self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':
+                    title=tr(('Session','Réseau','Coop','Image & contrôles')[i])
+                elif self.model.data.get('adapter') == 'hollowknight-hkmp':
+                    title=tr(('Session','Réseau','Coop')[i])
                 elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
@@ -1141,6 +1191,10 @@ class App:
                 if self.model.data['adapter'] == 'l4d2-goldberg':
                     subtitle = (tr('Sans bordure et résolution automatiques · langue : fichiers du jeu requis') if self.tab==2
                                 else tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables'))
+                if self.model.data['adapter']=='hollowknight-hkmultiplayer':
+                    subtitle=tr('HKMultiplayer · J1 ouvre le monde · connexion et code automatiques')
+                if self.model.data['adapter']=='hollowknight-hkmp':
+                    subtitle=tr('HKMP · écran automatique · chargez une partie, le réseau se connecte seul')
                 if self.model.data['adapter']=='nfsmw-lan':
                     subtitle=(tr('LAN privé : J1 crée le serveur et le salon, J2 le rejoint · sans Internet')
                               if self.model.data.get('nfsmw',{}).get('private_lan',True) else

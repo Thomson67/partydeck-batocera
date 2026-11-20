@@ -337,6 +337,23 @@ def mount_windows(player):
     return views
 
 
+def private_windows_paths(player):
+    """Authorize only mounted COW Windows views owned by this player.
+
+    Native game hooks normally permit prefix-contained paths only. A Windows
+    view lives outside the materialized prefix, without granting access to
+    another player's bottle or to the global shared object store.
+    """
+    try:
+        area=location(player)
+    except ValueError:
+        return ()
+    from partydeck_storage import mounted_paths
+    mounts=mounted_paths()
+    return tuple(state.parent/'view' for state in sorted((area/'windows').glob('*/state.json'))
+                 if state.parent/'view' in mounts)
+
+
 def collect_objects():
     """Only unreferenced content objects, never prefixes, manifests or seeds."""
     removed = 0

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><OutputType>Exe</OutputType><GameManagedDir Condition="'$(GameManagedDir)'==''">PLEASE_SET_GameManagedDir</GameManagedDir></PropertyGroup><ItemGroup>
+<Compile Include="../CameraHooks.cs" />
+<Reference Include="$(GameManagedDir)/MonoMod.RuntimeDetour.dll" />
+<Reference Include="$(GameManagedDir)/MonoMod.Utils.dll" />
+<Reference Include="$(GameManagedDir)/MonoMod.Core.dll" />
+<Reference Include="$(GameManagedDir)/MonoMod.Backports.dll" />
+<Reference Include="$(GameManagedDir)/MonoMod.ILHelpers.dll" />
+<Reference Include="$(GameManagedDir)/MonoMod.Iced.dll" />
+<Reference Include="$(GameManagedDir)/Mono.Cecil.dll" />
+</ItemGroup></Project>

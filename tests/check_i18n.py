@@ -200,3 +200,24 @@ for locale,label in (('fr','Sauvegardes'),('en','Saves')):
     lang.set_language(locale)
     assert lang.tr('Sauvegardes {p0} · Bottles {p1} · Runtime {p2}',p0=1,p1=2,p2=3).startswith(label)
     assert lang.tr('Bottle encore montée : {p0}',p0='test').startswith('Bottle encore' if locale=='fr' else 'Bottle is still')
+# Hollow Knight network/co-op controls and addon identifiers are bilingual.
+for language,title,coop in (('fr','Héberger et rejoindre automatiquement','PV partagés des ennemis · ESoulLink'),('en','Host and join automatically','Shared enemy HP · ESoulLink')):
+    lang.set_language(language)
+    assert fields(1,'hollowknight-hkmp')[0][1]==title
+    assert fields(2,'hollowknight-hkmp')[-2][1]==coop
+    assert label_value('hkmp.enemy_health','keep')==('Conserver' if language=='fr' else 'Keep current')
+    assert label_value('hkmp.enemy_ghosts','on')==('Activé' if language=='fr' else 'Enabled')
+    assert lang.tr('Hollow Knight · coop HKMP')==('Hollow Knight · coop HKMP' if language=='fr' else 'Hollow Knight · HKMP co-op')
+
+# HKMultiplayer uses a separate native API adapter and keeps assigned HIDRAW.
+for language,controller,world in (
+        ('fr','Désactiver l’entrée native · conserver HIDRAW','Dernier monde joué'),
+        ('en','Disable native input · keep HIDRAW','Most recently played world')):
+    lang.set_language(language)
+    assert fields(3,'hollowknight-hkmultiplayer')[0][1]==controller
+    assert label_value('hkmultiplayer.world','latest')==world
+    assert label_value('hkmultiplayer.host.sharedMap',1)==('Activé' if language=='fr' else 'Enabled')
+    for tab in (1,2,3):
+        for key,label,choices in fields(tab,'hollowknight-hkmultiplayer'):
+            if language=='en':assert label not in lang.EN, (key,label)
+lang.set_language('fr')

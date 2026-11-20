@@ -1,5 +1,9 @@
 # Windows Party pour Batocera
 
+Profil de test **Hollow Knight / HKMultiplayer 0.36.2** : connexion et code
+automatiques, entrée native désactivée avec HIDRAW conservé.
+Voir [le guide](docs/HOLLOW_KNIGHT_HKMULTIPLAYER.md).
+
 Lancer plusieurs instances d’un jeu Windows sur un seul PC, avec des contrôles
 attribués à chaque joueur et des fenêtres disposées en écran partagé.
 
@@ -14,16 +18,20 @@ attribués à chaque joueur et des fenêtres disposées en écran partagé.
 Le lancement repose sur le Gamescope de PartyDeck et sur Wine/les runners de
 Batocera. Le dépôt ne distribue ni jeux, ni DLLs de jeux, ni sauvegardes Nucleus.
 
+Ancien profil distinct [Hollow Knight / HKMP](docs/HOLLOW_KNIGHT_HKMP.md) : adaptation
+de l'écran, serveur J1 et connexion automatiques après chargement d'une partie,
+pseudos et options coop, activation privée d'ESoulLink et GhostHunter déjà installés.
+
 ## Installation
 
-La branche de développement courante est `feature/gamepad-configurator`.
+Cette branche de test combine **HKMultiplayer 0.36.2 / Native Wide 0.1.1** et les **bottles Windows mutualisées** : `test/shared-windows-bottles`.
 Fermez les jeux et le configurateur avant installation ou migration.
 
 ```bash
 (
   fichier=$(mktemp /tmp/windows-party-install.XXXXXX) || exit 1
   trap 'rm -f -- "$fichier"' EXIT
-  revision=feature/gamepad-configurator
+  revision=test/shared-windows-bottles
   curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
     "https://raw.githubusercontent.com/Thomson67/partydeck-batocera/$revision/install.sh" \
     -o "$fichier" && PARTYDECK_REVISION="$revision" bash "$fichier"
