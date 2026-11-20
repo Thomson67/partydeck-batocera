@@ -60,6 +60,20 @@ with tempfile.TemporaryDirectory() as folder:
             assert 1<=len(rendered)<=2
             assert all(call[1][2]==16 for call in rendered)
             assert ' '.join(call[0] for call in rendered)==title
+    # The cover sits above the library; the narrower title banner begins at
+    # the settings panel rather than covering the portrait at upper left.
+    boxes=[];original_box=app.box
+    def record_box(rect,color,*args,**kwargs):
+        boxes.append((rect,color));return original_box(rect,color,*args,**kwargs)
+    with patch.object(app,'box',side_effect=record_box):app.draw()
+    cover=next(rect for rect,color in boxes if color==(12,19,31))
+    header=next(rect for rect,color in boxes if color==(23,29,46))
+    panes=[rect for rect,color in boxes if color==(20,25,40)]
+    library=min(panes,key=lambda rect:rect[0]);settings=max(panes,key=lambda rect:rect[0])
+    assert cover[1]+cover[3]<=library[1] # cover entirely above the library
+    assert cover[0]==library[0] and cover[2]==library[2]
+    assert header[0]==settings[0] and header[2]==settings[2]
+    assert header[0]>=cover[0]+cover[2] # no title/cover overlap
     # Visual order and controller order are identical below the game list.
     app.pane='library';app.library=len(app.model.rows)-1
     with patch.object(app,'open_desktop') as desktop,patch.object(app,'open_storage') as storage:

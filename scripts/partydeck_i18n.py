@@ -430,6 +430,11 @@ EN = {
 
 
 EN.update({
+    'Lancer': 'Launch',
+    'Jeu introuvable : utilisez Ajouter pour choisir un autre jeu.': 'Game not found: use Add to choose another game.',
+
+    'Sélectionnez un jeu': 'Select a game',
+
     'Hollow Knight · HKMP (ancienne version)': 'Hollow Knight · HKMP (legacy version)',
     'Hollow Knight · HKMultiplayer 0.36.2': 'Hollow Knight · HKMultiplayer 0.36.2',
 

@@ -51,24 +51,28 @@ Après installation, actualisez les listes de jeux d’EmulationStation. Le syst
 ```
 
 La bibliothèque affiche uniquement les jeux ajoutés ; une nouvelle installation
-commence avec une liste vide. **Inser / Start → Ajouter** propose deux choix :
+commence avec une liste vide. **Inser / Select → Ajouter** propose deux choix :
 **Depuis le catalogue** pour appliquer un profil prédéfini, ou **Manuellement**
 pour choisir un jeu avec un profil standard vierge. Enregistrez ensuite pour
 créer son entrée Windows Party. Les jeux déjà ajoutés restent conservés.
 
 L’interface utilise tout le format de l’écran. Les noms de jeux disposent d’une
 police plus petite et de deux lignes ; la jaquette du jeu sélectionné apparaît
-sous la liste à partir des images déjà scrapées dans Batocera (`gamelist.xml`,
+en haut de la colonne gauche, au-dessus de la liste, à partir des images déjà scrapées dans Batocera (`gamelist.xml`,
 boxart/box2d ou image/thumbnail). Les proportions sont conservées, sans modifier
 les métadonnées. En descendant à la manette, l’ordre est jeux → Paramètres →
-Stockage, comme à l’écran.
+Stockage, comme à l’écran. **Start / Options** lance directement le jeu
+sélectionné (**F5** au clavier). **Select / Share / Create** ouvre le menu
+d’ajout. Le raccourci **HK + Start** reste réservé à la fermeture.
 
-**English:** A fresh personal library is empty. Insert/Start → Add offers
+**English:** A fresh personal library is empty. Insert/Select → Add offers
 **From the catalogue** (predefined profile) or **Manually** (blank standard
 profile). Save to create the Windows Party entry; existing entries are kept.
 The layout fills the screen, long titles use smaller type/two lines, and the
-selected game’s existing Batocera cover is displayed below the list. Navigation
-follows games → Settings → Storage.
+selected game’s existing Batocera cover is displayed above the list at upper left.
+The title banner begins above the settings pane to its right. Navigation
+follows games → Settings → Storage. Start/Options launches the selected game
+(F5 on keyboard); Select/Share/Create opens Add. HK+Start still exits.
 Les sources restent dans `/userdata/roms/windows` ; les entrées Windows Party
 sont de petits lanceurs. Les médias de scraping du jeu original sont réutilisés.
 Le runner peut être choisi dans les options ES de Windows Party ; Auto reprend

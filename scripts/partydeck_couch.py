@@ -31,7 +31,7 @@ from partydeck_display import (settings as desktop_settings, save_settings as sa
                                discover_outputs, output_choices, output_label)
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
-KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'tabs':'PgUp/PgDn'}
+KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
 
 
 def control_label(action, mode):
@@ -39,8 +39,10 @@ def control_label(action, mode):
         return tr(KEY_LABELS[action])
     if action == 'tabs':
         return 'L1/R1' if mode == 'ps' else 'LB/RB'
-    if action == 'add':
+    if action == 'launch':
         return 'OPTIONS' if mode == 'ps' else 'START'
+    if action == 'add':
+        return 'SHARE' if mode == 'ps' else 'SELECT'
     return ({'ok':tr('Croix'), 'back':tr('Cercle'), 'save':tr('Carré'), 'search':tr('Triangle')} if mode == 'ps'
             else {'ok':'A', 'back':'B', 'save':'X', 'search':'Y'})[action]
 
@@ -63,7 +65,7 @@ def context_hints(context, mode, has_tabs=True):
     if context == 'browser':
         return [('ok',tr('Choisir')), ('back',tr('Annuler')), ('tabs',tr('Parcourir') if mode=='keyboard' else tr('Pages · maintenir'))]
     return [('ok',tr('Choisir')), ('back',tr('Retour')), ('save',tr('Enregistrer')), ('search',tr('Rechercher')),
-            *([('tabs',tr('Onglets'))] if has_tabs else []), ('add',tr('Ajouter'))]
+            *([('tabs',tr('Onglets'))] if has_tabs else []), ('launch',tr('Lancer')), ('add',tr('Ajouter'))]
 KEYS = [list('azertyuiop'), list('qsdfghjklm'), list('wxcvbn0123'),
         list('456789 .-_'), list('@:/\\!?éèàç'), list('[]()#&+=$%'),
         list("'\";<>^~{}|"), ['Maj', 'Espace', 'Effacer', 'Vider', 'Valider']]
@@ -442,7 +444,7 @@ class Pads:
                 if kind == 'sdl':
                     if not (mapping.get('hotkey') or mapping.get('hotkeyenable')) and pad.get_button(5) and pad.get_button(6):
                         held.add('quit')
-                    for action, button in [('ok', 0), ('back', 1), ('save', 2), ('search', 3), ('add', 6),
+                    for action, button in [('ok', 0), ('back', 1), ('save', 2), ('search', 3), ('add', 4), ('launch', 6),
                                            ('prev', 9), ('next', 10), ('up', 11), ('down', 12), ('left', 13), ('right', 14)]:
                         if pad.get_button(button):
                             held.add(action)
@@ -452,7 +454,7 @@ class Pads:
                             held.add(neg if value < 0 else pos)
                 else:
                     for action, name in [('ok', 'b'), ('back', 'a'), ('save', 'y'), ('search', 'x'),
-                                         ('add', 'start'), ('prev', 'pageup'), ('next', 'pagedown'),
+                                         ('add', 'select'), ('launch', 'start'), ('prev', 'pageup'), ('next', 'pagedown'),
                                          *[(a, a) for a in ('up', 'down', 'left', 'right')]]:
                         m = mapping.get(name)
                         if not m:
@@ -480,7 +482,7 @@ class Pads:
             except (self.pg.error, IndexError, ValueError):
                 continue
         if 'quit' in held:
-            held = {'quit'}  # Never open the file browser for the Start in HK+Start.
+            held = {'quit'}  # HK+Start must never launch a game or open the add menu.
         now = time.monotonic()
         actions = []
         for action in held:
@@ -672,12 +674,13 @@ class App:
         return self.cover_image
 
     def draw_cover(self):
-        self.box((38,493,312,207),(12,19,31))
+        self.box((24,22,340,300),(12,19,31))
         image = self.selected_cover()
         if image is None:
-            self.text(tr('Jaquette indisponible'),60,584,16,(142,160,184),270)
+            label = tr('Sélectionnez un jeu') if self.model.rom is None else tr('Jaquette indisponible')
+            self.text(label,60,162,16,(142,160,184),270)
             return
-        target = self.pg.Rect(self.layout_rect((46,499,296,195)))
+        target = self.pg.Rect(self.layout_rect((38,30,312,284)))
         factor = min(target.width/image.get_width(),target.height/image.get_height())
         size = (max(1,round(image.get_width()*factor)),max(1,round(image.get_height()*factor)))
         surface = self.pg.transform.smoothscale(image,size)
@@ -1184,7 +1187,14 @@ class App:
                 else:
                     self.browse(path)
             return
-        if action == 'add':
+        if action == 'launch':
+            if self.pane == 'library' and self.library >= len(self.model.rows):
+                return
+            if self.model.rom is not None and self.model.data and is_rom(self.model.rom):
+                self.launch()
+            else:
+                self.toast(tr('Sélectionnez un jeu'))
+        elif action == 'add':
             self.switch(self.open_add)
         elif action == 'save':
             if self.save() and self.model.rom and self.single:
@@ -1222,7 +1232,7 @@ class App:
                         if recipe:
                             self.missing = recipe
                         else:
-                            self.toast(tr('Jeu introuvable : vous devez d’abord disposer du jeu. Start permet de choisir un autre jeu.'))
+                            self.toast(tr('Jeu introuvable : utilisez Ajouter pour choisir un autre jeu.'))
                     else:
                         self.pane, self.row = 'settings', 0
         elif self.model.data:
@@ -1282,29 +1292,28 @@ class App:
         if self.tab not in self.available_tabs():
             self.tab, self.row = 0, 0
         self.canvas.blit(self.background, (0,0))
-        self.box((24, 22, 1392, 100), (23, 29, 46))
-        self.text('WINDOWS PARTY', 52, 37, 36)
-        self.text(tr('Votre bibliothèque · vos règles · votre partie'), 54, 84, 16, (152, 167, 191))
+        self.box((386, 22, 1030, 100), (23, 29, 46))
+        self.text('WINDOWS PARTY', 416, 37, 36,width=650)
+        self.text(tr('Votre bibliothèque · vos règles · votre partie'), 418, 84, 16, (152, 167, 191),650)
         if self.logo is not None:
             factor = min(260/self.logo.get_width(), 76/self.logo.get_height())
             self.canvas.blit(self.pg.transform.smoothscale(self.logo,
                              (int(self.logo.get_width()*factor), int(self.logo.get_height()*factor))), self.layout_point(1110,35))
         else:
             self.text(tr('CONFIGURATEUR'), 1100, 60, 20, (117, 213, 230), 280)
-        self.box((24, 142, 340, 652), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open and not self.desktop_open else None)
-        self.text(tr('BIBLIOTHÈQUE'), 46, 163, 20, (122, 209, 229))
+        self.draw_cover()
+        self.box((24, 342, 340, 452), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open and not self.desktop_open else None)
+        self.text(tr('BIBLIOTHÈQUE'), 46, 358, 20, (122, 209, 229))
         start_label = control_label('add', self.input_mode)
-        self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 201, 16, (160, 174, 199))
-        visible = 5 if self.model.rom is not None else 9
+        self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 396, 16, (160, 174, 199))
+        visible = 5
         offset = max(0,min(self.library,len(self.model.rows)-1)-visible+1)
         for i, rom in enumerate(self.model.rows[offset:offset+visible], offset):
-            y = 246 + (i-offset)*50
+            y = 438 + (i-offset)*50
             selected = self.library == i
             if selected:
                 self.box((38, y-7, 312, 45), (35, 75, 94), (72, 202, 222))
             self.library_title(rom.stem,50,y,284)
-        if self.model.rom is not None:
-            self.draw_cover()
         self.box((38,750,312,36), (35,75,94) if self.library == len(self.model.rows)+1 else (29,39,55),
                  (72,202,222) if self.library == len(self.model.rows)+1 else None)
         self.text(tr('STOCKAGE'),50,758,16,width=284)
@@ -1402,7 +1411,7 @@ class App:
         volume_selected = (self.model.data and self.browser is None and self.pane == 'settings'
                            and self.row < len(self.current_fields()) and '.volumes.' in self.current_fields()[self.row][0])
         navigation = tr('Flèches : naviguer') if self.input_mode == 'keyboard' else tr('Croix directionnelle / stick : naviguer')
-        quit_hint = tr('Échap : retour / quitter') if self.input_mode == 'keyboard' else 'HK + ' + control_label('add', self.input_mode) + tr(' : quitter')
+        quit_hint = tr('Échap : retour / quitter') if self.input_mode == 'keyboard' else 'HK + ' + control_label('launch', self.input_mode) + tr(' : quitter')
         subtitle = (tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok', self.input_mode) + tr(' : valeur JSON commun') if volume_selected and context == 'main'
                     else navigation + ' · ' + quit_hint)
         if volume_selected and context == 'main' and self.model.data.get('adapter') == 'sm64coopdx':
@@ -1499,7 +1508,7 @@ class App:
         self.single = single
         keymap = {self.pg.K_UP:'up', self.pg.K_DOWN:'down', self.pg.K_LEFT:'left', self.pg.K_RIGHT:'right',
                   self.pg.K_RETURN:'ok', self.pg.K_ESCAPE:'back', self.pg.K_F2:'save', self.pg.K_F3:'search',
-                  self.pg.K_INSERT:'add', self.pg.K_PAGEUP:'prev', self.pg.K_PAGEDOWN:'next'}
+                  self.pg.K_INSERT:'add', self.pg.K_F5:'launch', self.pg.K_PAGEUP:'prev', self.pg.K_PAGEDOWN:'next'}
         try:
             while self.running:
                 for event in self.pg.event.get():

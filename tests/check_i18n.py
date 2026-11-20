@@ -231,3 +231,13 @@ for language,title,manual,cover in (
     assert lang.tr('Manuellement')==manual
     assert lang.tr('Jaquette indisponible')==cover
 lang.set_language('fr')
+
+for language,label in (('fr','Sélectionnez un jeu'),('en','Select a game')):
+    lang.set_language(language)
+    assert lang.tr('Sélectionnez un jeu')==label
+lang.set_language('fr')
+
+for language,label in (('fr','Lancer'),('en','Launch')):
+    lang.set_language(language)
+    assert lang.tr('Lancer')==label
+lang.set_language('fr')

@@ -15,10 +15,13 @@ assert control_label('back','keyboard')=='Échap'
 assert control_label('save','keyboard')=='F2'
 assert control_label('search','keyboard')=='F3'
 assert control_label('tabs','keyboard')=='PgUp/PgDn'
-assert control_label('add','ps')=='OPTIONS'
+assert control_label('add','ps')=='SHARE'
+assert control_label('launch','ps')=='OPTIONS'
 assert control_label('tabs','ps')=='L1/R1'
 assert control_label('ok','ps')=='Croix'
-assert control_label('add','xbox')=='START'
+assert control_label('add','xbox')=='SELECT'
+assert control_label('launch','xbox')=='START'
+assert control_label('launch','keyboard')=='F5'
 assert context_hints('keyboard','keyboard')==[('ok','Valider'),('back','Annuler')]
 assert ('ok','Saisir') in context_hints('keyboard','ps')
 assert len(context_hints('browser','keyboard'))==3
