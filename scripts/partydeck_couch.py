@@ -565,6 +565,8 @@ class App:
         self.storage_config = None
         self.cover_key = None
         self.cover_image = None
+        self.game_logo_key = None
+        self.game_logo_image = None
         self.logo = None
         logo = Path(base) / 'assets/windows-party.png'
         if logo.exists():
@@ -674,14 +676,58 @@ class App:
             pass
         return self.cover_image
 
+    def selected_game_logo(self):
+        rom = self.model.rom
+        if rom == self.game_logo_key:
+            return self.game_logo_image
+        self.game_logo_key,self.game_logo_image = rom,None
+        if rom is None:
+            return None
+        try:
+            found = source_scrape(rom,{})
+            candidates = []
+            if found is not None:
+                folder,game = found
+                for tag in ('marquee','wheel','clearlogo','logo'):
+                    value = game.findtext(tag)
+                    if value:
+                        candidates.append(absolute_path(value,folder))
+            for folder in dict.fromkeys((rom.parent, *([found[0]] if found else []))):
+                for subdir in ('media/marquee','media/wheel','media/wheels','media/clearlogo','media/logos','images'):
+                    suffixes = ('-marquee','-wheel','-clearlogo','-logo') + (() if subdir=='images' else ('',))
+                    for suffix in suffixes:
+                        for extension in ('.png','.webp'):
+                            candidates.append(folder/subdir/(rom.stem+suffix+extension))
+            for path in dict.fromkeys(candidates):
+                if path.is_file():
+                    try:
+                        self.game_logo_image = self.pg.image.load(str(path)).convert_alpha()
+                        break
+                    except (OSError,self.pg.error):
+                        continue
+        except (OSError,ValueError,ET.ParseError):
+            pass
+        return self.game_logo_image
+
     def draw_cover(self):
-        self.box((24,22,340,300),(12,19,31))
+        self.box((24,22,340,226),(12,19,31))
+        logo = self.selected_game_logo()
+        if logo is not None:
+            target = self.pg.Rect(self.layout_rect((194,38,156,194)))
+            factor = min(target.width/logo.get_width(),target.height/logo.get_height())
+            size = (max(1,round(logo.get_width()*factor)),max(1,round(logo.get_height()*factor)))
+            surface = self.pg.transform.smoothscale(logo,size)
+            self.canvas.blit(surface,surface.get_rect(center=target.center))
         image = self.selected_cover()
         if image is None:
             label = tr('Sélectionnez un jeu') if self.model.rom is None else tr('Jaquette indisponible')
-            self.text(label,60,162,16,(142,160,184),270)
+            if logo is None:
+                self.text(label,60,125,16,(142,160,184),270)
+            else:
+                for index,line in enumerate(textwrap.wrap(label,width=17)):
+                    self.text(line,38,112+index*22,16,(142,160,184),144)
             return
-        target = self.pg.Rect(self.layout_rect((38,30,312,284)))
+        target = self.pg.Rect(self.layout_rect((38,30,144 if logo is not None else 312,210)))
         factor = min(target.width/image.get_width(),target.height/image.get_height())
         size = (max(1,round(image.get_width()*factor)),max(1,round(image.get_height()*factor)))
         surface = self.pg.transform.smoothscale(image,size)
@@ -1305,14 +1351,14 @@ class App:
         else:
             self.text(tr('CONFIGURATEUR'), 1100, 60, 20, (117, 213, 230), 280)
         self.draw_cover()
-        self.box((24, 342, 340, 452), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open and not self.desktop_open else None)
-        self.text(tr('BIBLIOTHÈQUE'), 46, 358, 20, (122, 209, 229))
+        self.box((24, 268, 340, 526), (20, 25, 40), (76, 197, 219) if self.pane == 'library' and not self.storage_open and not self.desktop_open else None)
+        self.text(tr('BIBLIOTHÈQUE'), 46, 284, 20, (122, 209, 229))
         start_label = control_label('add', self.input_mode)
-        self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 396, 16, (160, 174, 199))
-        visible = 5
+        self.text(tr('{p0} jeux · {p1} : ajouter', p0=len(self.model.rows), p1=start_label), 46, 322, 16, (160, 174, 199))
+        visible = 7
         offset = max(0,min(self.library,len(self.model.rows)-1)-visible+1)
         for i, rom in enumerate(self.model.rows[offset:offset+visible], offset):
-            y = 438 + (i-offset)*50
+            y = 364 + (i-offset)*50
             selected = self.library == i
             if selected:
                 self.box((38, y-7, 312, 45), (35, 75, 94), (72, 202, 222))

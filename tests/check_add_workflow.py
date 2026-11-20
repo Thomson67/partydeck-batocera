@@ -46,11 +46,14 @@ with tempfile.TemporaryDirectory() as folder:
     # Standard Batocera metadata supplies a real portrait cover, read-only.
     cover=windows/'media/cover.png';cover.parent.mkdir()
     surface=app.pg.Surface((200,300));surface.fill((120,60,180));app.pg.image.save(surface,str(cover))
+    logo=windows/'media/title.png'
+    surface=app.pg.Surface((400,120),app.pg.SRCALPHA);surface.fill((20,210,160,255));app.pg.image.save(surface,str(logo))
     gamelist=windows/'gamelist.xml'
-    gamelist.write_text('<gameList><game><path>./'+rom.name+'</path><image>./media/cover.png</image></game></gameList>')
-    before=gamelist.read_bytes();app.cover_key=None
+    gamelist.write_text('<gameList><game><path>./'+rom.name+'</path><image>./media/cover.png</image><marquee>./media/title.png</marquee></game></gameList>')
+    before=gamelist.read_bytes();app.cover_key=None;app.game_logo_key=None
     image=app.selected_cover()
     assert image.get_size()==(200,300) and gamelist.read_bytes()==before
+    assert app.selected_game_logo().get_size()==(400,120)
     app.screen=app.pg.display.set_mode((1920,1080))
     for language,expected in (('fr','Depuis le catalogue'),('en','From the catalogue')):
         set_language(language);app.action('add')
@@ -63,6 +66,15 @@ with tempfile.TemporaryDirectory() as folder:
     # Broken media never prevents configuration or modifies the source file.
     cover.write_bytes(b'bad image');app.cover_key=None
     assert app.selected_cover() is None
+    app.draw();assert gamelist.read_bytes()==before
+    # A broken marquee falls back to a conventional wheel; a game with no
+    # logo leaves the cover usable and does not borrow another game's image.
+    logo.write_bytes(b'bad image');app.game_logo_key=None
+    wheel=windows/'media/wheel'/(rom.stem+'.png');wheel.parent.mkdir()
+    surface=app.pg.Surface((240,90));app.pg.image.save(surface,str(wheel))
+    assert app.selected_game_logo().get_size()==(240,90)
+    wheel.unlink();app.game_logo_key=None
+    assert app.selected_game_logo() is None
     app.draw();assert gamelist.read_bytes()==before
     app.pg.quit()
 print('Add workflow: empty library, catalogue vs manual, adapter persistence, no duplicates, French/English and read-only cover fallback verified.')
