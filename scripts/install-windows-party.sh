@@ -209,7 +209,7 @@ if [[ ${1:-verifier} == preparer-coop || ${1:-verifier} == ajouter ]]; then
     mode=prepare
     [[ $1 != ajouter ]] || mode=prepare-party
     shift
-    python3 "$coop_helper" "$mode" "$appdir" "$base" "$ports_dir" "$@"
+    python3 "$coop_helper" "$mode" "$appdir" "$base" "$ports_dir" "$@" 9>&-
     exit 0
 fi
 
@@ -246,7 +246,9 @@ fi
 
 log=$(mktemp "$base/logs/partydeck-$(date +%Y%m%d-%H%M%S)-XXXXXX")
 printf 'Journal : %s\n' "$log"
-exec > >(tee -a "$log") 2>&1
+# Only this shell owns the session lock. A logger, Wine server or background
+# service must not keep it alive after the shell has finished its session.
+exec > >(tee -a "$log" 9>&-) 2>&1
 printf 'Batocera %s\nPartyDeck %s\n' "$(batocera-version)" "$version"
 df -h "$base"
 
@@ -275,7 +277,7 @@ export APPDIR="$appdir" APPIMAGE="$release/$asset"
 export XDG_DATA_HOME="$base/data" XDG_CACHE_HOME="$base/cache" USE_HOST_XDG_CACHE_HOME=1
 unset ARGV0
 
-"$appdir/AppRun" --help
+"$appdir/AppRun" --help 9>&-
 if [[ ${1:-verifier} == installer ]]; then
     staging=$(mktemp -d "$base/.coop-XXXXXX")
     trap 'rm -rf -- "$staging"' EXIT
@@ -346,10 +348,10 @@ if [[ ${1:-verifier} == installer ]]; then
     chmod 0755 "$temporary_launcher"
     mv -fT -- "$temporary_launcher" "$launcher"
     trap - EXIT
-    python3 "$base/partydeck_migrate.py" finalize "$base" /userdata/system/partydeck-test /userdata/roms/windows-party "$ports_dir"
-    python3 "$coop_helper" install-system
-    python3 "$profiles_helper" installer "$base"
-    python3 "$base/partydeck_theme.py" "$base"
+    python3 "$base/partydeck_migrate.py" finalize "$base" /userdata/system/partydeck-test /userdata/roms/windows-party "$ports_dir" 9>&-
+    python3 "$coop_helper" install-system 9>&-
+    python3 "$profiles_helper" installer "$base" 9>&-
+    python3 "$base/partydeck_theme.py" "$base" 9>&-
     printf 'Ajoutez un jeu avec : %s ajouter "/userdata/roms/windows/Jeu.wsquashfs" 2 horizontal auto\n' "$launcher"
     printf 'Redémarrez EmulationStation pour charger le nouveau système Windows Party.\n'
     printf '\nWindows Party installé. Quand EmulationStation est affiché, lancez :\n%s verifier\n' "$launcher"
@@ -358,7 +360,7 @@ fi
 
 "$appdir/bin/gamescope-kbm" --help >"$base/logs/gamescope-help.log" 2>&1 ||
     die "Le Gamescope fourni ne démarre pas. Voir $base/logs/gamescope-help.log"
-"$appdir/bin/umu-run" --version
+"$appdir/bin/umu-run" --version 9>&-
 "$appdir/bin/bwrap" --die-with-parent --dev-bind / / --tmpfs /tmp /bin/true ||
     die 'Bubblewrap ne peut pas créer le namespace requis sur cette build.'
 
@@ -429,7 +431,7 @@ if [[ ${1:-verifier} == coop || ${1:-verifier} == party ]]; then
     mode=play
     [[ $1 != party ]] || mode=play-party
     shift
-    python3 "$coop_helper" "$mode" "$appdir" "$base" "$ports_dir" "$@"
+    python3 "$coop_helper" "$mode" "$appdir" "$base" "$ports_dir" "$@" 9>&-
     exit 0
 fi
 

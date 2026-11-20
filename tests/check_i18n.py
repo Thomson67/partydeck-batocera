@@ -15,6 +15,16 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
 from partydeck_catalog import COMMON
 
+# Surface the launcher's reason rather than its long argv, in either UI locale.
+for selected,prefix in (('fr','Enregistrement impossible : '),('en','Could not save: ')):
+    lang.set_language(selected)
+    reason='Session is still running.'
+    failed=SimpleNamespace(model=SimpleNamespace(data=True,save=Mock(
+        side_effect=subprocess.CalledProcessError(1,['long','command'],stderr=reason+'\n'))),toast=Mock())
+    assert App.save(failed) is False
+    failed.toast.assert_called_once_with(prefix+reason)
+lang.set_language('fr')
+
 for locale in ('fr','fr_FR','fr-FR','FR_ca.UTF-8','fr_BE@euro',"'fr_FR'"):
     assert lang.locale_language(locale)=='fr'
 for locale in ('en_US','de_DE','es_ES','zh_CN','C.UTF-8','','frr_FR','france'):

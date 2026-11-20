@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import sys
 import textwrap
 import time
 import xml.etree.ElementTree as ET
@@ -1014,7 +1015,9 @@ class App:
                 self.toast(tr('Profil enregistré · prêt pour le prochain lancement'))
                 return True
         except (ValueError, OSError, subprocess.CalledProcessError) as error:
-            self.toast(tr('Enregistrement impossible : ') + str(error))
+            detail = ((error.stderr or '').strip() if isinstance(error,subprocess.CalledProcessError) else '') or str(error)
+            print(tr('Enregistrement impossible : ') + detail,file=sys.stderr,flush=True)
+            self.toast(tr('Enregistrement impossible : ') + detail)
         return False
 
     def launch(self):

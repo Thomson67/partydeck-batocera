@@ -85,8 +85,10 @@ with tempfile.TemporaryDirectory() as directory:
     # Never write invalid profiles or lose the previous file after launcher failure.
     prior = copy.deepcopy(saved)
     app.model.data['players'] = '2'
-    with patch('partydeck_couch.subprocess.run', side_effect=subprocess.CalledProcessError(1, 'test')):
+    with patch('partydeck_couch.subprocess.run', side_effect=subprocess.CalledProcessError(
+            1, 'test', stderr='Erreur : Une session Windows Party est déjà en cours.\n')):
         assert not app.save()
+    assert app.notice=='Enregistrement impossible : Erreur : Une session Windows Party est déjà en cours.'
     assert read_profile(base, app.model.rom) == prior
     app.model.select(app.model.rom)
     # Directory browser chooses ROMs without a desktop file picker.
