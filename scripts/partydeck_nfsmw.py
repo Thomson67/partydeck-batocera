@@ -64,18 +64,16 @@ def apply_config(directory,prefix,payload,private_binds=PRIVATE_BINDS):
     if host=='auto':raise ValueError(tr('Adresse LAN Most Wanted invalide.'))
     port=9900 if payload.get('private_lan') else 9900+index
     edits=[]
-    def prepare(path,changes,*,root=None):
+    def prepare(path,changes):
         path=safe_path(path,allowed)
         original=path.read_bytes();text,codec=decode(original)
-        after=patch_ini(text,changes,root=root).encode(codec)
+        after=patch_ini(text,changes).encode(codec)
         backup=safe_path(player/'nfsmw-before'/(hashlib.sha256(os.fsencode(path)).hexdigest()[:16]+'.bak'),(player,))
         edits.append((path,original,after,backup))
-    # Keep the Nucleus-style section and the stock unsectioned settings in
-    # agreement so neither can supply a stale LAN address.
-    server=dict(PORT=port,LAN_THROTTLE=options['throttle'],TRUST='255.255.255.255',
-        ADDR=f'%%bind("{host}:{port}")',TRUST_MATCH=f'%%bind("{host}")')
-    # The stock ADDR directive uses the bare address; the section includes the port.
-    prepare(cfg,{'SERVER':server},root=dict(server,ADDR=f'%%bind("{host}")'))
+    # Nucleus uses IniSaveInfo("SERVER", ...); retain that section and its
+    # original unsectioned defaults, rather than guessing a flat-file parser.
+    prepare(cfg,{'SERVER':dict(PORT=port,LAN_THROTTLE=options['throttle'],TRUST='255.255.255.255',
+        ADDR=f'%%bind("{host}:{port}")',TRUST_MATCH=f'%%bind("{host}")')})
     scripts=safe_path(child(directory,'scripts'),allowed)
     extra=safe_path(child(scripts,'NFSMWExtraOptionsSettings.ini'),allowed)
     wide=safe_path(child(scripts,'NFSMostWanted.WidescreenFix.ini'),allowed)

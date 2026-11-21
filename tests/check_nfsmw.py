@@ -36,8 +36,7 @@ with tempfile.TemporaryDirectory() as temp:
     profile=defaults(rom);assert profile['adapter']=='nfsmw-lan' and recipe_for(rom).id=='nfsmw'
     save_profile(base,rom,profile)
     wine=base/'batocera-wine';wine.write_text('#!/bin/bash\n')
-    solo=(b'# ORIGINAL\r\nLAN_THROTTLE=30\r\nACCOUNT=1\r\nADDR=%%bind("159.153.253.82")\r\n'
-          b'TRUST_MATCH=%%bind("159.153.253.82")\r\n')
+    solo=b'# ORIGINAL\r\nLAN_THROTTLE=30\r\nACCOUNT=1\r\nADDR=%%bind("159.153.253.82")\r\n'
     for index in range(4):
         player=base/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game';scripts=game/'scripts';scripts.mkdir(parents=True)
         # Optional distribution icons must not prevent a selected MW profile
@@ -78,12 +77,6 @@ with tempfile.TemporaryDirectory() as temp:
         assert 'PORT=9900\n' in text
         assert f'ADDR=%%bind("{private_ip}:9900")' in text
         assert f'TRUST_MATCH=%%bind("{private_ip}")' in text
-        flat, section = text.split('[SERVER]', 1)
-        assert f'ADDR=%%bind("{private_ip}")\n' in flat
-        assert f'ADDR=%%bind("{private_ip}:9900")\n' in section
-        assert all(f'TRUST_MATCH=%%bind("{private_ip}")\n' in block for block in (flat, section))
-        assert 'PORT=' not in flat and 'ACCOUNT=1' in flat
-        assert '159.153.253.82' not in text
         mw.apply_config(game,prefix,data,private_binds=())
         assert f'PORT={9900+index}\n' in (game/'server.cfg').read_text()
         (game/'server.dll').unlink()

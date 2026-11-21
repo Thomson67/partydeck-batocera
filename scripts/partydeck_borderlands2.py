@@ -48,7 +48,7 @@ def validate(options):
     return normalized
 
 
-def patch_ini(text, updates, *, root=None):
+def patch_ini(text, updates):
     """UE3 INIs contain repeated array keys; ConfigParser would destroy them."""
     newline = '\r\n' if '\r\n' in text else '\n'
     output, section = [], None
@@ -56,9 +56,6 @@ def patch_ini(text, updates, *, root=None):
     canonical = {name.casefold(): name for name in updates}
     all_values = {name.casefold(): {k.casefold(): (k, str(v)) for k, v in values.items()}
                   for name, values in updates.items()}
-    if root is not None:
-        # Update existing unsectioned keys without adding missing ones.
-        all_values[None] = {k.casefold(): (k, str(v)) for k, v in root.items()}
 
     def flush():
         if section in pending:
@@ -75,8 +72,7 @@ def patch_ini(text, updates, *, root=None):
         key = re.match(r'^(\s*)([^;#=\s]+)(\s*=\s*)(.*?)(\r?\n)?$', line)
         if key and section in all_values and key[2].casefold() in all_values[section]:
             name, value = all_values[section][key[2].casefold()]
-            if section is not None:
-                pending[section].pop(name, None)
+            pending[section].pop(name, None)
             # Preserve an inline comment and every unmodified line byte-for-byte.
             comment = re.search(r'([ \t]*[;#].*)$', key[4])
             line = key[1] + key[2] + key[3] + value + (comment[1] if comment else '') + (key[5] or '')
