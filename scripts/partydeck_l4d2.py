@@ -28,6 +28,14 @@ WINE_LOCALES = dict(zip(tuple(LANGUAGES)[1:],('fr_FR.UTF-8','en_US.UTF-8','de_DE
     'cs_CZ.UTF-8','ru_RU.UTF-8','ja_JP.UTF-8')))
 BEGIN = '// Windows Party begin'
 END = '// Windows Party end'
+CAMPAIGNS = {'menu':'Choisir dans le jeu', 'c1m1_hotel':'Dead Center',
+    'c2m1_highway':'Dark Carnival','c3m1_plankcountry':'Swamp Fever',
+    'c4m1_milltown_a':'Hard Rain','c5m1_waterfront':'The Parish',
+    'c6m1_riverbank':'The Passing','c7m1_docks':'The Sacrifice',
+    'c8m1_apartment':'No Mercy','c9m1_alleys':'Crash Course',
+    'c10m1_caves':'Death Toll','c11m1_greenhouse':'Dead Air',
+    'c12m1_hilltop':'Blood Harvest','c13m1_alpinecreek':'Cold Stream',
+    'c14m1_junkyard':'The Last Stand'}
 
 
 def matches(rom):
@@ -35,7 +43,8 @@ def matches(rom):
 
 
 def defaults():
-    return dict(names=[tr('Joueur{p0}',p0=i) for i in range(1,5)],language='keep',gamepad=True)
+    return dict(names=[tr('Joueur{p0}',p0=i) for i in range(1,5)],language='keep',gamepad=True,
+                automatic=True,host_player=1,port=27015,campaign='menu')
 
 
 def validate(options):
@@ -49,7 +58,11 @@ def validate(options):
     gamepad=options.get('gamepad',True)
     if not isinstance(language,str) or language not in LANGUAGES or type(gamepad) is not bool:
         raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
-    return dict(names=list(names),language=language,gamepad=gamepad)
+    from partydeck_autoconnect import options as network_options
+    campaign=options.get('campaign','menu')
+    if campaign not in CAMPAIGNS:raise ValueError(tr('Campagne Left 4 Dead 2 invalide.'))
+    return dict(names=list(names),language=language,gamepad=gamepad,campaign=campaign,
+                **network_options(options,'l4d2'))
 
 
 def valid_id(value):

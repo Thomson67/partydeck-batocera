@@ -132,7 +132,7 @@ def plan(layout=Layout(), mounts=None):
         if root.is_symlink(): continue
         # Unknown game data is not classified as cache. This also preserves old
         # test prefixes and identity files inside a game/content overlay.
-        technical = {'releases', 'cache', 'logs', 'profiles', 'detached-profiles',
+        technical = {'releases', 'cache', 'logs', 'profiles', 'detached-profiles', 'dependencies',
                      'templates', 'assets', 'plugins', '__pycache__'}
         for source in root.iterdir():
             name = source.name

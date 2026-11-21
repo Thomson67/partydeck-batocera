@@ -21,7 +21,7 @@ from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LAB
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
 from partydeck_hkmp import defaults as hkmp_defaults, matches as matches_hkmp
 from partydeck_hkmultiplayer import defaults as multi_defaults, matches as matches_multi, HOST_CHOICES
-from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2, LANGUAGES as L4D2_LANGUAGES
+from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2, LANGUAGES as L4D2_LANGUAGES, CAMPAIGNS
 from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
                                   VOLUME_FIELDS as SM64_VOLUME_FIELDS)
@@ -127,7 +127,11 @@ def fields(tab, adapter='standard'):
     if adapter == 'l4d2-goldberg':
         if tab==2:
             return [('l4d2.language',tr('Langue du jeu'),list(L4D2_LANGUAGES)),
-                    ('l4d2.gamepad',tr('Activer la manette en jeu'),[True,False])]
+                    ('l4d2.gamepad',tr('Activer la manette en jeu'),[True,False]),
+                    ('l4d2.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
+                    ('l4d2.host_player',tr('Joueur hôte'),[1,2,3,4]),
+                    ('l4d2.port',tr('Port de la partie'),None),
+                    ('l4d2.campaign',tr('Campagne au lancement'),list(CAMPAIGNS))]
         return [(f'l4d2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
     if adapter == 'sm64coopdx':
         if tab == 1:
@@ -143,12 +147,19 @@ def fields(tab, adapter='standard'):
                     ('sm64coopdx.invert_y',tr('Inverser la caméra · axe Y'),[False,True])]
         if tab == 3:
             return [('sm64coopdx.language',tr('Langue du jeu'),list(SM64_LANGUAGES)),
-                    *[(f'sm64coopdx.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]]
+                    *[(f'sm64coopdx.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)],
+                    ('sm64coopdx.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
+                    ('sm64coopdx.host_player',tr('Joueur hôte'),[1,2,3,4]),
+                    ('sm64coopdx.port',tr('Port de la partie'),None),
+                    ('sm64coopdx.save_slot',tr('Sauvegarde de l’hôte'),[1,2,3,4])]
         return [('sm64coopdx.music_j1_only',tr('Musique uniquement pour J1'),[True,False]),
                 *[(f'sm64coopdx.volumes.{key}',tr(label)+' (%)',None) for key,label in SM64_VOLUME_FIELDS]]
     if adapter == 'borderlands2':
         if tab == 2:
-            return [(f'borderlands2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
+            return [*[(f'borderlands2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)],
+                    ('borderlands2.automatic',tr('LAN et connexion automatiques (SDK privé)'),[True,False]),
+                    ('borderlands2.host_player',tr('Joueur hôte'),[1,2,3,4]),
+                    ('borderlands2.port',tr('Port de la partie'),None)]
         return [('borderlands2.preset',tr('Préréglage graphique'),list(PRESETS)),
                 ('borderlands2.vsync',tr('VSync'),['keep','on','off']),
                 ('borderlands2.physx',tr('Qualité PhysX'),['keep','0','1','2'])]
@@ -205,6 +216,7 @@ def label_value(key, value):
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental'),'hollowknight-hkmp':'Hollow Knight / HKMP','hollowknight-hkmultiplayer':'Hollow Knight / HKMultiplayer'}.get(value, value)
+    if key == 'l4d2.campaign':return tr(CAMPAIGNS[value])
     if key == 'hkmultiplayer.world':
         return tr('Dernier monde joué' if value=='latest' else 'Monde portant ce nom')
     if key.startswith('hkmultiplayer.host.') and key.split('.')[-1] in ('revive','sharedMap','stagTogether','showNames','showPartnerHealth'):
@@ -1406,7 +1418,7 @@ class App:
                         self.toast(tr('Joueurs sur manettes ; clavier/souris disponible dans la fenêtre active pour les menus.'))
                 elif action == 'ok':
                     def update(text):
-                        result = int(text) if (key in ('anchor.port','hkmp.port','hkmultiplayer.port') or ('.volumes.' in key and text.strip())) else text
+                        result = int(text) if (key in ('anchor.port','hkmp.port','hkmultiplayer.port','borderlands2.port','sm64coopdx.port','l4d2.port') or ('.volumes.' in key and text.strip())) else text
                         if '.volumes.' in key and text.strip() and not 0 <= result <= 100:
                             raise ValueError(tr('Volume : de 0 à 100 %, ou vide pour le JSON commun.'))
                         if key == 'anchor.port' and not 1024 < result < 65535:

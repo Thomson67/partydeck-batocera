@@ -15,6 +15,17 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
 from partydeck_catalog import COMMON
 
+for language,host,automatic,campaign in (
+        ('fr','Joueur hôte','Héberger et rejoindre automatiquement','Choisir dans le jeu'),
+        ('en','Host player','Host and join automatically','Choose in game')):
+    lang.set_language(language)
+    for adapter in ('borderlands2','sm64coopdx','l4d2-goldberg'):
+        available=[field for tab in range(5) for field in fields(tab,adapter)]
+        assert next(label for key,label,choices in available if key.endswith('.host_player'))==host
+    assert lang.tr('Héberger et rejoindre automatiquement')==automatic
+    assert label_value('l4d2.campaign','menu')==campaign
+lang.set_language('fr')
+
 # Surface the launcher's reason rather than its long argv, in either UI locale.
 for selected,prefix in (('fr','Enregistrement impossible : '),('en','Could not save: ')):
     lang.set_language(selected)
@@ -33,7 +44,7 @@ for locale in ('en_US','de_DE','es_ES','zh_CN','C.UTF-8','','frr_FR','france'):
 for selected,labels in (('fr',('Langue du jeu','Activer la manette en jeu','Français','Conserver')),
                         ('en',('Game language','Enable gamepad in game','French','Keep current'))):
     lang.set_language(selected)
-    assert [title for _,title,_ in fields(2,'l4d2-goldberg')]==list(labels[:2])
+    assert [title for _,title,_ in fields(2,'l4d2-goldberg')][:2]==list(labels[:2])
     assert label_value('l4d2.language','french')==labels[2]
     assert label_value('l4d2.language','keep')==labels[3]
 

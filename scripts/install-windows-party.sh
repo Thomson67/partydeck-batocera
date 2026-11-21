@@ -225,6 +225,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_display.py ]] || die 'Module écran/GPU absent / Display/GPU module missing.'
     [[ -f $source_dir/partydeck_bottles.py ]] || die 'Module bottles absent / Bottles module missing.'
     [[ -f $source_dir/partydeck_uninstall.py ]] || die 'Module de désinstallation absent / Uninstall module missing.'
+    [[ -f $source_dir/partydeck_autoconnect.py && -f $source_dir/partydeck_bl2_session.py ]] || die 'Module de connexion absent / Connection module missing.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'
     [[ -f $source_dir/partydeck_borderlands2.py ]] || die 'Module Borderlands 2 absent du paquet.'
     [[ -f $source_dir/partydeck_sm64coopdx.py && -f $source_dir/../templates/sm64coopdx-common.txt ]] || die 'Profil SM64CoopDX absent du paquet.'
@@ -309,6 +310,8 @@ if [[ ${1:-verifier} == installer ]]; then
     cp -- "$source_dir/partydeck_l4d2.py" "$staging/partydeck_l4d2.py"
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
     cp -- "$source_dir/partydeck_umu.py" "$base/partydeck_umu.py"
+    cp -- "$source_dir/partydeck_autoconnect.py" "$base/partydeck_autoconnect.py"
+    cp -- "$source_dir/partydeck_bl2_session.py" "$base/partydeck_bl2_session.py"
     cp -- "$source_dir/partydeck_mangohud.py" "$base/partydeck_mangohud.py"
     cp -- "$source_dir/partydeck_controls.py" "$base/partydeck_controls.py"
     cp -- "$source_dir/partydeck_migrate.py" "$base/partydeck_migrate.py"

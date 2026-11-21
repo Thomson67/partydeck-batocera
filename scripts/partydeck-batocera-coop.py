@@ -519,6 +519,9 @@ def _run_wine(original, target, player, saves=None):
         from partydeck_hkmultiplayer import install_hook as install_multi, finish_launch as finish_multi
         hkmultiplayer_result=install_multi(Path(__file__).resolve().parent,original,player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
+    if saves is not None:
+        from partydeck_autoconnect import install_hook as install_autoconnect
+        install_autoconnect(Path(__file__).resolve().parent,original,player)
     # All UMU distributions receive cheap COW views: native Wine resolves the
     # selected runner itself, including per-ROM and filename overrides.
     from partydeck_umu import runner_views,pressure_vessel_environment
@@ -578,7 +581,8 @@ def run_compositor(command):
 
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
-                 shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0):
+                 shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
+                 session_token=None,player_count=1):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -612,6 +616,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                                        "SDL_VIDEO_X11_WMCLASS": window_class,
                                        "PARTYDECK_PLAYER_WIDTH": str(width),
                                        "PARTYDECK_PLAYER_HEIGHT": str(height)}
+    environment.pop('PARTYDECK_SESSION_TOKEN',None)
+    environment['PARTYDECK_SESSION_PLAYERS']=str(player_count)
+    if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
@@ -751,6 +758,17 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                     for devices in players for d in devices)
     monitor=primary_monitor(desktop['output'])
     boxes = layout(monitor, len(players), split)
+    session_token=uuid.uuid4().hex
+    if party and len(players)>1:
+        from partydeck_autoconnect import prepare_sdk, options as session_options, ADAPTERS, udp_bound
+        kind=ADAPTERS.get((profile or {}).get('adapter'))
+        if kind:
+            automatic=session_options(profile[kind],kind)
+            if automatic['automatic'] and automatic['host_player']>len(players):
+                raise ValueError(tr('Le joueur hôte choisi ne participe pas à cette session.'))
+            if automatic['automatic'] and udp_bound(automatic['port']):
+                raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
+        prepare_sdk(base,profile)
     print(tr('Écran demandé : {p0} · zone active : {p1}',p0=desktop['output'],p1=monitor),flush=True)
     print(f"Joueurs : {len(players)} | demande : {count} | entrées : {input_mode} | "
           f"partage : {split}", flush=True)
@@ -774,6 +792,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if bottle_probe.returncode:
             raise RuntimeError(tr('Le disque des bottles ne permet pas la copie privée Windows. Aucune migration effectuée.'))
     game_id = hashlib.sha256(os.fsencode(original)).hexdigest()[:16]
+    for index in range(1,len(players)+1):
+        (base / ('runtime' if party else 'coop') / game_id / f'j{index}').mkdir(parents=True,exist_ok=True)
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
     processes, states = [], []
     bottle_players=[]
@@ -809,7 +829,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
                                           shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
-                                          network=network,network_index=index-1))
+                                          network=network,network_index=index-1,
+                                          session_token=session_token,player_count=len(players)))
             states.append(state)
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)

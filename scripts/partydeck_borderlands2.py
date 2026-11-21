@@ -24,7 +24,8 @@ def matches(rom):
 
 
 def defaults():
-    return dict(preset='keep', vsync='keep', physx='keep', names=[''] * 4)
+    return dict(preset='keep', vsync='keep', physx='keep', names=[''] * 4,
+                automatic=True,host_player=1,port=7777)
 
 
 def validate(options):
@@ -33,6 +34,8 @@ def validate(options):
     # Discard retired toggles, custom paths and language overrides from old
     # profiles. Display policy and config discovery are mandatory.
     normalized = {key:options.get(key,value) for key,value in defaults().items()}
+    from partydeck_autoconnect import options as network_options
+    normalized.update(network_options(normalized,'borderlands2'))
     if (normalized['preset'] not in PRESETS or normalized['vsync'] not in ('keep','on','off')
             or normalized['physx'] not in ('keep','0','1','2')):
         raise ValueError(tr('Réglages Borderlands 2 invalides.'))

@@ -42,13 +42,17 @@ def defaults():
     return dict(vsync=True,msaa=8,texture_filtering=2,coop_draw_distance=6,
                 free_camera=True,sensitivity_x=20,sensitivity_y=20,invert_x=True,invert_y=True,
                 names=[tr('Joueur{p0}',p0=i) for i in range(1,5)],language='French',
-                music_j1_only=True,volumes={})
+                music_j1_only=True,volumes={},automatic=True,host_player=1,port=7777,save_slot=1)
 
 
 def validate(options):
     if not isinstance(options,dict):
         raise ValueError(tr('Réglages SM64CoopDX invalides.'))
     normalized = {key:options.get(key,value) for key,value in defaults().items()}
+    from partydeck_autoconnect import options as network_options
+    normalized.update(network_options(normalized,'sm64coopdx'))
+    if type(normalized['save_slot']) is not int or normalized['save_slot'] not in range(1,5):
+        raise ValueError(tr('Sauvegarde hôte SM64CoopDX invalide.'))
     for key in ('vsync','free_camera','invert_x','invert_y','music_j1_only'):
         if type(normalized[key]) is not bool:
             raise ValueError(tr('Réglages SM64CoopDX invalides.'))
@@ -108,6 +112,7 @@ def configured_template(template, settings, index, width, height):
                   bettercam_xsens=options['sensitivity_x'],bettercam_ysens=options['sensitivity_y'],
                   bettercam_invertx=options['invert_x'],bettercam_inverty=options['invert_y'],
                   coop_player_name=options['names'][index],language=options['language'])
+    values['coop_host_save_slot']=options['save_slot']
     values.update({key:round(value*127/100) for key,value in options['volumes'].items()})
     if options['music_j1_only'] and index > 0:
         values['music_volume'] = 0

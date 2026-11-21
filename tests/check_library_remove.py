@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert app.save()
     saved=profiles.read_profile(base,game)['borderlands2']
     assert saved['vsync']=='off' and saved['names'][0]=='Alice'
-    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx','names'}
+    assert set(app.model.data['borderlands2'])=={'preset','vsync','physx','names','automatic','host_player','port'}
     app.draw()
     app.row=len(app.current_fields())+2;app.action('ok')
     assert app.removal and app.removal['common'] and app.help_context()=='remove'

@@ -57,6 +57,16 @@ descriptor leak in the compositor.
 
 ## Utilisation
 
+La branche de test propose l'hébergement et la connexion automatiques pour
+SM64CoopDX et Left 4 Dead 2, ainsi qu'un compagnon SDK privé pour le LAN de
+Borderlands 2. Le joueur hôte et le port sont configurables ; les profils
+peuvent revenir au mode manuel. Voir les prérequis, les limites et la procédure
+de test dans [Connexions automatiques](docs/AUTOMATIC_SESSIONS.md).
+
+**English:** Test profiles support automatic SM64CoopDX/L4D2 sessions and a
+private SDK LAN companion for Borderlands 2, with selectable host/port and
+manual fallback. Live Batocera validation is required; see the linked guide.
+
 ```bash
 /userdata/system/windows-party/windows-party verifier
 /userdata/system/windows-party/windows-party configurer
