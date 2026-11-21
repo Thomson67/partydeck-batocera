@@ -166,6 +166,20 @@ with tempfile.TemporaryDirectory() as folder:
         app.action('back')
         app.storage_open=True;app.storage_config=dict(DEFAULTS);app.draw()
         assert 'WINDOWS PARTY STORAGE' in rendered and 'Total caches (MiB)' in rendered
+        for language, expected in (
+                ('fr', ('Wine-bottles uniquement', 'Wine-bottles + sauvegardes', 'Supprimer définitivement')),
+                ('en', ('Wine bottles only', 'Wine bottles + saves', 'Delete permanently'))):
+            lang.set_language(language)
+            rendered.clear()
+            app.storage_result = dict(games=[dict(name=rom.stem, rom=str(rom))])
+            app.storage_row = 8
+            app.storage_action('ok')
+            app.draw_game_cleanup()
+            app.game_cleanup_action('ok')
+            app.draw_game_cleanup()
+            assert set(expected) <= set(rendered)
+            app.game_cleanup_action('back')
+        app.storage_result = None
         app.storage_open=False
     assert profile_path(root,rom).read_bytes()==original
     with patch('partydeck_couch.subprocess.run',return_value=Mock(returncode=0)):

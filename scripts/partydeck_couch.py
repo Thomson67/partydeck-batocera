@@ -26,7 +26,7 @@ from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
                                   VOLUME_FIELDS as SM64_VOLUME_FIELDS)
 from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
-                               snapshot as storage_snapshot, clean as clean_storage, prepare_launch, human)
+                               snapshot as storage_snapshot, clean as clean_storage, clean_game, prepare_launch, human)
 
 from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
                                discover_outputs, output_choices, output_label)
@@ -56,7 +56,7 @@ def context_hints(context, mode, has_tabs=True):
         return [('ok',tr('Confirmer')), ('back',tr('Annuler'))]
     if context == 'storage-error':
         return [('back',tr('Fermer'))]
-    if context in ('desktop','add','catalog'):
+    if context in ('desktop','add','catalog','game-cleanup'):
         return [('ok',tr('Choisir')), ('back',tr('Retour'))]
     if context == 'storage':
         return [('ok',tr('Choisir')), ('back',tr('Retour')), ('tabs',tr('Jeux par taille'))]
@@ -579,6 +579,7 @@ class App:
         self.storage_result = None
         self.storage_future = self.storage_pool = None
         self.storage_task = None
+        self.game_cleanup = None
         self.launch_pending = False
         self.launch_error = None
         self.storage_config = None
@@ -836,6 +837,8 @@ class App:
 
     def help_context(self):
         if self.uninstall_state:return ('uninstall-running' if self.uninstall_state=='running' else 'uninstall-done' if self.uninstall_state=='done' else 'uninstall')
+        if self.game_cleanup is not None:
+            return 'game-cleanup'
         return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
                 'keyboard' if self.keyboard else 'add' if self.add_menu is not None else 'catalog' if self.catalog_picker is not None else 'browser' if self.browser is not None else
                 'desktop' if self.desktop_open else 'storage' if self.storage_open else 'main')
@@ -959,7 +962,7 @@ class App:
                 self.text(line,210,330+i*35,20,width=1015)
             self.text(tr('Les données mises à l’abri restent dans les sauvegardes.'),210,610,16,width=1015)
 
-    def storage_job(self, task='scan'):
+    def storage_job(self, task='scan', *, rom=None, include_saves=False):
         if self.storage_future is not None:
             self.toast(tr('Analyse / nettoyage en cours…'))
             return
@@ -970,6 +973,8 @@ class App:
             self.storage_future = self.storage_pool.submit(prepare_launch, self.model.base)
         elif task == 'scan':
             self.storage_future = self.storage_pool.submit(storage_snapshot, self.model.base)
+        elif task == 'game':
+            self.storage_future = self.storage_pool.submit(clean_game, self.model.base, rom, include_saves=include_saves)
         else:
             self.storage_future = self.storage_pool.submit(clean_storage, self.model.base, task == 'purge')
 
@@ -988,6 +993,11 @@ class App:
                 self.launch_pending = False
             elif task == 'scan':
                 self.storage_result = result
+                games = len(result['games'])
+                self.storage_row = min(self.storage_row, 7 + games)
+                self.storage_page = min(self.storage_page, max(0, (games - 1) // 3))
+            elif task == 'game':
+                self.toast(tr('Nettoyage du jeu terminé.') if result else tr('Aucune donnée à nettoyer pour ce jeu.'))
             else:
                 self.toast(tr('{p0} libérés · {p1} erreurs · sauvegardes conservées', p0=human(result['freed']), p1=len(result['errors'])))
                 self.storage_job()
@@ -997,6 +1007,10 @@ class App:
                 self.launch_error = str(error)
             else:
                 self.toast(str(error))
+        finally:
+            if task == 'game':
+                self.storage_row = 7
+                self.storage_job()
 
     def open_storage(self):
         try:
@@ -1008,16 +1022,28 @@ class App:
         self.storage_job()
 
     def storage_action(self, action):
+        games = self.storage_result['games'] if self.storage_result else []
         if action == 'back':
             self.storage_open = False
             return
         if action in ('prev', 'next'):
-            count = len(self.storage_result['games']) if self.storage_result else 0
-            pages = max(1, (count + 2) // 3)
+            pages = max(1, (len(games) + 2) // 3)
             self.storage_page = (self.storage_page + (1 if action == 'next' else -1)) % pages
+            if self.storage_row >= 8:
+                self.storage_row = 8 + self.storage_page * 3
         elif action in ('up', 'down'):
-            self.storage_row = (self.storage_row + (1 if action == 'down' else -1)) % 8
+            self.storage_row = (self.storage_row + (1 if action == 'down' else -1)) % (8 + len(games))
+            if self.storage_row >= 8:
+                self.storage_page = (self.storage_row - 8) // 3
         elif action in ('left', 'right', 'ok'):
+            if self.storage_row >= 8:
+                if action == 'ok':
+                    if self.storage_future is not None:
+                        self.toast(tr('Analyse / nettoyage en cours…'))
+                    else:
+                        game = games[self.storage_row - 8]
+                        self.game_cleanup = dict(game=game, choice=0, confirming=False)
+                return
             if self.storage_row >= 5:
                 if action == 'ok':
                     self.storage_job(('clean', 'purge', 'scan')[self.storage_row-5])
@@ -1069,18 +1095,55 @@ class App:
             focused = self.storage_row == index+5
             self.box((416+index*327,533,314,40),(35,75,92), (134,236,238) if focused else None)
             self.text(title,430+index*327,543,16,width=290)
-        self.text(tr('Sauvegardes, préfixes et réglages conservés. Limites appliquées hors jeu.'),418,588,16,width=960)
+        self.text(tr('L’entretien global conserve les sauvegardes, préfixes et réglages.'),418,588,16,width=960)
         if self.storage_future is not None:
             self.text(tr('Analyse en cours…') if self.storage_task == 'scan' else tr('Nettoyage en cours…'),418,614,16,(141,220,234),950)
         else:
-            self.text(tr('JEUX PAR TAILLE · progression et réglages inclus dans « persistant »'),418,614,16,width=950)
+            self.text(tr('JEUX PAR TAILLE · choisissez un jeu pour nettoyer ses données'),418,614,16,width=950)
         if result:
             for index, game in enumerate(result['games'][self.storage_page*3:self.storage_page*3+3]):
                 y = 648+index*45
+                if self.storage_row == 8 + self.storage_page*3 + index:
+                    self.box((410,y-3,986,44),(38,64,86),(90,210,229))
                 self.text(game['name'],430,y,20,width=730)
                 self.text(human(game['total']),1200,y,20,width=180)
                 self.text(tr('Sauvegardes {p0} · Bottles {p1} · Travail {p2} · Caches/logs {p3}', p0=human(game['persistent']), p1=human(game.get('bottles',0)), p2=human(game['runtime']), p3=human(game['cache']+game['logs'])),
                           430,y+25,16,(148,169,191),945)
+
+    def game_cleanup_action(self, action):
+        dialog = self.game_cleanup
+        if action == 'back':
+            self.game_cleanup = None
+        elif action in ('up','down','left','right'):
+            dialog['choice'] = 1 - dialog['choice']
+        elif action == 'ok':
+            if not dialog['confirming']:
+                dialog.update(confirming=True, include_saves=bool(dialog['choice']), choice=0)
+            else:
+                self.game_cleanup = None
+                if dialog['choice']:
+                    self.storage_job('game', rom=dialog['game']['rom'], include_saves=dialog['include_saves'])
+
+    def draw_game_cleanup(self):
+        dialog = self.game_cleanup
+        self.box((190,270,1060,382),(36,45,65),(244,164,128))
+        self.text(tr('NETTOYER LES DONNÉES DU JEU'),220,298,28,width=1000)
+        self.text(dialog['game']['name'],220,350,24,width=1000)
+        choices = (tr('Wine-bottles uniquement'), tr('Wine-bottles + sauvegardes'))
+        if dialog['confirming']:
+            self.text(choices[dialog['include_saves']],220,395,20,width=1000)
+            choices = (tr('Annuler'), tr('Supprimer définitivement'))
+        else:
+            self.text(tr('Le jeu d’origine et le profil Windows Party sont conservés.'),220,395,20,width=1000)
+        self.text(tr('Les sauvegardes internes aux préfixes Wine seront effacées dans les deux cas.'),220,424,20,width=1000)
+        include_saves = dialog['include_saves'] if dialog['confirming'] else dialog['choice']
+        self.text(tr('Les sauvegardes externalisées de Windows Party seront supprimées.') if include_saves else
+                  tr('Les sauvegardes externalisées de Windows Party seront conservées.'),220,453,20,width=1000)
+        for index, title in enumerate(choices):
+            y = 490 + index*65
+            focused = dialog['choice'] == index
+            self.box((220,y,1000,50),(39,80,103) if focused else (29,39,55),(72,202,222) if focused else None)
+            self.text(title,240,y+10,20,width=960)
 
     def volume(self, key):
         value = get(self.model.data, key)
@@ -1257,6 +1320,9 @@ class App:
                 self.removal = None
             elif action == 'ok':
                 self.confirm_remove()
+            return
+        if self.game_cleanup is not None:
+            self.game_cleanup_action(action)
             return
         if self.launch_error:
             if action in ('ok', 'back'):
@@ -1565,7 +1631,7 @@ class App:
                     else navigation + ' · ' + quit_hint)
         if volume_selected and context == 'main' and self.model.data.get('adapter') == 'sm64coopdx':
             subtitle = tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok',self.input_mode) + tr(' : valeur de la configuration commune')
-        if context in ('confirm','missing','remove'):
+        if context in ('confirm','missing','remove','game-cleanup'):
             subtitle = ''
         elif context == 'browser':
             subtitle = navigation
@@ -1640,6 +1706,8 @@ class App:
             self.text(tr('PRÉPARATION DE LA PARTIE'),255,368,28,width=920)
             self.text(tr('Vérification de l’espace libre et entretien du stockage…'),255,425,20,width=920)
             self.text(control_label('back',self.input_mode) + tr(' : annuler'),255,480,16,width=920)
+        if self.game_cleanup is not None:
+            self.draw_game_cleanup()
         if self.launch_error:
             self.box((190,280,1060,360), (36,45,65), (244,164,128))
             self.text(tr('LANCEMENT INTERROMPU'),220,308,28,width=1000)

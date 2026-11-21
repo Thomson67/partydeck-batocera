@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_storage as storage
+import partydeck_bottles as bottles
 
 
 def file(path, size=4096, age=3600):
@@ -194,4 +195,57 @@ with tempfile.TemporaryDirectory() as directory:
             raise AssertionError('started despite full disk')
         start.assert_not_called()
 
-print('Stockage : budgets globaux, préservation, liens, montages, fichiers ouverts, verrous et manque d’espace vérifiés.')
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    base, saves, bottle_root = root/'system', root/'saves', root/'bottles'
+    rom = file(root/'Game.wsquashfs')
+    digest, name = storage.identity(rom)
+    slot = saves/name
+    bottle = bottle_root/'players'/digest
+    prefix = file(bottle/'j1/prefixes/user.reg')
+    (slot/'j1').mkdir(parents=True)
+    migration_link = slot/'j1/prefixes'
+    migration_link.symlink_to(prefix.parent)
+    legacy = file(slot/'j2/content/upper/legacy.dat')
+    externalized = file(slot/'j1/windows/slot.sav')
+    runtime_prefix = file(base/'runtime'/digest/'j1/umu-private/materialized-prefixes/game/user.reg')
+    private_overlay = file(bottle/'j2/content/upper/NFS Most Wanted 2005.bak/game.exe')
+    solo_save = file(root/'solo/slot.sav')
+    (prefix.parent/'dosdevices').symlink_to(solo_save.parent)
+    (externalized.parent/'linked.sav').symlink_to(solo_save)
+    kept = [rom, solo_save, file(bottle_root/'players'/'0000000000000000/j1/prefixes/user.reg'),
+            file(bottle_root/'seeds/shared'), file(base/'profiles'/f'{digest}.json')]
+    base.mkdir(exist_ok=True)
+    with patch.object(storage, 'SAVES', saves), patch.object(bottles, 'ROOT', bottle_root):
+        def expect_refusal():
+            try:
+                storage.clean_game(base, rom)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('unsafe game cleanup allowed')
+            assert all(path.exists() for path in (prefix, legacy, externalized, runtime_prefix, private_overlay))
+
+        with storage.storage_lock(base):
+            expect_refusal()
+        with patch.object(storage, 'mounted_paths', return_value={prefix.parent/'mounted-view'}):
+            expect_refusal()
+        with patch.object(storage, 'mounted_paths', return_value={legacy.parents[2]}):
+            expect_refusal()
+        redirected = slot/'j3'
+        redirected.symlink_to(solo_save.parent)
+        expect_refusal()
+        redirected.unlink()
+        assert storage.clean_game(base, rom)
+        assert not bottle.exists() and not legacy.exists() and not runtime_prefix.exists()
+        assert not private_overlay.exists()
+        assert not migration_link.is_symlink() and externalized.exists()
+        # Restarting a migrated game must not encounter a dangling migration link.
+        bottles.migrate(base/'runtime'/digest/'j1', slot/'j1')
+        assert prefix.parent.is_dir()
+        assert storage.clean_game(base, rom, include_saves=True)
+        assert not slot.exists() and not bottle.exists()
+        assert not storage.clean_game(base, rom, include_saves=True)
+        assert all(path.exists() for path in kept)
+
+print('Stockage : budgets, préservation, verrous et nettoyage ciblé des bottles et sauvegardes vérifiés.')

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import tempfile
 import time
 
@@ -242,8 +243,9 @@ def _clean(base, config, purge=False):
     return dict(freed=removed, trimmed=trimmed, errors=errors)
 
 
-def clean(base, purge=False):
-    """User requested maintenance; also respect the existing installer/GUI lock."""
+@contextmanager
+def maintenance_lock(base):
+    """Serialize user-requested cleanup with both the installer and game sessions."""
     base = Path(base)
     with (base / 'session.lock').open('a') as lock:
         try:
@@ -251,7 +253,69 @@ def clean(base, purge=False):
         except BlockingIOError:
             raise RuntimeError(tr('Fermez la session ou attendez la fin de l’installation avant de nettoyer.')) from None
         with storage_lock(base):
-            return _clean(base, settings(base), purge)
+            yield
+
+
+def clean(base, purge=False):
+    with maintenance_lock(base):
+        return _clean(base, settings(base), purge)
+
+
+def clean_game(base, rom, *, include_saves=False):
+    """Remove this game's PartyDeck bottles and optionally its external saves."""
+    from partydeck_bottles import ROOT as bottles_root
+
+    base, rom = Path(base).absolute(), Path(rom)
+    if not rom.is_absolute() or rom.suffix.lower() not in ('.wine', '.pc', '.wsquashfs'):
+        raise ValueError(tr('Chemin de jeu Windows Party invalide.'))
+    digest, name = identity(rom)
+    bottles = bottles_root / 'players' / digest
+    saves = SAVES / name
+    runtime = base / 'runtime' / digest
+
+    with maintenance_lock(base):
+        ensure_idle(base)
+        mounts = mounted_paths()
+        targets = []
+
+        def check(path, game_root, compatibility_target=None):
+            if path.parent.resolve() != path.parent:
+                raise RuntimeError(tr('Dossier technique redirigé : {p0}', p0=path.parent))
+            if any(mount == path or path in mount.parents
+                   or (mount in path.parents and mount.is_relative_to(game_root))
+                   for mount in mounts):
+                raise RuntimeError(tr('Bottle encore montée : {p0}', p0=path))
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                return
+            if stat.S_ISDIR(mode):
+                targets.append((path, False))
+            elif compatibility_target is not None and stat.S_ISLNK(mode) and Path(
+                    os.path.normpath(path.parent / os.readlink(path))) == compatibility_target:
+                targets.append((path, True))
+            else:
+                raise RuntimeError(tr('Dossier technique redirigé : {p0}', p0=path))
+
+        if include_saves:
+            check(saves, saves)
+        for index in range(1, 5):
+            player = f'j{index}'
+            if not include_saves:
+                # Older installations put these directories under saves. Remove
+                # migration links before their targets so relaunch can rebuild.
+                for folder in ('prefixes', 'content'):
+                    check(saves / player / folder, saves, bottles / player / folder)
+            for folder in ('bottles', 'umu', 'umu-private'):
+                check(runtime / player / folder, runtime)
+        check(bottles, bottles)
+
+        for path, link in targets:
+            if link:
+                path.unlink(missing_ok=True)
+            else:
+                shutil.rmtree(path)
+        return bool(targets)
 
 
 def prepare_launch(base):
@@ -345,7 +409,7 @@ def snapshot(base, saves=None):
             persistent = size(saves / name)
             runtime = size(base / 'runtime' / digest)
             bottles = size(bottles_root/'players'/digest)
-            row = dict(name=rom.stem, cache=cache, logs=logs, persistent=persistent, runtime=runtime, bottles=bottles)
+            row = dict(name=rom.stem, rom=str(rom), cache=cache, logs=logs, persistent=persistent, runtime=runtime, bottles=bottles)
             row['total'] = cache + logs + persistent + runtime + bottles
             games.append(row)
             for key in ('cache', 'logs', 'persistent', 'runtime', 'bottles'):

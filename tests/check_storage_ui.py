@@ -25,6 +25,31 @@ with tempfile.TemporaryDirectory() as directory:
     app.storage_future.result(timeout=10)
     app.poll_storage()
     assert app.storage_result and app.running
+    # The first confirmation defaults to Cancel. Both choices target the selected ROM.
+    app.storage_row = 7
+    app.action('down')
+    assert app.storage_row == 8
+    with patch('partydeck_couch.clean_game', return_value=True) as clean_game:
+        app.action('ok')
+        app.draw()
+        app.action('ok')
+        app.draw()
+        app.action('ok')
+        assert app.game_cleanup is None and app.storage_future is None
+        clean_game.assert_not_called()
+        for include_saves in (False, True):
+            app.storage_row = 8
+            app.action('ok')
+            if include_saves:
+                app.action('down')
+            app.action('ok')
+            app.action('down')
+            app.action('ok')
+            app.storage_future.result(timeout=10)
+            clean_game.assert_called_with(base, str(rom), include_saves=include_saves)
+            app.poll_storage()
+            app.storage_future.result(timeout=10)
+            app.poll_storage()
     # Edits belong to global storage settings, never to the selected game.
     app.storage_row = 1
     app.action('left')

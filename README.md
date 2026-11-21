@@ -129,6 +129,11 @@ Voir [les paramètres d’affichage](docs/GLOBAL_DISPLAY_GPU.md).
 
 **Stockage** permet de consulter l’occupation et d’entretenir les caches et les
 journaux. Les sauvegardes et les réglages ne sont pas soumis à un quota.
+Dans **Jeux par taille**, sélectionnez un jeu pour nettoyer ses données Windows
+Party. **Wine-bottles uniquement** conserve ses sauvegardes externalisées.
+**Wine-bottles + sauvegardes** les supprime aussi. Les deux choix effacent les
+sauvegardes encore stockées dans les préfixes. Le jeu d’origine et son profil
+Windows Party sont conservés.
 
 Les contrôles virtuels clavier/souris de la Wine Toolbox installée sont
 réutilisés lorsqu’ils sont activés : HK+Select pour le clavier, HK+L3 pour la
