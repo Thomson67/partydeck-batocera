@@ -87,11 +87,16 @@ with patch.object(coop.subprocess, "run") as run:
     assert coop.top_window("partydeck-coop-123-j1") is None
     assert run.call_count == 1
 
-with tempfile.TemporaryDirectory() as temp, patch.object(coop, "sandbox_arguments", return_value=[]), patch.object(coop.subprocess,"Popen") as popen:
+with tempfile.TemporaryDirectory() as temp, \
+     patch.object(coop, "sandbox_arguments", return_value=[]), \
+     patch.object(coop.subprocess,"Popen") as popen, \
+     patch.dict(os.environ, PARTYDECK_PRIVATE_LAN_IP='192.168.247.99'):
     base = Path(temp)
     game = base / "Game.wsquashfs"
     coop.start_player(base, base / "j2", game, game, [], (960, 0, 960, 1080), "test-j2")
     assert popen.call_args.kwargs["env"]["SDL_VIDEO_X11_WMCLASS"] == "test-j2"
+    assert 'PARTYDECK_PRIVATE_LAN_IP' not in popen.call_args.kwargs['env']
+    assert 'PARTYDECK_PRIVATE_LAN_IP' not in popen.call_args.args[0]
     assert popen.call_args.kwargs['stdin']==coop.subprocess.DEVNULL
     assert "test-j2" not in popen.call_args.args[0]
     assert "-W" in popen.call_args.args[0]

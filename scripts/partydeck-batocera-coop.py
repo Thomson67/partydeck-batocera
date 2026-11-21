@@ -616,6 +616,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                                        "SDL_VIDEO_X11_WMCLASS": window_class,
                                        "PARTYDECK_PLAYER_WIDTH": str(width),
                                        "PARTYDECK_PLAYER_HEIGHT": str(height)}
+    environment.pop('PARTYDECK_PRIVATE_LAN_IP',None)
     environment.pop('PARTYDECK_SESSION_TOKEN',None)
     environment['PARTYDECK_SESSION_PLAYERS']=str(player_count)
     if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token

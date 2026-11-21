@@ -62,7 +62,7 @@ def apply_config(directory,prefix,payload,private_binds=PRIVATE_BINDS):
         raise ValueError(tr('Dimensions Most Wanted invalides.'))
     host=payload['host'];validate(dict(host=host))
     if host=='auto':raise ValueError(tr('Adresse LAN Most Wanted invalide.'))
-    port=9900+index
+    port=9900 if payload.get('private_lan') else 9900+index
     edits=[]
     def prepare(path,changes):
         path=safe_path(path,allowed)
@@ -104,13 +104,15 @@ def install_hook(base,rom,player):
     if profile.get('adapter')!='nfsmw-lan':return
     settings=validate(profile['nfsmw']);index=int(player.name.removeprefix('j'))-1
     if index not in range(4):raise ValueError(tr('Numéro de joueur Most Wanted invalide.'))
-    host=host_ip(os.environ.get('PARTYDECK_PRIVATE_LAN_IP') or settings['host'])
+    private_ip=os.environ.get('PARTYDECK_PRIVATE_LAN_IP')
+    host=host_ip(private_ip or settings['host'])
     if index and settings['start_delay']:
         print(tr('Most Wanted J{p0} : attente de {p1} s pour préparer le salon J1.',p0=index+1,p1=index*settings['start_delay']),flush=True)
         time.sleep(index*settings['start_delay'])
     result=player/f'nfsmw-result-{uuid.uuid4().hex}.json'
     payload=player/'nfsmw-launch.json'
-    atomic_write(payload,json.dumps(dict(player=str(player),settings=settings,index=index,host=host,
+    atomic_write(payload,json.dumps(dict(player=str(player),settings=settings,index=index,
+        host=host,private_lan=bool(private_ip),
         width=int(os.environ.get('PARTYDECK_PLAYER_WIDTH','0')),height=int(os.environ.get('PARTYDECK_PLAYER_HEIGHT','0')),result=str(result))))
     binary=shutil.which('batocera-wine')
     if not binary:raise RuntimeError(tr('batocera-wine introuvable.'))

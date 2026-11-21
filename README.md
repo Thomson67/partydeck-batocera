@@ -150,8 +150,8 @@ souris. HK+Start reste la sortie du jeu. Les profils sont isolés par joueur.
 ### Most Wanted : LAN privé local
 
 Le LAN privé est activé par défaut dans ce profil à partir de deux joueurs.
-Chaque instance reçoit une adresse distincte et peut utiliser les mêmes ports
-UDP sans conflit. Le profil prépare `server.cfg` et une copie privée inchangée
+Chaque instance reçoit une adresse distincte et utilise le port UDP `9900`.
+Le profil prépare `server.cfg` et une copie privée inchangée
 de `server.dll`. Il ne simule ni clic de connexion ni création de salon.
 
 1. J1 crée le serveur LAN et le salon.
@@ -163,7 +163,8 @@ Batocera v44 Wayland avec NVIDIA T550. Trois/quatre joueurs et d’autres
 configurations restent à valider. Ce profil reste expérimental.
 
 Dans **Réseau**, désactivez **LAN privé local (sans Internet)** pour utiliser le
-réseau partagé du PC. L’adresse LAN manuelle devient alors disponible. Le LAN
+réseau partagé du PC avec un port par joueur (`9900` à `9903`).
+L’adresse LAN manuelle devient alors disponible. Le LAN
 privé n’a accès ni à Internet ni au réseau extérieur ; ES et SSH conservent
 leur réseau habituel. En solo, le réseau reste partagé.
 
@@ -265,11 +266,13 @@ Automatic inherits the global GPU. Output disconnects fall back to an active
 screen while retaining the preference. Existing running windows are repositioned
 when output geometry changes. Internal game resolution changes on the next launch.
 
-Most Wanted defaults to private LAN for two or more players. P1 creates a server
+Most Wanted defaults to private LAN for two or more players and uses port `9900`
+for each instance on its own address. P1 creates a server
 and lobby; P2 joins. A user confirmed a two-player race starting on Batocera v44
 Wayland/NVIDIA T550. Other hardware and three/four-player races remain unvalidated.
 Private LAN has no Internet/external LAN access; disabling **Local private LAN
-(no Internet)** restores the shared PC network. Single-player and all other
+(no Internet)** restores the shared PC network with separate ports (`9900` to
+`9903`). Single-player and all other
 profiles keep the shared network. The namespace mechanism is reusable, with
 explicit per-profile opt-in rather than a global setting for all games.
 

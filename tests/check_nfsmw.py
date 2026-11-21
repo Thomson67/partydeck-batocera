@@ -1,9 +1,9 @@
 """Experimental MW LAN configuration, isolation, CLI outcome and FR/EN UI."""
 import os
 os.environ['SDL_VIDEODRIVER']='dummy';os.environ['PARTYDECK_LANGUAGE']='fr'
-import json,sys,tempfile,subprocess,uuid
+import sys,tempfile,subprocess
 from pathlib import Path
-from unittest.mock import patch,Mock
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import partydeck_nfsmw as mw
 from partydeck_profiles import defaults,save_profile,read_profile
@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory() as temp:
     root=Path(temp);base=root/'system';base.mkdir();rom=root/'Most Wanted 2005.wsquashfs';rom.write_bytes(b'SOLO')
     profile=defaults(rom);assert profile['adapter']=='nfsmw-lan' and recipe_for(rom).id=='nfsmw'
     save_profile(base,rom,profile)
+    wine=base/'batocera-wine';wine.write_text('#!/bin/bash\n')
     solo=b'# ORIGINAL\r\nLAN_THROTTLE=30\r\nACCOUNT=1\r\nADDR=%%bind("159.153.253.82")\r\n'
     for index in range(4):
         player=base/f'j{index+1}';prefix=player/'prefix';game=prefix/'drive_c/game';scripts=game/'scripts';scripts.mkdir(parents=True)
@@ -60,12 +61,24 @@ with tempfile.TemporaryDirectory() as temp:
         data['settings']['music_j1_only']=True
         assert (game/'server.dll').read_bytes()==b'PRIVATE DLL' and rom.read_bytes()==b'SOLO'
         assert any(p.read_bytes()==solo for p in (player/'nfsmw-before').glob('*.bak'))
-        result=player/f'nfsmw-result-{uuid.uuid4().hex}.json';data['result']=str(result)
-        payload=player/'payload.json';payload.write_text(json.dumps(data))
-        # Actual CLI result protocol and native launcher success swallowing.
+        private_ip=f'192.168.247.{11+index}'
+        with patch.dict(os.environ,PARTYDECK_PRIVATE_LAN_IP=private_ip,
+                        PARTYDECK_PLAYER_WIDTH='1920',PARTYDECK_PLAYER_HEIGHT='540'), \
+             patch.object(mw.shutil,'which',return_value=str(wine)), \
+             patch.object(mw.subprocess,'run'), \
+             patch('partydeck_anchor.instrument_native',return_value=wine.read_text()):
+            result=mw.install_hook(base,rom,player)
+        payload=player/'nfsmw-launch.json'
+        # Verify the private IP and common port through the real CLI payload.
         env=dict(os.environ,PARTYDECK_PRIVATE_PLAYER=str(player))
         done=subprocess.run([sys.executable,mw.__file__,str(payload),str(game),str(prefix)],env=env,capture_output=True,text=True)
         assert done.returncode==0 and mw.finish_launch(result,0)==0
+        text=(game/'server.cfg').read_text()
+        assert 'PORT=9900\n' in text
+        assert f'ADDR=%%bind("{private_ip}:9900")' in text
+        assert f'TRUST_MATCH=%%bind("{private_ip}")' in text
+        mw.apply_config(game,prefix,data,private_binds=())
+        assert f'PORT={9900+index}\n' in (game/'server.cfg').read_text()
         (game/'server.dll').unlink()
         done=subprocess.run([sys.executable,mw.__file__,str(payload),str(game),str(prefix)],env=env,capture_output=True,text=True)
         assert done.returncode==1 and mw.finish_launch(result,0)==1
@@ -86,4 +99,4 @@ with tempfile.TemporaryDirectory() as temp:
         assert ('PC LAN IP (auto: detect)' if language=='en' else 'IP LAN du PC (auto : détection)') in labels
     app.pg.quit()
     assert read_profile(base,rom)['nfsmw']['host']=='auto'
-print('Most Wanted : profil expérimental, quatre ports, TRUST_MATCH sans port, DLL privée, échec conservé et UI FR/EN vérifiés.')
+print('Most Wanted : port 9900 en LAN privé, ports 9900–9903 en réseau partagé, TRUST_MATCH sans port, DLL privée, échec conservé et UI FR/EN vérifiés.')
