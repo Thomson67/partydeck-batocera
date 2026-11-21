@@ -268,3 +268,33 @@ recognised generated launchers and archives old exploratory data. Compatibility
 links preserve absolute paths inside existing Wine prefixes. Regression tests
 remain in the source repository. No game, mod or Nucleus save binaries are
 redistributed.
+
+## Désinstaller Windows Party
+
+Dans le configurateur : **Paramètres → Désinstaller Windows Party**. La
+confirmation sélectionne Annuler par défaut. Après validation, le nettoyage
+retire l’application, les caches, les profils, les lanceurs générés et le
+système EmulationStation. Redémarrer EmulationStation après l’opération.
+
+Les sauvegardes `/userdata/saves/windows-party` restent présentes. Les préfixes
+privés, identités et anciennes données de jeu qui pourraient contenir une
+progression sont déplacés dans `.uninstall-preserved` sous ce dossier, avant
+toute suppression. Les parties privées et le travail persistant des joueurs
+sont remis en place à la réinstallation ; les autres archives de récupération
+restent disponibles. Les anciens programmes et profils ne sont pas restaurés.
+Les fichiers personnalisés non reconnus restent en place et sont signalés.
+
+Les jeux Windows sources, les runners partagés et les autres outils Batocera
+ne sont pas supprimés. Une session active ou un montage encore présent bloque
+la désinstallation. Aucune désinstallation n’est exécutée lors de la mise à jour.
+
+**English:** Settings → Uninstall Windows Party shows a confirmation (Cancel
+selected by default), then a responsive progress screen. It removes the app,
+caches, profiles, generated launchers and its ES system. Saves are retained;
+private prefixes, identities and legacy game data are preserved under
+`saves/windows-party/.uninstall-preserved` before deletion. Reinstall restores
+persistent player state, not the old application/profiles; other recovery
+archives remain available. Unrecognized personal files are retained and
+reported. Source games and shared tools remain untouched. Active sessions and
+mounts block the operation. Restart EmulationStation afterwards. Updating the
+application does not execute an uninstall.

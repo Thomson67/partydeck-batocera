@@ -259,3 +259,12 @@ for language,expected in (
     assert lang.tr('Gamescope : fichiers ouverts autorisés {p0} → {p1} (maximum {p2}).',
                    p0=1024,p1=65536,p2=1048576)==expected
 lang.set_language('fr')
+
+# Uninstall confirmation and preservation guarantees are available in FR/EN.
+for language, label in (('fr','DÉSINSTALLER WINDOWS PARTY'),('en','UNINSTALL WINDOWS PARTY')):
+    lang.set_language(language)
+    assert lang.tr('DÉSINSTALLER WINDOWS PARTY')==label
+    assert lang.tr('ANNULER')==('ANNULER' if language=='fr' else 'CANCEL')
+    assert lang.tr('Conserve les sauvegardes et les préfixes contenant la progression.')==('Conserve les sauvegardes et les préfixes contenant la progression.' if language=='fr' else 'Keeps saves and prefixes containing player progress.')
+    assert context_hints('uninstall-running','keyboard')==[]
+lang.set_language('fr')

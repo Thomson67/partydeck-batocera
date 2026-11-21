@@ -49,6 +49,9 @@ def control_label(action, mode):
 
 
 def context_hints(context, mode, has_tabs=True):
+    if context == 'uninstall-running':return []
+    if context == 'uninstall-done':return [('ok',tr('Fermer'))]
+    if context == 'uninstall':return [('ok',tr('Confirmer')),('back',tr('Annuler'))]
     if context == 'remove':
         return [('ok',tr('Confirmer')), ('back',tr('Annuler'))]
     if context == 'storage-error':
@@ -551,6 +554,10 @@ class App:
         self.add_mode = None
         self.catalog_picker = None
         self.catalog_index = 0
+        self.uninstall_state = None
+        self.uninstall_choice = 0
+        self.uninstall_future = None
+        self.uninstall_result = None
         self.desktop_open = False
         self.desktop_row = 0
         self.desktop_config = None
@@ -816,6 +823,7 @@ class App:
         self.text(label, x+label_offset, y+3, 20, width=max(0,width-label_offset))
 
     def help_context(self):
+        if self.uninstall_state:return ('uninstall-running' if self.uninstall_state=='running' else 'uninstall-done' if self.uninstall_state=='done' else 'uninstall')
         return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
                 'keyboard' if self.keyboard else 'add' if self.add_menu is not None else 'catalog' if self.catalog_picker is not None else 'browser' if self.browser is not None else
                 'desktop' if self.desktop_open else 'storage' if self.storage_open else 'main')
@@ -832,8 +840,11 @@ class App:
         if action=='back':
             self.desktop_open=False
         elif action in ('up','down'):
-            self.desktop_row=(self.desktop_row+(1 if action=='down' else -1))%3
+            self.desktop_row=(self.desktop_row+(1 if action=='down' else -1))%4
         elif action in ('ok','left','right'):
+            if self.desktop_row==3:
+                if action=='ok':self.request_uninstall()
+                return
             if self.desktop_row==2:
                 self.desktop_outputs=discover_outputs()
                 return
@@ -849,19 +860,92 @@ class App:
     def draw_desktop(self):
         self.text(tr('PARAMÈTRES WINDOWS PARTY'),416,161,28,width=960)
         self.text(tr('Réglages globaux · enregistrés automatiquement'),418,215,20,width=950)
-        for index,title in enumerate((tr('Écran des jeux'),tr('GPU par défaut'),tr('ACTUALISER LES ÉCRANS'))):
-            y=285+index*105
+        for index,title in enumerate((tr('Écran des jeux'),tr('GPU par défaut'),tr('ACTUALISER LES ÉCRANS'),tr('DÉSINSTALLER WINDOWS PARTY'))):
+            y=275+index*80
             focused=self.desktop_row==index
-            self.box((410,y-12,986,90),(38,64,86) if focused else (25,33,50),(90,210,229) if focused else None)
+            self.box((410,y-8,986,72),(38,64,86) if focused else (25,33,50),(90,210,229) if focused else None)
             self.text(title,430,y,24,width=925)
             if index<2:
                 value=(output_label(self.desktop_outputs,self.desktop_config['output']) if index==0
                        else label_value('gpu',self.desktop_config['gpu']))
-                self.text('‹ '+value+' ›',445,y+39,20,(144,223,234),910)
-        self.text(tr('Écran indisponible : repli sur un écran actif, choix conservé.'),418,630,20,width=950)
+                self.text('‹ '+value+' ›',445,y+32,20,(144,223,234),910)
+        self.text(tr('Écran indisponible : repli sur un écran actif, choix conservé.'),418,620,20,width=950)
         self.text(tr('Reconnexion : placement des jeux réajusté automatiquement.'),418,672,20,width=950)
         self.text(tr('GPU appliqué au prochain lancement. Le GPU du jeu peut remplacer ce choix.'),418,714,16,width=950)
         self.text(tr('GPU du jeu sur Automatique : utiliser ce réglage global.'),418,750,16,width=950)
+
+    def request_uninstall(self):
+        if self.storage_future is not None:
+            self.toast(tr('Attendez la fin de l’analyse ou du nettoyage.'))
+            return
+        try:
+            from partydeck_uninstall import preview
+            preview(self.model.base)
+            self.uninstall_state='confirm'
+            self.uninstall_choice=0
+        except (OSError,ValueError,RuntimeError,ET.ParseError) as error:self.toast(str(error))
+
+    def uninstall_action(self,action):
+        if self.uninstall_state=='running':return
+        if self.uninstall_state in ('done','error'):
+            if action in ('ok','back'):
+                if self.uninstall_state=='done':
+                    self.launch_requested=self.accepted=False
+                    self.running=False
+                else:self.uninstall_state=None
+            return
+        if action=='back':self.uninstall_state=None
+        elif action in ('left','right','up','down'):self.uninstall_choice=1-self.uninstall_choice
+        elif action=='ok':
+            if self.uninstall_choice==0:
+                self.uninstall_state=None
+                return
+            from partydeck_uninstall import execute
+            if self.storage_pool is None:
+                self.storage_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='party-uninstall')
+            self.uninstall_state='running'
+            self.uninstall_future=self.storage_pool.submit(execute)
+
+    def poll_uninstall(self):
+        if self.uninstall_future is None or not self.uninstall_future.done():return
+        future,self.uninstall_future=self.uninstall_future,None
+        try:
+            self.uninstall_result=future.result()
+            self.uninstall_state='done'
+        except Exception as error:
+            self.uninstall_result=str(error)
+            self.uninstall_state='error'
+
+    def draw_uninstall(self):
+        self.box((180,230,1080,495),(27,36,54),(244,164,128))
+        titles={'confirm':'DÉSINSTALLER WINDOWS PARTY ?','running':'DÉSINSTALLATION EN COURS…',
+                'done':'DÉSINSTALLATION TERMINÉE','error':'DÉSINSTALLATION INTERROMPUE'}
+        self.text(tr(titles[self.uninstall_state]),210,255,28,width=1015)
+        if self.uninstall_state=='confirm':
+            lines=('Supprime l’application, les caches, les profils et les raccourcis.',
+                   'Retire le système Windows Party d’EmulationStation.',
+                   'Conserve les sauvegardes et les préfixes contenant la progression.',
+                   'Les jeux Windows d’origine et les outils partagés restent intacts.')
+            for i,line in enumerate(lines):self.text(tr(line),210,320+i*52,20,width=1015)
+            for i,label in enumerate(('ANNULER','DÉSINSTALLER')):
+                self.box((220+i*495,590,470,65),(55,90,112) if self.uninstall_choice==i else (33,44,62),
+                         (244,164,128) if self.uninstall_choice==i else None)
+                self.text(tr(label),245+i*495,610,24,width=425)
+        elif self.uninstall_state=='running':
+            self.text(tr('Mise à l’abri des sauvegardes et nettoyage…'),210,350,24,width=1015)
+            self.text(tr('Ne fermez pas le configurateur pendant cette opération.'),210,410,20,width=1015)
+            dot=int(time.monotonic()*3)%8
+            self.box((220+dot*115,540,90,12),(111,222,236))
+        elif self.uninstall_state=='done':
+            self.text(tr('Sauvegardes et progression conservées.'),210,340,24,width=1015)
+            self.text(tr('Redémarrez EmulationStation pour actualiser les systèmes.'),210,405,20,width=1015)
+            if self.uninstall_result.get('leftovers'):
+                self.text(tr('Des fichiers personnels restent dans le dossier Windows Party.'),210,465,16,width=1015)
+            self.text(tr('Valider pour fermer le configurateur.'),210,590,24,width=1015)
+        else:
+            for i,line in enumerate(textwrap.wrap(str(self.uninstall_result),width=85)[:7]):
+                self.text(line,210,330+i*35,20,width=1015)
+            self.text(tr('Les données mises à l’abri restent dans les sauvegardes.'),210,610,16,width=1015)
 
     def storage_job(self, task='scan'):
         if self.storage_future is not None:
@@ -1130,6 +1214,9 @@ class App:
             self.missing = recipe
 
     def action(self, action):
+        if self.uninstall_state:
+            self.uninstall_action(action)
+            return
         if self.launch_pending and action in ('back','quit'):
             self.launch_pending = False
             if action == 'back':
@@ -1335,6 +1422,7 @@ class App:
         self.library, self.pane = 0, 'library'
 
     def draw(self):
+        self.poll_uninstall()
         self.poll_storage()
         if self.layout_target != self.screen.get_size():
             self.resize_layout(self.screen.get_size())
@@ -1545,6 +1633,7 @@ class App:
             self.text(tr('LANCEMENT INTERROMPU'),220,308,28,width=1000)
             for index, line in enumerate(textwrap.wrap(self.launch_error, width=85)[:6]):
                 self.text(line,220,365+index*34,20,width=1000)
+        if self.uninstall_state:self.draw_uninstall()
         if time.monotonic() < self.notice_until:
             self.box((100, 743, 1240, 57), (48, 73, 91))
             self.text(self.notice, 120, 759, 20, width=1200)
