@@ -8,10 +8,11 @@ import time
 
 TRAVEL_ABSOLUTE = 0
 SERVER_BROWSER = 'WillowGame.LANServerBrowserGFxMovie:'
-TITLE_START = 'WillowGame.WillowGFxMoviePressStart:BeginStartupProcess'
+FRONTEND = 'WillowGame.FrontendGFxMovie:'
 RESULT_FIELDS = ('Name','Game','GameSettings','SearchResult','GameSearchResult','OwningPlayerName',
                  'ServerName','HostName','ServerIndex','ResultIndex','SearchResultIndex','PingInMs')
 NATIVE_LAN_CALLS = (
+    FRONTEND+'ShowLanBrowser',
     SERVER_BROWSER+'extLANServerBrowserOnLoad',
     'WillowGame.LANServerBrowserGFxMovie:FindGames',
     'IpDrv.OnlineGameInterfaceImpl:FindOnlineGames',
@@ -96,10 +97,7 @@ class NativeJoin:
 
     def select(self, browser):
         if self.attempted or not self.host_name or browser.bSearchingForGames:return
-        try:ready=json.loads(Path(self.config['host_marker']).read_text())
-        except (OSError,ValueError):return
-        if (not isinstance(ready,dict) or ready.get('token')!=self.config['token']
-                or ready.get('ready') is not True or ready.get('port')!=self.config['port']):return
+        if not host_ready(self.config):return
         matches=[index for index,result in enumerate(browser.SortedResults)
                  if str(result.Name).strip().casefold()==self.host_name]
         if len(matches)!=1:return
@@ -138,21 +136,40 @@ class NativeTrace:
             self.log('Native LAN trace finished.')
 
 
-class LanAtTitle:
-    def __init__(self, get_pc, log):
-        self.get_pc=get_pc
-        self.log=log
-        self.requested=False
+def host_ready(config):
+    try:ready=json.loads(Path(config['host_marker']).read_text())
+    except (OSError,ValueError):return False
+    return (isinstance(ready,dict) and ready.get('token')==config['token']
+            and ready.get('ready') is True and ready.get('port')==config['port'])
 
-    def start(self):
-        if self.requested:return
-        pc=self.get_pc()
-        if pc is None:return
-        # The title screen initializes the native front-end LAN session.
-        # Request the same LAN transition used by BL2's startup LAN mod.
-        self.requested=True
-        pc.AttemptNetworkTransition(1,2,True)
-        self.log('Native LAN mode requested at the title screen.')
+
+class LanFrontend:
+    def __init__(self, config, log, now=time.monotonic):
+        self.config=config
+        self.log=log
+        self.now=now
+        self.frontend=None
+        self.requested=False
+        self.browser_opened=False
+        self.next_check=0
+
+    def tick(self, pc, can_join):
+        if self.frontend is None or pc is None or self.browser_opened:return
+        now=self.now()
+        if now<self.next_check:return
+        self.next_check=now+1
+        menu=self.frontend()
+        if menu is None or pc.WorldInfo is None or int(pc.WorldInfo.NetMode)!=0:return
+        if not self.requested:
+            # Run after the front-end is initialized, outside its Start hook.
+            self.requested=True
+            pc.AttemptNetworkTransition(1,2,True)
+            self.log('Native LAN mode requested from the main menu.')
+            return
+        if not can_join or not host_ready(self.config):return
+        self.browser_opened=True
+        self.log('Opening the native LAN browser.')
+        menu.ShowLanBrowser()
 
 
 class Session:
@@ -226,24 +243,23 @@ def load():
             logging.error(f'Windows Party LAN log: {error}')
 
     native_trace=None
+    native_join=None
     argument_hooks=[]
     auto_lan=config.get('automatic') and config.get('auto_lan')
     if auto_lan:
-        lan=LanAtTitle(get_pc,log)
+        from unrealsdk.hooks import Type
+        from unrealsdk.unreal import WeakPointer
+        lan=LanFrontend(config,log)
 
-        @hook(TITLE_START)
-        def start_lan(obj,args,ret,func):
-            try:
-                lan.start()
-            except Exception as error:
-                log(f'Native LAN mode: {type(error).__name__}: {error}')
-
-        @hook('WillowGame.FrontendGFxMovie:Start')
+        @hook(FRONTEND+'Start',Type.POST_UNCONDITIONAL)
         def frontend(obj,args,ret,func):
-            members=[name for name in dir(obj) if re.search(r'lan|browser|findgame|matchmak',name,re.I)]
-            log('Front-end LAN methods: '+', '.join(members[:40]))
+            lan.frontend=WeakPointer(obj)
 
-        argument_hooks.extend((start_lan,frontend))
+        @hook(SERVER_BROWSER+'extLANServerBrowserOnLoad',Type.POST_UNCONDITIONAL)
+        def browser_loaded(obj,args,ret,func):
+            lan.browser_opened=True
+
+        argument_hooks.extend((frontend,browser_loaded))
     if trace is not None and trace.with_name('bl2-native-trace.mode').is_file():
         from unrealsdk.hooks import Type, log_all_calls
         trigger=trace.with_name('bl2-native-trace.start')
@@ -254,7 +270,6 @@ def load():
         arguments=trace.with_name('bl2-native-args.log')
         arguments.unlink(missing_ok=True)
         host_file=trace.with_name('bl2-native-join.host')
-        native_join=None
         if host_file.is_file():
             from unrealsdk.unreal import WrappedStruct
             native_join=NativeJoin(config,host_file.read_text(encoding='utf-8').strip(),WrappedStruct,log)
@@ -289,6 +304,10 @@ def load():
     def tick(obj,args,ret,func):
         nonlocal next_error
         try:
+            if auto_lan:
+                pc=get_pc()
+                if pc is not None and pc==obj:
+                    lan.tick(pc,native_join is not None)
             if native_trace is not None:
                 native_trace.tick()
                 return

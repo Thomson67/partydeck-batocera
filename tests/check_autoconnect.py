@@ -247,12 +247,23 @@ with tempfile.TemporaryDirectory() as folder:
     native.select(browser)
     wrap.assert_called_once_with(click.func,ServerIndex=1)
     click.assert_called_once_with(wrapped)
-    local_pc=Mock()
-    get_pc=Mock(side_effect=[None,local_pc])
-    boot=bl2_session.LanAtTitle(get_pc,events.append)
-    for _ in range(3):boot.start()
+    local_pc=Mock(WorldInfo=SimpleNamespace(NetMode=0))
+    menu=Mock()
+    boot=bl2_session.LanFrontend(native_config,events.append,now=lambda:clock[0])
+    boot.tick(local_pc,True)
+    local_pc.AttemptNetworkTransition.assert_not_called()
+    boot.frontend=lambda:menu
+    boot.tick(local_pc,True)
     local_pc.AttemptNetworkTransition.assert_called_once_with(1,2,True)
-    assert events[-1]=='Native LAN mode requested at the title screen.'
+    assert events[-1]=='Native LAN mode requested from the main menu.'
+    menu.ShowLanBrowser.assert_not_called()
+    clock[0]+=1
+    boot.tick(local_pc,False)
+    menu.ShowLanBrowser.assert_not_called()
+    clock[0]+=1
+    boot.tick(local_pc,True)
+    boot.tick(local_pc,True)
+    menu.ShowLanBrowser.assert_called_once_with()
     trace.tick();assert toggles==[True,False]
 
 # Real UDP challenge and response, not a mocked readiness boolean.
