@@ -26,9 +26,8 @@ for language,host,automatic,campaign in (
     assert label_value('l4d2.campaign','menu')==campaign
     assert label_value('l4d2.campaign','c1m1_hotel')=='1 · Dead Center'
     assert label_value('l4d2.campaign','c14m1_junkyard')=='14 · The Last Stand'
-    mode_label=next(label for key,label,choices in fields(2,'l4d2-goldberg') if key=='l4d2.campaign_mode')
-    assert mode_label==('Mode de la campagne au lancement' if language=='fr' else 'Startup campaign mode')
-    assert label_value('l4d2.campaign_mode','realism')==('Réalisme' if language=='fr' else 'Realism')
+    l4d2_options={key for key,_,_ in fields(2,'l4d2-goldberg')}
+    assert {'l4d2.campaign','l4d2.campaign_mode'}.isdisjoint(l4d2_options)
 lang.set_language('fr')
 
 # Surface the launcher's reason rather than its long argv, in either UI locale.

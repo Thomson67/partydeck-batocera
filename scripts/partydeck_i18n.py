@@ -82,8 +82,6 @@ EN = {
     'Contexte de connexion automatique invalide.': 'Invalid automatic connection context.',
     'Joueur hôte': 'Host player',
     'Port de la partie': 'Game port',
-    'Campagne au lancement': 'Campaign on startup',
-    'Mode de la campagne au lancement': 'Startup campaign mode',
     'Réalisme': 'Realism',
     'Difficulté Left 4 Dead 2 invalide.': 'Invalid Left 4 Dead 2 difficulty.',
     'Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.': 'Left 4 Dead 2 setup screen unavailable. Using profile settings.',

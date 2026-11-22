@@ -22,7 +22,7 @@ from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
 from partydeck_hkmp import defaults as hkmp_defaults, matches as matches_hkmp
 from partydeck_hkmultiplayer import defaults as multi_defaults, matches as matches_multi, HOST_CHOICES
 from partydeck_l4d2 import (defaults as l4d2_defaults, matches as matches_l4d2,
-                            LANGUAGES as L4D2_LANGUAGES, CAMPAIGNS, CAMPAIGN_MODES, DIFFICULTIES,
+                            LANGUAGES as L4D2_LANGUAGES, CAMPAIGNS, DIFFICULTIES,
                             ARENAS, ARENA_MODES, MUTATIONS, SESSION_MODES, mode_maps,
                             launch_options as l4d2_launch_options)
 from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
@@ -133,9 +133,7 @@ def fields(tab, adapter='standard'):
                     ('l4d2.gamepad',tr('Activer la manette en jeu'),[True,False]),
                     ('l4d2.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
                     ('l4d2.host_player',tr('Joueur hôte'),[1,2,3,4]),
-                    ('l4d2.port',tr('Port de la partie'),None),
-                    ('l4d2.campaign',tr('Campagne au lancement'),list(CAMPAIGNS)),
-                    ('l4d2.campaign_mode',tr('Mode de la campagne au lancement'),list(CAMPAIGN_MODES))]
+                    ('l4d2.port',tr('Port de la partie'),None)]
         return [(f'l4d2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
     if adapter == 'sm64coopdx':
         if tab == 1:
@@ -223,8 +221,6 @@ def label_value(key, value):
     if key == 'l4d2.campaign':
         title=tr(CAMPAIGNS[value])
         return title if value=='menu' else f'{value[1:value.index("m")]} · {title}'
-    if key == 'l4d2.campaign_mode':
-        return tr(CAMPAIGN_MODES[value])
     if key == 'hkmultiplayer.world':
         return tr('Dernier monde joué' if value=='latest' else 'Monde portant ce nom')
     if key.startswith('hkmultiplayer.host.') and key.split('.')[-1] in ('revive','sharedMap','stagTogether','showNames','showPartnerHealth'):

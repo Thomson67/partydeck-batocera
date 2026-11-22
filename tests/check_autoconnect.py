@@ -69,7 +69,20 @@ with tempfile.TemporaryDirectory() as folder:
         with patch.object(auto,'wait_host',return_value=ready) as wait:
             auto.source_join(source_client,join)
         wait.assert_called_once_with(source_client,timeout=300)
-        assert join.read_text()==auto.SOURCE_STOP+('connect 127.0.0.1:27015\n' if ready else '')
+        assert join.read_text()==auto.SOURCE_STOP+(
+            'echo PARTYDECK_L4D2_CONNECT\nconnect 127.0.0.1:27015\n' if ready else '')
+    original_host_cfg=cfg/'listenserver.cfg'
+    original_host_cfg.write_text('sv_allow_lobby_connect_only 1\n')
+    source_host=dict(source_client,index=0)
+    with patch.object(auto,'udp_bound',return_value=False):
+        auto.prepare_game(game,prefix,source_host)
+    assert original_host_cfg.read_text()=='sv_allow_lobby_connect_only 1\n'
+    assert (cfg/auto.SOURCE_HOST).read_text().splitlines()[:3]==[
+        'exec listenserver.cfg','sv_lan 1','sv_allow_lobby_connect_only 0']
+    for native_host_cfg in ('',' +lservercfgfile custom.cfg'):
+        out,found=auto.command_arguments('left4dead2.exe'+native_host_cfg,source_host)
+        assert found and out.count('+lservercfgfile')==1
+        assert ('custom.cfg' if native_host_cfg else auto.SOURCE_HOST) in out
     command='"Borderlands2.exe"'
     for index in (0,1):
         assert auto.command_arguments(command,dict(plan,kind='borderlands2',index=index))==(command,True)

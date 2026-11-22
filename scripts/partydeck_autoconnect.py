@@ -23,6 +23,8 @@ SDK_URL = 'https://github.com/bl-sdk/willow2-mod-manager/releases/download/v3.8/
 SOURCE_POLL = 'partydeck_l4d2_poll.cfg'
 SOURCE_JOIN = 'partydeck_l4d2_join.cfg'
 SOURCE_STOP = 'alias partydeck_l4d2_tick ""\n'
+SOURCE_HOST = 'partydeck_l4d2_host.cfg'
+SOURCE_LOG = 'partydeck_l4d2_console.log'
 
 
 def context(player):
@@ -74,8 +76,10 @@ def game_arguments(plan):
     if plan['kind']=='sm64coopdx':
         return ['--server',port] if host else ['--client','127.0.0.1',port]
     if plan['kind']=='l4d2':
-        result=['-port',port if host else str(0),'+sv_lan','1','+sv_allow_lobby_connect_only','0']
+        result=['-port',port if host else str(0),'+con_logfile',SOURCE_LOG,
+                '+sv_lan','1','+sv_allow_lobby_connect_only','0']
         if host:
+            result+=['+lservercfgfile',SOURCE_HOST]
             campaign=plan.get('campaign','menu')
             if campaign!='menu':
                 mode=plan.get('campaign_mode','coop')
@@ -100,6 +104,9 @@ def command_arguments(command, plan):
     # Do not let two conflicting session controllers silently compete.
     if re.search(r'(?i)(?:^|\s)(?:--server|--client|--coopnet|\+connect|\+map|-port)(?:[=\s]|$)',command):
         raise ValueError(tr('Le lanceur du jeu contient déjà des options réseau ; choisissez le mode manuel ou retirez ces options.'))
+    if '+lservercfgfile' in flags and re.search(r'(?i)(?:^|\s)"?\+lservercfgfile(?:["\s=]|$)',command):
+        host_cfg=flags.index('+lservercfgfile')
+        del flags[host_cfg:host_cfg+2]
     return command.rstrip()+' '+' '.join(flags),True
 
 
@@ -225,9 +232,21 @@ def wait_host(plan, timeout=120):
     return False
 
 
-def arm_source_join(directory, allowed, plan):
+def source_cfg(directory, allowed):
     game=directory if directory.name.casefold()=='left4dead2' else child(directory,'left4dead2')
-    cfg=safe_path(child(game,'cfg'),allowed)
+    return safe_path(child(game,'cfg'),allowed)
+
+
+def configure_source_host(cfg, allowed):
+    commands=[]
+    if child(cfg,'listenserver.cfg').is_file():
+        commands.append('exec listenserver.cfg')
+    commands.extend(('sv_lan 1','sv_allow_lobby_connect_only 0',
+                     'echo PARTYDECK_L4D2_HOST_CFG','status'))
+    write_bytes(safe_path(cfg/SOURCE_HOST,allowed),('\n'.join(commands)+'\n').encode())
+
+
+def arm_source_join(cfg, allowed, plan):
     poll=safe_path(cfg/SOURCE_POLL,allowed)
     join=safe_path(cfg/SOURCE_JOIN,allowed)
     # Keep the command queue bounded even if the engine ignores wait.
@@ -235,6 +254,7 @@ def arm_source_join(directory, allowed, plan):
     ten='partydeck_l4d2_ten'
     hundred='partydeck_l4d2_hundred'
     script=[
+        'echo PARTYDECK_L4D2_CLIENT_CFG',
         f'alias {tick} "exec {SOURCE_JOIN}; wait 60"',
         f'alias {ten} "'+'; '.join([tick]*10)+'"',
         f'alias {hundred} "'+'; '.join([ten]*10)+'"',
@@ -251,7 +271,7 @@ def source_join(plan, join):
     ready=wait_host(plan,timeout=300)
     command=SOURCE_STOP
     if ready:
-        command+=f'connect 127.0.0.1:{plan["port"]}\n'
+        command+=f'echo PARTYDECK_L4D2_CONNECT\nconnect 127.0.0.1:{plan["port"]}\n'
     write_bytes(join,command.encode())
     if ready:
         print(tr('Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée.',
@@ -314,9 +334,11 @@ def prepare_game(directory, prefix, plan):
         return
     if not bl2 and host:
         if udp_bound(plan['port']):raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
+        if plan['kind']=='l4d2':
+            configure_source_host(source_cfg(directory,allowed),allowed)
         write_bytes(marker(plan),json.dumps(dict(token=plan['token'])).encode())
     elif plan['kind']=='l4d2':
-        arm_source_join(directory,allowed,plan)
+        arm_source_join(source_cfg(directory,allowed),allowed,plan)
     elif not bl2 and not wait_host(plan):
         # A batch can fall back cleanly; direct EXE arguments already include
         # connect, which the game can cancel back to its main menu.
