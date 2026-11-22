@@ -203,6 +203,19 @@ with tempfile.TemporaryDirectory() as folder:
     observers[-1](None,args,True,None)
     assert records==[dict(call='Engine.PlayerController:ClientTravel',result=True,
                          params=dict(SessionName='Game',URL='192.168.1.141:7777',UserIndex=0))]
+    registered={}
+    def register(name,timing):
+        def bind(callback):
+            registered[name]=(timing,callback)
+            return callback
+        return bind
+    bl2_session.native_argument_hooks(register,'POST',records.append,pre='PRE')
+    timing,click=registered[bl2_session.SERVER_BROWSER+'HandleServerBrowserItemClick']
+    browser=SimpleNamespace(SortedResults=[SimpleNamespace(
+        GameSettings=SimpleNamespace(OwningPlayerName='j1'),PlatformData=123456)])
+    click(browser,args,None,None)
+    assert timing=='PRE' and records[-1]['result_count']==1
+    assert records[-1]['results']==[dict(GameSettings=dict(OwningPlayerName='j1'))]
     trace.tick();assert toggles==[True,False]
 
 # Real UDP challenge and response, not a mocked readiness boolean.

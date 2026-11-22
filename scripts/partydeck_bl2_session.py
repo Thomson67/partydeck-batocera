@@ -7,10 +7,16 @@ import re
 import time
 
 TRAVEL_ABSOLUTE = 0
+SERVER_BROWSER = 'WillowGame.LANServerBrowserGFxMovie:'
+RESULT_FIELDS = ('GameSettings','SearchResult','GameSearchResult','OwningPlayerName',
+                 'ServerName','HostName','ServerIndex','ResultIndex','SearchResultIndex','PingInMs')
 NATIVE_LAN_CALLS = (
+    SERVER_BROWSER+'extLANServerBrowserOnLoad',
     'WillowGame.LANServerBrowserGFxMovie:FindGames',
     'IpDrv.OnlineGameInterfaceImpl:FindOnlineGames',
     'WillowGame.LANServerBrowserGFxMovie:OnFindGamesComplete',
+    SERVER_BROWSER+'PopulateSearchResults',
+    SERVER_BROWSER+'HandleServerBrowserItemClick',
     'WillowGame.LANServerBrowserGFxMovie:JoinMatchmakingSession',
     'IpDrv.OnlineGameInterfaceImpl:JoinOnlineGame',
     'WillowGame.LANServerBrowserGFxMovie:OnJoinMatchComplete',
@@ -40,20 +46,39 @@ def describe_params(params, depth=1):
     return fields
 
 
-def native_argument_hooks(register, post, record):
+def describe_search_result(result, depth=2):
+    if result is None or isinstance(result,(bool,int,float)):return result
+    if isinstance(result,str):return result[:120]
+    if not depth:return type(result).__name__
+    fields={}
+    for field in RESULT_FIELDS:
+        try:value=getattr(result,field)
+        except AttributeError:continue
+        fields[field]=describe_search_result(value,depth-1)
+    return fields or dict(type=type(result).__name__, fields=[
+        key for key in dir(result) if not key.startswith('_')][:40])
+
+
+def native_argument_hooks(register, post, record, pre=None):
     hooks=[]
     for name in NATIVE_LAN_CALLS:
         def capture(obj,args,ret,func,*,name=name):
             try:
                 data=dict(call=name,params=describe_params(args),
                           result=ret if isinstance(ret,(bool,int,float)) else None)
-                if name.endswith((':OnFindGamesComplete',':JoinMatchmakingSession')):
+                if name in (SERVER_BROWSER+'OnFindGamesComplete',
+                            SERVER_BROWSER+'HandleServerBrowserItemClick'):
                     data['browser_members']=[field for field in dir(obj) if
                         re.search(r'find|search|server|selected|results|session',field,re.I)][:50]
+                    results=obj.SortedResults
+                    data['result_count']=len(results)
+                    data['results']=[describe_search_result(results[index])
+                                     for index in range(min(len(results),8))]
                 record(data)
             except Exception as error:
                 record(dict(call=name,error=type(error).__name__))
-        hooks.append(register(name,post)(capture))
+        timing=pre if pre is not None and name==SERVER_BROWSER+'HandleServerBrowserItemClick' else post
+        hooks.append(register(name,timing)(capture))
     return hooks
 
 
@@ -170,7 +195,7 @@ def load():
             except OSError as error:
                 logging.error(f'Windows Party LAN argument trace: {error}')
 
-        argument_hooks=native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args)
+        argument_hooks=native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args,pre=Type.PRE)
 
         def record(enabled):
             log_all_calls(enabled)
