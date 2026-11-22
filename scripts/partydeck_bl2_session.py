@@ -8,7 +8,7 @@ import time
 
 TRAVEL_ABSOLUTE = 0
 SERVER_BROWSER = 'WillowGame.LANServerBrowserGFxMovie:'
-RESULT_FIELDS = ('GameSettings','SearchResult','GameSearchResult','OwningPlayerName',
+RESULT_FIELDS = ('Name','Game','GameSettings','SearchResult','GameSearchResult','OwningPlayerName',
                  'ServerName','HostName','ServerIndex','ResultIndex','SearchResultIndex','PingInMs')
 NATIVE_LAN_CALLS = (
     SERVER_BROWSER+'extLANServerBrowserOnLoad',
@@ -59,7 +59,7 @@ def describe_search_result(result, depth=2):
         key for key in dir(result) if not key.startswith('_')][:40])
 
 
-def native_argument_hooks(register, post, record, pre=None):
+def native_argument_hooks(register, post, record, pre=None, on_results=None):
     hooks=[]
     for name in NATIVE_LAN_CALLS:
         def capture(obj,args,ret,func,*,name=name):
@@ -75,11 +75,42 @@ def native_argument_hooks(register, post, record, pre=None):
                     data['results']=[describe_search_result(results[index])
                                      for index in range(min(len(results),8))]
                 record(data)
+                if on_results is not None and name==SERVER_BROWSER+'OnFindGamesComplete' and args.bWasSuccessful:
+                    on_results(obj)
             except Exception as error:
                 record(dict(call=name,error=type(error).__name__))
         timing=pre if pre is not None and name==SERVER_BROWSER+'HandleServerBrowserItemClick' else post
         hooks.append(register(name,timing)(capture))
     return hooks
+
+
+class NativeJoin:
+    """Select a uniquely matching row in the game's own LAN browser once."""
+    def __init__(self, config, host_name, wrap, log):
+        self.config=config
+        self.host_name=host_name.casefold()
+        self.wrap=wrap
+        self.log=log
+        self.attempted=False
+
+    def select(self, browser):
+        if self.attempted or not self.host_name or browser.bSearchingForGames:return
+        try:ready=json.loads(Path(self.config['host_marker']).read_text())
+        except (OSError,ValueError):return
+        if (not isinstance(ready,dict) or ready.get('token')!=self.config['token']
+                or ready.get('ready') is not True or ready.get('port')!=self.config['port']):return
+        matches=[index for index,result in enumerate(browser.SortedResults)
+                 if str(result.Name).strip().casefold()==self.host_name]
+        if len(matches)!=1:return
+        index=matches[0]
+        if index==browser.IncompatibleGameVersionsServerIndex:return
+        click=browser.HandleServerBrowserItemClick
+        # Use the SDK's initialized argument struct for the UI platform fields.
+        # No native search result or session pointer is constructed by PartyDeck.
+        args=self.wrap(click.func,ServerIndex=index)
+        self.attempted=True
+        self.log(f'Native LAN: selecting row {index} for {self.host_name}.')
+        click(args)
 
 
 class NativeTrace:
@@ -187,6 +218,11 @@ def load():
         summary.unlink(missing_ok=True)
         arguments=trace.with_name('bl2-native-args.log')
         arguments.unlink(missing_ok=True)
+        host_file=trace.with_name('bl2-native-join.host')
+        native_join=None
+        if host_file.is_file():
+            from unrealsdk.unreal import WrappedStruct
+            native_join=NativeJoin(config,host_file.read_text(encoding='utf-8').strip(),WrappedStruct,log)
 
         def record_args(data):
             try:
@@ -195,7 +231,8 @@ def load():
             except OSError as error:
                 logging.error(f'Windows Party LAN argument trace: {error}')
 
-        argument_hooks=native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args,pre=Type.PRE)
+        argument_hooks=native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args,pre=Type.PRE,
+                                             on_results=native_join.select if native_join else None)
 
         def record(enabled):
             log_all_calls(enabled)
@@ -242,8 +279,10 @@ def load():
         mod.enable()
         log('LAN module enabled.')
         if native_trace is not None:
-            log('Native LAN trace armed. Automatic join disabled for this launch.')
+            log('Native LAN trace armed. Direct ClientTravel disabled for this launch.')
             log('Recording native LAN parameters without a trigger.')
+            if native_join is not None:
+                log(f'Native LAN selection armed for {native_join.host_name}.')
         logging.info(f'Windows Party LAN: J{config["index"]+1}, host J{config["host_player"]}')
     return mod
 

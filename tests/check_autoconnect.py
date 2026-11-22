@@ -216,6 +216,30 @@ with tempfile.TemporaryDirectory() as folder:
     click(browser,args,None,None)
     assert timing=='PRE' and records[-1]['result_count']==1
     assert records[-1]['results']==[dict(GameSettings=dict(OwningPlayerName='j1'))]
+
+    # Do not click a different or duplicate host, or trust a previous launch.
+    marker=player/'native-ready.json'
+    native_config=dict(token=cfg['token'],port=7777,host_marker=str(marker))
+    click=Mock(func=object())
+    wrapped=object()
+    wrap=Mock(return_value=wrapped)
+    native=bl2_session.NativeJoin(native_config,'J1',wrap,events.append)
+    j1=SimpleNamespace(Name='j1')
+    browser=SimpleNamespace(bSearchingForGames=False,SortedResults=[j1],
+                            IncompatibleGameVersionsServerIndex=-1,HandleServerBrowserItemClick=click)
+    native.select(browser)
+    marker.write_text(json.dumps(dict(token='b'*32,ready=True,port=7777)))
+    native.select(browser)
+    marker.write_text(json.dumps(dict(token=native_config['token'],ready=True,port=7777)))
+    for rows in ([SimpleNamespace(Name='other')],[j1,j1]):
+        browser.SortedResults=rows
+        native.select(browser)
+    click.assert_not_called()
+    browser.SortedResults=[SimpleNamespace(Name='other'),j1]
+    native.select(browser)
+    native.select(browser)
+    wrap.assert_called_once_with(click.func,ServerIndex=1)
+    click.assert_called_once_with(wrapped)
     trace.tick();assert toggles==[True,False]
 
 # Real UDP challenge and response, not a mocked readiness boolean.
