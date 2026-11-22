@@ -152,6 +152,15 @@ class LanFrontend:
         self.requested=False
         self.browser_opened=False
         self.next_check=0
+        self.reported_missing_menu=False
+
+    def menu_started(self, frontend):
+        self.frontend=frontend
+        self.reported_missing_menu=False
+        # Defer until the game's front-end Start call has returned.
+        self.next_check=self.now()+0.5
+        if not self.requested:
+            self.log('Main menu Start detected; LAN request queued.')
 
     def tick(self, pc, can_join):
         if self.frontend is None or pc is None or self.browser_opened:return
@@ -159,14 +168,20 @@ class LanFrontend:
         if now<self.next_check:return
         self.next_check=now+1
         menu=self.frontend()
-        if menu is None or pc.WorldInfo is None or int(pc.WorldInfo.NetMode)!=0:return
+        if menu is None:
+            if not self.reported_missing_menu:
+                self.reported_missing_menu=True
+                self.log('Main menu object is no longer available.')
+            return
+        if pc.WorldInfo is None:return
         if not self.requested:
             # Run after the front-end is initialized, outside its Start hook.
             self.requested=True
+            self.log(f'Requesting LAN from the main menu (NetMode={int(pc.WorldInfo.NetMode)}).')
             pc.AttemptNetworkTransition(1,2,True)
             self.log('Native LAN mode requested from the main menu.')
             return
-        if not can_join or not host_ready(self.config):return
+        if int(pc.WorldInfo.NetMode)!=0 or not can_join or not host_ready(self.config):return
         self.browser_opened=True
         self.log('Opening the native LAN browser.')
         menu.ShowLanBrowser()
@@ -251,9 +266,12 @@ def load():
         from unrealsdk.unreal import WeakPointer
         lan=LanFrontend(config,log)
 
-        @hook(FRONTEND+'Start',Type.POST_UNCONDITIONAL)
+        @hook(FRONTEND+'Start',Type.PRE)
         def frontend(obj,args,ret,func):
-            lan.frontend=WeakPointer(obj)
+            try:
+                lan.menu_started(WeakPointer(obj))
+            except Exception as error:
+                log(f'Main menu hook: {type(error).__name__}: {error}')
 
         @hook(SERVER_BROWSER+'extLANServerBrowserOnLoad',Type.POST_UNCONDITIONAL)
         def browser_loaded(obj,args,ret,func):

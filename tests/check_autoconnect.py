@@ -252,11 +252,19 @@ with tempfile.TemporaryDirectory() as folder:
     boot=bl2_session.LanFrontend(native_config,events.append,now=lambda:clock[0])
     boot.tick(local_pc,True)
     local_pc.AttemptNetworkTransition.assert_not_called()
-    boot.frontend=lambda:menu
+    boot.menu_started(lambda:menu)
+    boot.tick(local_pc,True)
+    local_pc.AttemptNetworkTransition.assert_not_called()
+    clock[0]+=0.5
+    local_pc.WorldInfo.NetMode=2
     boot.tick(local_pc,True)
     local_pc.AttemptNetworkTransition.assert_called_once_with(1,2,True)
     assert events[-1]=='Native LAN mode requested from the main menu.'
     menu.ShowLanBrowser.assert_not_called()
+    clock[0]+=1
+    boot.tick(local_pc,True)
+    menu.ShowLanBrowser.assert_not_called()
+    local_pc.WorldInfo.NetMode=0
     clock[0]+=1
     boot.tick(local_pc,False)
     menu.ShowLanBrowser.assert_not_called()
