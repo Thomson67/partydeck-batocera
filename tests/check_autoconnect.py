@@ -44,16 +44,11 @@ with tempfile.TemporaryDirectory() as folder:
     assert auto.game_arguments(other)==['--client','127.0.0.1','7777']
     assert '+map' not in auto.game_arguments(dict(plan,kind='l4d2',campaign='menu'))
     assert auto.game_arguments(dict(plan,kind='l4d2',campaign='c1m1_hotel'))[-3:]==['+map','c1m1_hotel','coop']
-    for host in range(1,5):
-        for port in (7777,65535):
-            ports = [auto.bl2_local_port(port, player, host) for player in range(1,5)]
-            assert ports[host-1]==port and len(set(ports))==4
-            assert all(1024<=item<=65535 for item in ports)
-    args, found = auto.command_arguments('start "" "Binaries\\Win32\\Borderlands2.exe"',
-                                         dict(plan,kind='borderlands2',index=1))
-    assert found and args.endswith(' -port=7779')
-    args, found = auto.command_arguments('"Borderlands2.exe"',dict(plan,kind='borderlands2'))
-    assert found and args.endswith(' -port=7777')
+    command='"Borderlands2.exe"'
+    for index in (0,1):
+        assert auto.command_arguments(command,dict(plan,kind='borderlands2',index=index))==(command,True)
+    custom=auto.command_arguments(command,dict(plan,kind='borderlands2',port=7781))
+    assert custom==(command+' -port=7781',True)
 
     # Only the batch actually selected by the native launcher is modified.
     batch=game/'start.bat';original=b'@echo off\r\nrem sm64coopdx.exe\r\nstart "" "sm64coopdx.exe" -f\r\n'
@@ -120,7 +115,10 @@ with tempfile.TemporaryDirectory() as folder:
     (root/'partydeck_bl2_session.py').write_bytes(b'# companion')
     blplan=dict(plan,kind='borderlands2')
     with patch.object(auto,'SDK_SHA256',hashlib.sha256(archive.read_bytes()).hexdigest()):
-        auto.configure_bl2(game,player,blplan,(prefix,player))
+        auto.prepare_game(game,prefix,blplan)
+        assert not (game/'Binaries/Win32/ddraw.dll').exists()
+        auto.prepare_game(game,prefix,dict(blplan,host_player=2))
+        assert (player/'autoconnect-sdk-ready').exists()
         assert (game/'Binaries/Win32/ddraw.dll').read_bytes()==b'LOADER'
         assert json.loads((game/'sdk_mods/partydeck_session.json').read_text())['automatic']
         auto.configure_bl2(game,player,dict(blplan,automatic=False),(prefix,player))
@@ -128,10 +126,22 @@ with tempfile.TemporaryDirectory() as folder:
         (game/'Binaries/Win32/ddraw.dll').write_bytes(b'OTHER LOADER')
         auto.configure_bl2(game,player,blplan,(prefix,player))
         assert (game/'Binaries/Win32/ddraw.dll').read_bytes()==b'OTHER LOADER'
-    # BL2 host publishes readiness only after becoming a listen server.
-    path=player/'bl2-ready.json';clock=[0]
-    cfg=dict(blplan,host_marker=str(path));host=Session(cfg,now=lambda:clock[0]);pc=Mock()
-    host.tick(pc,SimpleNamespace(NetMode=0));assert not path.exists()
+    # A socket held only by P2 cannot publish P1's readiness.
+    proc=root/'proc';(proc/'net').mkdir(parents=True)
+    (proc/'net/udp').write_text('header\n  0: 00000000:1E61 00000000:0000 07 0 0 0 0 0 42\n')
+    sample=proc/'123';(sample/'fd').mkdir(parents=True)
+    (sample/'fd/4').symlink_to('socket:[42]')
+    environ=sample/'environ'
+    environ.write_bytes(b'PARTYDECK_PRIVATE_PLAYER='+os.fsencode(player.with_name('j2'))+b'\0')
+    assert not auto.bl2_owns_port(player,'192.168.1.141',7777,proc)
+    environ.write_bytes(b'PARTYDECK_PRIVATE_PLAYER='+os.fsencode(player)+b'\0')
+    assert auto.bl2_owns_port(player,'192.168.1.141',7777,proc)
+    host=auto.BL2Host(player,7777,blplan['token'],'192.168.1.141')
+    with patch.object(auto,'bl2_owns_port',return_value=True):
+        host.poll()
+    path=host.path;clock=[0]
+    assert json.loads(path.read_text())==dict(token='a'*32,ready=True,address='192.168.1.141',port=7777)
+    cfg=dict(blplan,index=1,host_marker=str(path))
 
     # Willow2 auto_enable restores saved settings only. A fresh PartyDeck
     # session must explicitly activate the registered local-player hook.
@@ -139,7 +149,7 @@ with tempfile.TemporaryDirectory() as folder:
     config_path=module_path.parent.parent/'partydeck_session.json'
     config_path.write_text(json.dumps(cfg))
     mod=Mock()
-    local_pc=Mock(WorldInfo=SimpleNamespace(NetMode=2))
+    local_pc=Mock(WorldInfo=SimpleNamespace(NetMode=0))
     hook=Mock(side_effect=lambda path:lambda callback:callback)
     sdk=SimpleNamespace(build_mod=Mock(return_value=mod),get_pc=lambda:local_pc,hook=hook)
     with patch.object(bl2_session,'__file__',str(module_path)),patch.dict(sys.modules,{
@@ -149,29 +159,29 @@ with tempfile.TemporaryDirectory() as folder:
         hook.assert_called_once_with('Engine.PlayerController:PlayerTick')
         callback,=sdk.build_mod.call_args.kwargs['hooks']
         callback(Mock(),None,None,None)
-        assert not path.exists()
+        local_pc.ClientTravel.assert_not_called()
         callback(local_pc,None,None,None)
-        assert path.exists()
+        local_pc.ClientTravel.assert_called_once_with('192.168.1.141:7777',0,False)
+        local_pc.AttemptNetworkTransition.assert_not_called()
         mod.reset_mock()
         config_path.write_text('{"automatic":false}')
         bl2_session.load()
         mod.enable.assert_not_called()
-    clock[0]=1;host.tick(pc,SimpleNamespace(NetMode=2))
-    assert json.loads(path.read_text())==dict(token='a'*32,ready=True)
+    clock[0]=1
     events=[]
     client=Session(dict(cfg,index=1),now=lambda:clock[0],log=events.append);client_pc=Mock()
     client.tick(client_pc,SimpleNamespace(NetMode=0))
-    client_pc.ClientTravel.assert_called_once_with('127.0.0.1:7777',0,False)
+    client_pc.ClientTravel.assert_called_once_with('192.168.1.141:7777',0,False)
     client_pc.ConsoleCommand.assert_not_called()
     # Joining and leaving can both happen inside the 20-second retry delay.
     # The still-ready host must not pull the client back into the game.
     clock[0]=2;client.tick(client_pc,SimpleNamespace(NetMode=3))
     clock[0]=21;client.tick(client_pc,SimpleNamespace(NetMode=0))
     assert client_pc.ClientTravel.call_count==1 # No forced rejoin after leaving.
-    assert events==['LAN transition requested.', 'Host ready signal received.',
-                    'Automatic join attempt 1: ClientTravel 127.0.0.1:7777.',
+    assert events==['Host UDP endpoint verified: 192.168.1.141:7777.',
+                    'Automatic join attempt 1: ClientTravel 192.168.1.141:7777.',
                     'Entered client mode.', 'Left client mode.']
-    host.tick(pc,SimpleNamespace(NetMode=0));assert not path.exists()
+    host.close();assert not path.exists()
 
 # Real UDP challenge and response, not a mocked readiness boolean.
 with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as server:

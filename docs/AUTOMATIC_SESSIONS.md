@@ -14,7 +14,7 @@ la session ou un port UDP déjà occupé provoque un refus avant le lancement.
 
 | Profil | Réglage | Fonctionnement |
 | --- | --- | --- |
-| Borderlands 2 | Joueurs → LAN et connexion automatiques (SDK privé) | Passage en LAN. L'hôte choisit son personnage puis continue sa partie ; les clients tentent la connexion lorsque le compagnon détecte un serveur de partie. |
+| Borderlands 2 | Joueurs → Connexion automatique à l’hôte (SDK privé) | Sélectionnez Réseau local sur les deux jeux, puis faites Continuer uniquement sur l’hôte. PartyDeck détecte son port UDP avant de connecter les clients à l’adresse LAN du PC. |
 | SM64CoopDX | Options → Héberger et rejoindre automatiquement | L'hôte démarre un serveur avec la sauvegarde choisie dans le profil ; les clients attendent son ouverture de port, puis démarrent en connexion directe. |
 | Left 4 Dead 2 | Options → Héberger et rejoindre automatiquement | Avec « Choisir dans le jeu », l'hôte lance une campagne depuis les menus. Avec une campagne sélectionnée dans le profil, sa première carte est lancée automatiquement en coop. Les clients attendent une réponse A2S_INFO du serveur (AppID 550, carte chargée) puis rejoignent. |
 | SoH / Anchor | Réseau → Connexion automatique Anchor | Fonction existante : chaque joueur rejoint le serveur et la salle communs. Il faut charger les sauvegardes compatibles. |
@@ -32,12 +32,12 @@ Willow2 v3.8 (environ 13 Mo compressés). Le SHA-256 est fixé dans le module ;
 une archive différente est refusée. Le téléchargement est conservé dans
 `/userdata/system/windows-party/dependencies/willow2-sdk-v3.8.zip`.
 
-Le SDK et notre petit compagnon sont installés dans la vue privée du jeu, pas
-dans la ROM, le wsquashfs ou le runner. Le compagnon utilise la fonction
-`AttemptNetworkTransition` et attend un `NetMode` de serveur avant de signaler
-aux autres joueurs que la partie est prête. Il ne charge, n'édite et ne
-remplace aucun personnage. Les clients utilisent le personnage sélectionné
-par le jeu lors de la connexion : cette interaction reste à vérifier en jeu.
+Le SDK et le compagnon sont activés uniquement pour les joueurs qui rejoignent.
+L’hôte sélectionne Réseau local et continue sa partie depuis les menus natifs.
+Avec le port par défaut 7777, PartyDeck conserve les arguments de lancement du
+jeu. Il attend qu’un processus de l’hôte ouvre le port avant de transmettre
+l’adresse IPv4 LAN aux clients. Le compagnon ne modifie aucun personnage ni
+aucune sauvegarde. La sélection du personnage client reste à vérifier en jeu.
 
 Une DLL `ddraw.dll` différente ou un SDK incompatible déjà présent est conservé.
 Dans ce cas, un message dans le journal explique que le LAN reste manuel.
@@ -111,10 +111,11 @@ Existing profiles default to automatic mode for multiplayer sessions. Single
 player sessions leave automation disabled. The host defaults to P1, and can
 be selected in each profile together with the UDP port.
 
-Borderlands 2 uses a pinned, checksum-verified Willow2 SDK v3.8 in each private
-game overlay. The host still selects a character and continues the game.
-Clients wait for a listen-server readiness marker and attempt direct travel
-up to six times. Existing incompatible loaders/SDK files are preserved, with
+Borderlands 2 enables the pinned, checksum-verified Willow2 SDK v3.8 in
+clients' private overlays. Each player selects LAN in the game. The host selects
+a character and continues the game without the PartyDeck SDK module.
+Clients wait for the host to own the configured UDP port and attempt direct
+travel to the PC's LAN address up to six times. Existing incompatible loaders/SDK files are preserved, with
 manual LAN fallback. Character selection during client travel remains a live
 test requirement. No character/save is rewritten by the companion.
 

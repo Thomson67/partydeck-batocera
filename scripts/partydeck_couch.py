@@ -157,7 +157,7 @@ def fields(tab, adapter='standard'):
     if adapter == 'borderlands2':
         if tab == 2:
             return [*[(f'borderlands2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)],
-                    ('borderlands2.automatic',tr('LAN et connexion automatiques (SDK privé)'),[True,False]),
+                    ('borderlands2.automatic',tr('Connexion automatique à l’hôte (SDK privé)'),[True,False]),
                     ('borderlands2.host_player',tr('Joueur hôte'),[1,2,3,4]),
                     ('borderlands2.port',tr('Port de la partie'),None)]
         return [('borderlands2.preset',tr('Préréglage graphique'),list(PRESETS)),

@@ -120,6 +120,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert label_value('borderlands2.names.0','')=='Keep current'
     assert label_value('borderlands2.names.0','Joueur français')=='Joueur français'
     assert fields(2,'borderlands2')[0][1]=='Player 1 · Name'
+    assert dict((key,title) for key,title,_ in fields(2,'borderlands2'))['borderlands2.automatic']=='Automatically join the host (private SDK)'
     assert label_value('anchor.locations',1)=='Team only'
     assert label_value('anchor.graphics.texture_filter',0)=='N64 three-point'
     assert label_value('anchor.names.0','Enregistrer')=='Enregistrer'
@@ -140,6 +141,7 @@ with tempfile.TemporaryDirectory() as folder:
     assert fields(1,'l4d2-goldberg')[0][1]=='J1 · Nom'
     assert label_value('sm64coopdx.language','French')=='Français'
     assert fields(2,'borderlands2')[0][1]=='J1 · Nom'
+    assert dict((key,title) for key,title,_ in fields(2,'borderlands2'))['borderlands2.automatic']=='Connexion automatique à l’hôte (SDK privé)'
     rom=root/'Enregistrer.wsquashfs';rom.touch()
     data=defaults(rom);data.update(adapter='soh-anchor',anchor=anchor_defaults())
     data['anchor'].update(room='Annuler',names=['Enregistrer','Équipe','Moyen','Joueur4'])

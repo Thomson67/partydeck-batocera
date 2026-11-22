@@ -760,19 +760,18 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     monitor=primary_monitor(desktop['output'])
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
+    bl2_lan=None
     if party and len(players)>1:
-        from partydeck_autoconnect import prepare_sdk, options as session_options, ADAPTERS, udp_bound, bl2_local_port
+        from partydeck_autoconnect import prepare_sdk, options as session_options, ADAPTERS, udp_bound, bl2_lan_address, BL2Host
         kind=ADAPTERS.get((profile or {}).get('adapter'))
         if kind:
             automatic=session_options(profile[kind],kind)
             if automatic['automatic'] and automatic['host_player']>len(players):
                 raise ValueError(tr('Le joueur hôte choisi ne participe pas à cette session.'))
-            ports = [automatic['port']]
-            if kind=='borderlands2':
-                ports = [bl2_local_port(automatic['port'], index, automatic['host_player'])
-                         for index in range(1,len(players)+1)]
-            if automatic['automatic'] and any(udp_bound(port) for port in ports):
+            if automatic['automatic'] and udp_bound(automatic['port']):
                 raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
+            if kind=='borderlands2' and automatic['automatic']:
+                bl2_lan=(automatic['host_player'],automatic['port'],bl2_lan_address())
         prepare_sdk(base,profile)
     print(tr('Écran demandé : {p0} · zone active : {p1}',p0=desktop['output'],p1=monitor),flush=True)
     print(f"Joueurs : {len(players)} | demande : {count} | entrées : {input_mode} | "
@@ -804,10 +803,14 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     bottle_players=[]
     virtual_watcher=None
     network=None
+    bl2_host=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     try:
+        if bl2_lan is not None:
+            host,port,address=bl2_lan
+            bl2_host=BL2Host(base/'runtime'/game_id/f'j{host}',port,session_token,address)
         from partydeck_profiles import private_lan_enabled,PRIVATE_LAN_PROFILES
         requested=os.environ.get('PARTYDECK_PRIVATE_LAN',os.environ.get('PARTYDECK_NFSMW_PRIVATE_LAN'))
         use_private=private_lan_enabled(profile,len(players))
@@ -845,6 +848,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         next_attempt = dict.fromkeys(pending, 0)
         deadline = time.monotonic() + 120
         while pending and time.monotonic() < deadline:
+            if bl2_host is not None:bl2_host.poll()
             result = session_result(processes,states,wayland)
             if result is not None:
                 return result
@@ -882,6 +886,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             focus_window(seen_windows[min(seen_windows)])
         next_output_check=time.monotonic()+2
         while True:
+            if bl2_host is not None:bl2_host.poll()
             result = session_result(processes,states,wayland)
             if result is not None:
                 return result
@@ -909,6 +914,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 finally:
                     if network is not None:network.close()
         finally:
+            if bl2_host is not None:bl2_host.close()
             # All Wine namespaces must be gone before touching physical uppers.
             # A failed optimization never masks the game exit or removes saves.
             if bottle_players:

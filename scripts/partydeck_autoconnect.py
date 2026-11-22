@@ -1,6 +1,7 @@
 """Per-session launch coordination; edits only the current player's game view."""
 from pathlib import Path
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -64,14 +65,6 @@ def prepare_sdk(base, profile):
     finally:Path(name).unlink(missing_ok=True)
 
 
-def bl2_local_port(port, player, host):
-    if player == host:
-        return port
-    # Leave a gap for Unreal's peer port, even when the host is not player 1.
-    slot = player if player < host else player - 1
-    return 1024 + (port - 1024 + 2 * slot) % (65536 - 1024)
-
-
 def game_arguments(plan):
     host = plan['index']+1==plan['host_player']
     port = str(plan['port'])
@@ -84,8 +77,7 @@ def game_arguments(plan):
             if campaign!='menu':result+=['+map',campaign,'coop']
         else:result+=['+connect','127.0.0.1:'+port]
         return result
-    local_port = bl2_local_port(plan['port'], plan['index']+1, plan['host_player'])
-    return [f'-port={local_port}']
+    return [f'-port={port}'] if host and port!='7777' else []
 
 
 def command_arguments(command, plan):
@@ -95,14 +87,92 @@ def command_arguments(command, plan):
     pattern=re.compile(r'(?i)(?:^|[\\/\s\"])(?:'+names+r')(?=[\"\s]|$)')
     if not pattern.search(command):return command,False
     if any(char in command for char in '&|<>\r\n'):return command,False
+    flags=game_arguments(plan)
+    if not flags:
+        return command,True
     # Do not let two conflicting session controllers silently compete.
     if re.search(r'(?i)(?:^|\s)(?:--server|--client|--coopnet|\+connect|\+map|-port)(?:[=\s]|$)',command):
         raise ValueError(tr('Le lanceur du jeu contient déjà des options réseau ; choisissez le mode manuel ou retirez ces options.'))
-    return command.rstrip()+' '+' '.join(game_arguments(plan)),True
+    return command.rstrip()+' '+' '.join(flags),True
 
 
 def marker(plan):
     return Path(plan['player']).parent/f'j{plan["host_player"]}'/'autoconnect-host.json'
+
+
+def bl2_lan_address():
+    # Route lookup selects a source address without sending traffic.
+    commands=(['route','get','1.1.1.1'],['addr','show','scope','global'])
+    for command in commands:
+        try:
+            rows=json.loads(subprocess.check_output(['ip','-j','-4',*command],text=True,timeout=3,
+                                                    stderr=subprocess.DEVNULL))
+            candidates={ipaddress.IPv4Address(value) for row in rows for value in
+                        ([row.get('prefsrc') or row.get('src')] if 'get' in command else
+                         [item['local'] for item in row.get('addr_info',[])]) if value}
+        except (OSError,ValueError,subprocess.SubprocessError):
+            continue
+        candidates={address for address in candidates if not address.is_loopback and
+                    not address.is_unspecified and not address.is_multicast}
+        if len(candidates)==1:return str(candidates.pop())
+    raise ValueError(tr('Borderlands 2 : adresse IPv4 LAN introuvable. Utilisez le LAN manuel.'))
+
+
+def bl2_owns_port(player, address, port, proc=Path('/proc')):
+    """Find the host player's actual game socket in the shared network."""
+    try:
+        rows=(proc/'net/udp').read_text().splitlines()[1:]
+    except OSError:
+        return False
+    local={f'00000000:{port:04X}',f'{socket.inet_aton(address)[::-1].hex().upper()}:{port:04X}'}
+    sockets=set()
+    for row in rows:
+        fields=row.split()
+        if len(fields)>9 and fields[1] in local and fields[3]=='07':
+            sockets.add(f'socket:[{fields[9]}]')
+    if not sockets:return False
+    identity=b'PARTYDECK_PRIVATE_PLAYER='+os.fsencode(player)
+    for process in proc.glob('[0-9]*/environ'):
+        try:
+            if identity not in process.read_bytes().split(b'\0'):continue
+            for fd in (process.parent/'fd').iterdir():
+                try:
+                    if os.readlink(fd) in sockets:return True
+                except OSError:
+                    continue
+        except OSError:
+            continue
+    return False
+
+
+class BL2Host:
+    def __init__(self, player, port, token, address):
+        self.player=player
+        self.address=address
+        self.port=port
+        self.token=token
+        self.path=player/'autoconnect-host.json'
+        self.next_check=0
+        self.ready=False
+        self.path.unlink(missing_ok=True)
+
+    def poll(self):
+        now=time.monotonic()
+        if now<self.next_check:return
+        self.next_check=now+1
+        ready=bl2_owns_port(self.player,self.address,self.port)
+        if ready==self.ready:return
+        if ready:
+            data=dict(token=self.token,ready=True,address=self.address,port=self.port)
+            write_bytes(self.path,json.dumps(data).encode())
+            print(tr('Borderlands 2 : {p0} écoute sur {p1}:{p2}.',
+                     p0=self.player.name.upper(),p1=self.address,p2=self.port),flush=True)
+        else:
+            self.path.unlink(missing_ok=True)
+        self.ready=ready
+
+    def close(self):
+        self.path.unlink(missing_ok=True)
 
 
 def udp_bound(port):
@@ -164,8 +234,15 @@ def prepare_game(directory, prefix, plan):
     safe_path(directory,allowed)
     (player/'autoconnect-sdk-ready').unlink(missing_ok=True)
     restore_batches(directory,player,allowed)
+    bl2=plan['kind']=='borderlands2'
+    host=plan['index']+1==plan['host_player']
+    if bl2:
+        client=plan['automatic'] and not host
+        if configure_bl2(directory,player,dict(plan,automatic=client),allowed):
+            write_bytes(player/'autoconnect-sdk-ready',b'1')
+        if not host or plan['port']==7777:
+            return
     if not plan['automatic']:
-        if plan['kind']=='borderlands2':configure_bl2(directory,player,plan,allowed)
         return
     direct=plan.get('direct',False)
     edits=[]
@@ -192,16 +269,12 @@ def prepare_game(directory, prefix, plan):
                 changed|=found;lines.append(modified+ending)
             if changed:edits.append((path,before,''.join(lines).encode(codec)))
     if not direct and not edits:
-        if plan['kind']=='borderlands2':configure_bl2(directory,player,dict(plan,automatic=False),allowed)
         print(tr('Lanceur non reconnu : connexion automatique non appliquée ; utilisez les menus du jeu.'),flush=True)
         return
-    if plan['kind']=='borderlands2':
-        if not configure_bl2(directory,player,plan,allowed):return
-        write_bytes(player/'autoconnect-sdk-ready',b'1')
-    elif plan['index']+1==plan['host_player']:
+    if not bl2 and host:
         if udp_bound(plan['port']):raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
         write_bytes(marker(plan),json.dumps(dict(token=plan['token'])).encode())
-    elif not wait_host(plan):
+    elif not bl2 and not wait_host(plan):
         # A batch can fall back cleanly; direct EXE arguments already include
         # connect, which the game can cancel back to its main menu.
         if not direct:return
@@ -251,9 +324,7 @@ def configure_bl2(directory,player,plan,allowed):
     data=dict(plan)
     data['host_marker']='Z:'+str(marker(plan)).replace('/','\\')
     write_bytes(cfg,json.dumps(data).encode())
-    print(tr('Borderlands 2 J{p0} : port local {p1}, port de l’hôte {p2}.',
-             p0=plan['index']+1,p1=bl2_local_port(plan['port'],plan['index']+1,plan['host_player']),p2=plan['port']),flush=True)
-    print(tr('Borderlands 2 : LAN automatique préparé ; l’hôte choisit son personnage puis continue sa partie.'),flush=True)
+    print(tr('Borderlands 2 : connexion automatique prête. Sélectionnez Réseau local dans le jeu.'),flush=True)
     return True
 
 

@@ -1,5 +1,6 @@
 """Companion loaded by Willow2 SDK in the private game overlay, never solo."""
 from pathlib import Path
+from ipaddress import IPv4Address
 import json
 import os
 import time
@@ -12,7 +13,6 @@ class Session:
         self.config=config
         self.now=now
         self.log=log
-        self.lan=False
         self.next_tick=0
         self.attempts=0
         self.joined=False
@@ -23,47 +23,30 @@ class Session:
     def tick(self, pc, world):
         c=self.config
         if not c.get('automatic') or pc is None or world is None:return
-        host=c['index']+1==c['host_player']
+        if c['index']+1==c['host_player']:return
         # Notice a connection even during the retry delay. A short visit to
         # NM_Client is enough to stop automatic retries after a disconnect.
-        if not host:
-            client_mode=int(world.NetMode)==3
-            if client_mode!=self.client_mode:
-                self.log('Entered client mode.' if client_mode else 'Left client mode.')
-                self.client_mode=client_mode
-            if self.joined or client_mode:
-                self.joined=True
-                return
+        client_mode=int(world.NetMode)==3
+        if client_mode!=self.client_mode:
+            self.log('Entered client mode.' if client_mode else 'Left client mode.')
+            self.client_mode=client_mode
+        if self.joined or client_mode:
+            self.joined=True
+            return
         now=self.now()
         if now<self.next_tick:return
         self.next_tick=now+1
-        if not self.lan:
-            pc.AttemptNetworkTransition(1,2,False)
-            self.lan=True
-            self.log('LAN transition requested.')
         path=Path(c['host_marker'])
-        if host:
-            if int(world.NetMode)==2:
-                # A listen server is the readiness signal; startup/menu timing
-                # is not enough to let the other players connect.
-                data=json.dumps(dict(token=c['token'],ready=True))
-                if not path.exists() or path.read_text()!=data:
-                    temporary=path.with_suffix('.tmp')
-                    temporary.write_text(data);os.replace(temporary,path)
-                    self.log('Host ready.')
-            elif path.exists():
-                try:
-                    if json.loads(path.read_text()).get('token')==c['token']:
-                        path.unlink()
-                        self.log('Host no longer ready.')
-                except (OSError,ValueError):pass
-            return
         try:ready=json.loads(path.read_text())
         except (OSError,ValueError):return
-        if ready.get('token')!=c['token'] or not ready.get('ready'):return
+        if (not isinstance(ready,dict) or ready.get('token')!=c['token']
+                or not ready.get('ready') or ready.get('port')!=c['port']):return
+        try:host_address=IPv4Address(ready.get('address'))
+        except (ValueError,TypeError):return
+        if host_address.is_loopback or host_address.is_unspecified or host_address.is_multicast:return
         if self.deadline is None:
             self.deadline=now+120
-            self.log('Host ready signal received.')
+            self.log(f'Host UDP endpoint verified: {host_address}:{c["port"]}.')
         if now>=self.deadline or self.attempts>=6:
             if not self.expired:
                 self.log('Automatic join attempts ended without entering client mode.')
@@ -71,7 +54,7 @@ class Session:
             return
         self.next_tick=now+20
         self.attempts+=1
-        address=f'127.0.0.1:{c["port"]}'
+        address=f'{host_address}:{c["port"]}'
         self.log(f'Automatic join attempt {self.attempts}: ClientTravel {address}.')
         # Invoke the local player's network travel directly from the menu.
         pc.ClientTravel(address,TRAVEL_ABSOLUTE,False)
@@ -115,7 +98,7 @@ def load():
                 next_error=now+10
                 log(f'{type(error).__name__}: {error}')
 
-    mod=build_mod(name='Windows Party LAN',version='0.2',author='Windows Party',
+    mod=build_mod(name='Windows Party LAN',version='0.3',author='Windows Party',
                   hooks=[tick],auto_enable=False)
     # The SDK's auto_enable only restores an earlier enabled state. The
     # PartyDeck session plan, rather than an SDK preference, owns activation.
