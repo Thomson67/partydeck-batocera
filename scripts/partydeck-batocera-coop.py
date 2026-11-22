@@ -761,13 +761,17 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     if party and len(players)>1:
-        from partydeck_autoconnect import prepare_sdk, options as session_options, ADAPTERS, udp_bound
+        from partydeck_autoconnect import prepare_sdk, options as session_options, ADAPTERS, udp_bound, bl2_local_port
         kind=ADAPTERS.get((profile or {}).get('adapter'))
         if kind:
             automatic=session_options(profile[kind],kind)
             if automatic['automatic'] and automatic['host_player']>len(players):
                 raise ValueError(tr('Le joueur hôte choisi ne participe pas à cette session.'))
-            if automatic['automatic'] and udp_bound(automatic['port']):
+            ports = [automatic['port']]
+            if kind=='borderlands2':
+                ports = [bl2_local_port(automatic['port'], index, automatic['host_player'])
+                         for index in range(1,len(players)+1)]
+            if automatic['automatic'] and any(udp_bound(port) for port in ports):
                 raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
         prepare_sdk(base,profile)
     print(tr('Écran demandé : {p0} · zone active : {p1}',p0=desktop['output'],p1=monitor),flush=True)

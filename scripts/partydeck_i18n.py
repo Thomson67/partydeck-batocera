@@ -72,6 +72,7 @@ EN = {
     'Hôte non prêt : connexion automatique abandonnée ; utilisez les menus du jeu.': 'Host not ready: automatic connection stopped; use the game menus.',
     'Lanceur non reconnu : connexion automatique non appliquée ; utilisez les menus du jeu.': 'Unrecognized launcher: automatic connection was not applied; use the game menus.',
     'Le port de la partie est déjà occupé. Changez le port dans le profil.': 'The game port is already in use. Change the port in the profile.',
+    'Borderlands 2 J{p0} : port local {p1}, port de l’hôte {p2}.': 'Borderlands 2 P{p0}: local port {p1}, host port {p2}.',
     'Borderlands 2 : ddraw.dll existant conservé ; SDK automatique non installé. Mode LAN manuel.': 'Borderlands 2: existing ddraw.dll preserved; automatic SDK was not installed. Use manual LAN mode.',
     'Borderlands 2 : SDK existant différent, fichiers conservés. Mode LAN manuel.': 'Borderlands 2: a different SDK exists; files preserved. Use manual LAN mode.',
     'Borderlands 2 : LAN automatique préparé ; l’hôte choisit son personnage puis continue sa partie.': 'Borderlands 2: automatic LAN prepared; the host selects a character and continues the game.',

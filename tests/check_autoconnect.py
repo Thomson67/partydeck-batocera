@@ -44,6 +44,16 @@ with tempfile.TemporaryDirectory() as folder:
     assert auto.game_arguments(other)==['--client','127.0.0.1','7777']
     assert '+map' not in auto.game_arguments(dict(plan,kind='l4d2',campaign='menu'))
     assert auto.game_arguments(dict(plan,kind='l4d2',campaign='c1m1_hotel'))[-3:]==['+map','c1m1_hotel','coop']
+    for host in range(1,5):
+        for port in (7777,65535):
+            ports = [auto.bl2_local_port(port, player, host) for player in range(1,5)]
+            assert ports[host-1]==port and len(set(ports))==4
+            assert all(1024<=item<=65535 for item in ports)
+    args, found = auto.command_arguments('start "" "Binaries\\Win32\\Borderlands2.exe"',
+                                         dict(plan,kind='borderlands2',index=1))
+    assert found and args.endswith(' -port=7779')
+    args, found = auto.command_arguments('"Borderlands2.exe"',dict(plan,kind='borderlands2'))
+    assert found and args.endswith(' -port=7777')
 
     # Only the batch actually selected by the native launcher is modified.
     batch=game/'start.bat';original=b'@echo off\r\nrem sm64coopdx.exe\r\nstart "" "sm64coopdx.exe" -f\r\n'

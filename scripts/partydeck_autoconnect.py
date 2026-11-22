@@ -64,6 +64,14 @@ def prepare_sdk(base, profile):
     finally:Path(name).unlink(missing_ok=True)
 
 
+def bl2_local_port(port, player, host):
+    if player == host:
+        return port
+    # Leave a gap for Unreal's peer port, even when the host is not player 1.
+    slot = player if player < host else player - 1
+    return 1024 + (port - 1024 + 2 * slot) % (65536 - 1024)
+
+
 def game_arguments(plan):
     host = plan['index']+1==plan['host_player']
     port = str(plan['port'])
@@ -76,7 +84,8 @@ def game_arguments(plan):
             if campaign!='menu':result+=['+map',campaign,'coop']
         else:result+=['+connect','127.0.0.1:'+port]
         return result
-    return ['-port',port] if host else []
+    local_port = bl2_local_port(plan['port'], plan['index']+1, plan['host_player'])
+    return [f'-port={local_port}']
 
 
 def command_arguments(command, plan):
@@ -242,6 +251,8 @@ def configure_bl2(directory,player,plan,allowed):
     data=dict(plan)
     data['host_marker']='Z:'+str(marker(plan)).replace('/','\\')
     write_bytes(cfg,json.dumps(data).encode())
+    print(tr('Borderlands 2 J{p0} : port local {p1}, port de l’hôte {p2}.',
+             p0=plan['index']+1,p1=bl2_local_port(plan['port'],plan['index']+1,plan['host_player']),p2=plan['port']),flush=True)
     print(tr('Borderlands 2 : LAN automatique préparé ; l’hôte choisit son personnage puis continue sa partie.'),flush=True)
     return True
 
