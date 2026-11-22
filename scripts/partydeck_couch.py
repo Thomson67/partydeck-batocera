@@ -29,7 +29,8 @@ from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
                                   VOLUME_FIELDS as SM64_VOLUME_FIELDS)
 from partydeck_storage import (settings as storage_settings, save_settings as save_storage_settings,
-                               snapshot as storage_snapshot, clean as clean_storage, clean_game, prepare_launch, human)
+                               snapshot as storage_snapshot, clean as clean_storage, clean_game,
+                               reset_l4d2_config, prepare_launch, human)
 
 from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
                                discover_outputs, output_choices, output_label)
@@ -1109,6 +1110,8 @@ class App:
             self.storage_future = self.storage_pool.submit(storage_snapshot, self.model.base)
         elif task == 'game':
             self.storage_future = self.storage_pool.submit(clean_game, self.model.base, rom, include_saves=include_saves)
+        elif task == 'l4d2-config':
+            self.storage_future = self.storage_pool.submit(reset_l4d2_config, self.model.base, rom)
         else:
             self.storage_future = self.storage_pool.submit(clean_storage, self.model.base, task == 'purge')
 
@@ -1132,6 +1135,9 @@ class App:
                 self.storage_page = min(self.storage_page, max(0, (games - 1) // 3))
             elif task == 'game':
                 self.toast(tr('Nettoyage du jeu terminé.') if result else tr('Aucune donnée à nettoyer pour ce jeu.'))
+            elif task == 'l4d2-config':
+                self.toast(tr('Fichiers config.cfg mis de côté · {p0}',p0=result) if result else
+                           tr('Aucun config.cfg privé trouvé pour ce jeu.'))
             else:
                 self.toast(tr('{p0} libérés · {p1} erreurs · sauvegardes conservées', p0=human(result['freed']), p1=len(result['errors'])))
                 self.storage_job()
@@ -1249,30 +1255,44 @@ class App:
         if action == 'back':
             self.game_cleanup = None
         elif action in ('up','down','left','right'):
-            dialog['choice'] = 1 - dialog['choice']
+            total = 2 if dialog['confirming'] else len(self.game_cleanup_choices())
+            dialog['choice'] = (dialog['choice'] + (-1 if action in ('up','left') else 1)) % total
         elif action == 'ok':
             if not dialog['confirming']:
-                dialog.update(confirming=True, include_saves=bool(dialog['choice']), choice=0)
+                dialog.update(confirming=True, operation=dialog['choice'], choice=0)
             else:
                 self.game_cleanup = None
                 if dialog['choice']:
-                    self.storage_job('game', rom=dialog['game']['rom'], include_saves=dialog['include_saves'])
+                    if dialog['operation'] == 2:
+                        self.storage_job('l4d2-config', rom=dialog['game']['rom'])
+                    else:
+                        self.storage_job('game', rom=dialog['game']['rom'], include_saves=bool(dialog['operation']))
+
+    def game_cleanup_choices(self):
+        choices = (tr('Wine-bottles uniquement'), tr('Wine-bottles + sauvegardes'))
+        if matches_l4d2(Path(self.game_cleanup['game']['rom'])):
+            choices += (tr('Réinitialiser config.cfg'),)
+        return choices
 
     def draw_game_cleanup(self):
         dialog = self.game_cleanup
-        self.box((190,270,1060,382),(36,45,65),(244,164,128))
+        self.box((190,270,1060,425),(36,45,65),(244,164,128))
         self.text(tr('NETTOYER LES DONNÉES DU JEU'),220,298,28,width=1000)
         self.text(dialog['game']['name'],220,350,24,width=1000)
-        choices = (tr('Wine-bottles uniquement'), tr('Wine-bottles + sauvegardes'))
+        choices = self.game_cleanup_choices()
+        operation = dialog['operation'] if dialog['confirming'] else dialog['choice']
         if dialog['confirming']:
-            self.text(choices[dialog['include_saves']],220,395,20,width=1000)
-            choices = (tr('Annuler'), tr('Supprimer définitivement'))
+            self.text(choices[operation],220,395,20,width=1000)
+            choices = (tr('Annuler'), tr('Réinitialiser') if operation == 2 else tr('Supprimer définitivement'))
         else:
             self.text(tr('Le jeu d’origine et le profil Windows Party sont conservés.'),220,395,20,width=1000)
-        self.text(tr('Les sauvegardes internes aux préfixes Wine seront effacées dans les deux cas.'),220,424,20,width=1000)
-        include_saves = dialog['include_saves'] if dialog['confirming'] else dialog['choice']
-        self.text(tr('Les sauvegardes externalisées de Windows Party seront supprimées.') if include_saves else
-                  tr('Les sauvegardes externalisées de Windows Party seront conservées.'),220,453,20,width=1000)
+        if operation == 2:
+            self.text(tr('Les config.cfg des joueurs sont mis de côté avec une copie de secours.'),220,424,20,width=1000)
+            self.text(tr('Les sauvegardes et les Wine-bottles sont conservées.'),220,453,20,width=1000)
+        else:
+            self.text(tr('Les sauvegardes internes aux préfixes Wine seront effacées dans les deux cas.'),220,424,20,width=1000)
+            self.text(tr('Les sauvegardes externalisées de Windows Party seront supprimées.') if operation else
+                      tr('Les sauvegardes externalisées de Windows Party seront conservées.'),220,453,20,width=1000)
         for index, title in enumerate(choices):
             y = 490 + index*65
             focused = dialog['choice'] == index

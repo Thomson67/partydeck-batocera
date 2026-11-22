@@ -51,6 +51,18 @@ with tempfile.TemporaryDirectory() as directory:
             app.storage_future.result(timeout=10)
             app.poll_storage()
     # Edits belong to global storage settings, never to the selected game.
+    l4d2_rom=base/'Left 4 Dead 2.wsquashfs'
+    app.game_cleanup=dict(game=dict(name=l4d2_rom.stem,rom=str(l4d2_rom)),choice=0,confirming=False)
+    assert len(app.game_cleanup_choices())==3
+    with patch('partydeck_couch.reset_l4d2_config',return_value=2) as reset:
+        app.game_cleanup_action('up')
+        app.draw_game_cleanup()
+        app.game_cleanup_action('ok')
+        app.game_cleanup_action('down')
+        app.game_cleanup_action('ok')
+        app.storage_future.result(timeout=10)
+        reset.assert_called_once_with(base,str(l4d2_rom))
+        app.poll_storage()
     app.storage_row = 1
     app.action('left')
     assert storage.settings(base)['cache_mib'] == 1792

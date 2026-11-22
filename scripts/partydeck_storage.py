@@ -318,6 +318,39 @@ def clean_game(base, rom, *, include_saves=False):
         return bool(targets)
 
 
+def reset_l4d2_config(base, rom):
+    """Move private L4D2 config files aside so the game can load defaults."""
+    from partydeck_bottles import ROOT as bottles_root
+    from partydeck_l4d2 import matches
+
+    base, rom = Path(base).absolute(), Path(rom)
+    if not rom.is_absolute() or rom.suffix.lower() not in ('.wine', '.pc', '.wsquashfs') or not matches(rom):
+        raise ValueError(tr('Chemin de jeu Windows Party invalide.'))
+    digest, name = identity(rom)
+    with maintenance_lock(base):
+        ensure_idle(base)
+        mounts = mounted_paths()
+        count = 0
+        for index in range(1, 5):
+            player = f'j{index}'
+            private = bottles_root/'players'/digest/player
+            legacy = SAVES/name/player
+            umu = base/'runtime'/digest/player/'umu-private'
+            roots = (private/'prefixes', private/'content/upper', legacy/'prefixes',
+                     legacy/'content/upper', umu/'materialized-prefixes', umu/'compatdata')
+            for root in roots:
+                for path, _ in files(root, mounts):
+                    parts = tuple(part.casefold() for part in path.relative_to(root).parts)
+                    if parts[-3:] != ('left4dead2', 'cfg', 'config.cfg') or any(
+                            part.endswith('.bak') for part in parts[:-3]):
+                        continue
+                    backup = Path(tempfile.mkdtemp(prefix='config.cfg.partydeck-', dir=path.parent))
+                    path.rename(backup/'config.cfg')
+                    print(tr('Configuration Left 4 Dead 2 sauvegardée dans {p0}.',p0=backup),flush=True)
+                    count += 1
+        return count
+
+
 def prepare_launch(base):
     """UI preflight stays responsive and reports refusal before leaving SDL."""
     base = Path(base)

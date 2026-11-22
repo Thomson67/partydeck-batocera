@@ -248,4 +248,23 @@ with tempfile.TemporaryDirectory() as directory:
         assert not storage.clean_game(base, rom, include_saves=True)
         assert all(path.exists() for path in kept)
 
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory)
+    rom = file(root/'Left 4 Dead 2.wsquashfs')
+    digest, name = storage.identity(rom)
+    private = root/'bottles/players'/digest
+    config = file(private/'j1/prefixes/TKG/game.wine/drive_c/game/left4dead2/cfg/config.cfg')
+    config.write_bytes(b'name2 "unnamed"\r\n')
+    legacy = file(root/'saves'/name/'j2/content/upper/game/Left4Dead2/CFG/CONFIG.CFG')
+    protected = [file(config.with_name('config_default.cfg')),file(config.with_name('autoexec.cfg')),
+                 file(root/'saves'/name/'j1/windows/550/remote/left4dead2/cfg/config.cfg'),
+                 file(root/'solo/left4dead2/cfg/config.cfg')]
+    (private/'j3').symlink_to(protected[-1].parents[2],target_is_directory=True)
+    with patch.object(storage,'SAVES',root/'saves'),patch.object(bottles,'ROOT',root/'bottles'):
+        assert storage.reset_l4d2_config(root,rom)==2
+        assert storage.reset_l4d2_config(root,rom)==0
+    assert not config.exists() and not legacy.exists()
+    assert next(config.parent.glob('config.cfg.partydeck-*/config.cfg')).read_bytes()==b'name2 "unnamed"\r\n'
+    assert all(path.exists() for path in protected)
+
 print('Stockage : budgets, préservation, verrous et nettoyage ciblé des bottles et sauvegardes vérifiés.')
