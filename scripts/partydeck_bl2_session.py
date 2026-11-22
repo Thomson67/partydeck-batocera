@@ -4,6 +4,8 @@ import json
 import os
 import time
 
+TRAVEL_ABSOLUTE = 0
+
 
 class Session:
     def __init__(self, config, now=time.monotonic, log=lambda message: None):
@@ -69,8 +71,10 @@ class Session:
             return
         self.next_tick=now+20
         self.attempts+=1
-        self.log(f'Automatic join attempt {self.attempts}: 127.0.0.1:{c["port"]}.')
-        pc.ConsoleCommand('open 127.0.0.1:'+str(c['port']),False)
+        address=f'127.0.0.1:{c["port"]}'
+        self.log(f'Automatic join attempt {self.attempts}: ClientTravel {address}.')
+        # Invoke the local player's network travel directly from the menu.
+        pc.ClientTravel(address,TRAVEL_ABSOLUTE,False)
 
 
 def load():
