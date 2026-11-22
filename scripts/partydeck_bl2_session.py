@@ -8,6 +8,7 @@ import time
 
 TRAVEL_ABSOLUTE = 0
 SERVER_BROWSER = 'WillowGame.LANServerBrowserGFxMovie:'
+TITLE_START = 'WillowGame.WillowGFxMoviePressStart:BeginStartupProcess'
 RESULT_FIELDS = ('Name','Game','GameSettings','SearchResult','GameSearchResult','OwningPlayerName',
                  'ServerName','HostName','ServerIndex','ResultIndex','SearchResultIndex','PingInMs')
 NATIVE_LAN_CALLS = (
@@ -137,6 +138,23 @@ class NativeTrace:
             self.log('Native LAN trace finished.')
 
 
+class LanAtTitle:
+    def __init__(self, get_pc, log):
+        self.get_pc=get_pc
+        self.log=log
+        self.requested=False
+
+    def start(self):
+        if self.requested:return
+        pc=self.get_pc()
+        if pc is None:return
+        # The title screen initializes the native front-end LAN session.
+        # Request the same LAN transition used by BL2's startup LAN mod.
+        self.requested=True
+        pc.AttemptNetworkTransition(1,2,True)
+        self.log('Native LAN mode requested at the title screen.')
+
+
 class Session:
     def __init__(self, config, now=time.monotonic, log=lambda message: None):
         self.config=config
@@ -209,6 +227,23 @@ def load():
 
     native_trace=None
     argument_hooks=[]
+    auto_lan=config.get('automatic') and config.get('auto_lan')
+    if auto_lan:
+        lan=LanAtTitle(get_pc,log)
+
+        @hook(TITLE_START)
+        def start_lan(obj,args,ret,func):
+            try:
+                lan.start()
+            except Exception as error:
+                log(f'Native LAN mode: {type(error).__name__}: {error}')
+
+        @hook('WillowGame.FrontendGFxMovie:Start')
+        def frontend(obj,args,ret,func):
+            members=[name for name in dir(obj) if re.search(r'lan|browser|findgame|matchmak',name,re.I)]
+            log('Front-end LAN methods: '+', '.join(members[:40]))
+
+        argument_hooks.extend((start_lan,frontend))
     if trace is not None and trace.with_name('bl2-native-trace.mode').is_file():
         from unrealsdk.hooks import Type, log_all_calls
         trigger=trace.with_name('bl2-native-trace.start')
@@ -231,8 +266,8 @@ def load():
             except OSError as error:
                 logging.error(f'Windows Party LAN argument trace: {error}')
 
-        argument_hooks=native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args,pre=Type.PRE,
-                                             on_results=native_join.select if native_join else None)
+        argument_hooks.extend(native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args,pre=Type.PRE,
+                                                    on_results=native_join.select if native_join else None))
 
         def record(enabled):
             log_all_calls(enabled)
@@ -256,6 +291,10 @@ def load():
         try:
             if native_trace is not None:
                 native_trace.tick()
+                return
+            if auto_lan:
+                # This experiment uses native browser selection only. Without
+                # the trace/host-name flags the join remains manual.
                 return
             pc=get_pc()
             if pc is not None and pc==obj:

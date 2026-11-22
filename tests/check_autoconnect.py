@@ -117,6 +117,13 @@ with tempfile.TemporaryDirectory() as folder:
     with patch.object(auto,'SDK_SHA256',hashlib.sha256(archive.read_bytes()).hexdigest()):
         auto.prepare_game(game,prefix,blplan)
         assert not (game/'Binaries/Win32/ddraw.dll').exists()
+        auto_lan_marker=player.parent/'bl2-auto-lan.mode'
+        auto_lan_marker.touch()
+        auto.prepare_game(game,prefix,blplan)
+        host_plan=json.loads((game/'sdk_mods/partydeck_session.json').read_text())
+        assert host_plan['automatic'] and host_plan['auto_lan']
+        assert (player/'autoconnect-sdk-ready').exists()
+        auto_lan_marker.unlink()
         auto.prepare_game(game,prefix,dict(blplan,host_player=2))
         assert (player/'autoconnect-sdk-ready').exists()
         assert (game/'Binaries/Win32/ddraw.dll').read_bytes()==b'LOADER'
@@ -240,6 +247,12 @@ with tempfile.TemporaryDirectory() as folder:
     native.select(browser)
     wrap.assert_called_once_with(click.func,ServerIndex=1)
     click.assert_called_once_with(wrapped)
+    local_pc=Mock()
+    get_pc=Mock(side_effect=[None,local_pc])
+    boot=bl2_session.LanAtTitle(get_pc,events.append)
+    for _ in range(3):boot.start()
+    local_pc.AttemptNetworkTransition.assert_called_once_with(1,2,True)
+    assert events[-1]=='Native LAN mode requested at the title screen.'
     trace.tick();assert toggles==[True,False]
 
 # Real UDP challenge and response, not a mocked readiness boolean.

@@ -237,8 +237,9 @@ def prepare_game(directory, prefix, plan):
     bl2=plan['kind']=='borderlands2'
     host=plan['index']+1==plan['host_player']
     if bl2:
-        client=plan['automatic'] and not host
-        if configure_bl2(directory,player,dict(plan,automatic=client),allowed):
+        auto_lan=plan['automatic'] and (player.parent/'bl2-auto-lan.mode').is_file()
+        use_sdk=plan['automatic'] and (not host or auto_lan)
+        if configure_bl2(directory,player,dict(plan,automatic=use_sdk,auto_lan=auto_lan),allowed):
             write_bytes(player/'autoconnect-sdk-ready',b'1')
         if not host or plan['port']==7777:
             return
