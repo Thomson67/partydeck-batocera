@@ -65,17 +65,25 @@ with tempfile.TemporaryDirectory() as folder:
     assert start_worker.call_args.args[0][-2:]==[str(player/'autoconnect-launch.json'),str(join)]
     assert 'connect ' not in join.read_text()
     assert f'exec {auto.SOURCE_JOIN}; wait 60' in (cfg/auto.SOURCE_POLL).read_text()
-    for ready in (True,False):
-        with patch.object(auto,'wait_host',return_value=ready) as wait:
+    for address in ('192.168.1.141','192.168.1.162',False):
+        with patch.object(auto,'wait_host',return_value=address) as wait:
             auto.source_join(source_client,join)
         wait.assert_called_once_with(source_client,timeout=300)
         assert join.read_text()==auto.SOURCE_STOP+(
-            'echo PARTYDECK_L4D2_CONNECT\nconnect 127.0.0.1:27015\n' if ready else '')
+            f'echo PARTYDECK_L4D2_CONNECT\nconnect {address}:27015\n' if address else '')
     original_host_cfg=cfg/'listenserver.cfg'
     original_host_cfg.write_text('sv_allow_lobby_connect_only 1\n')
     source_host=dict(source_client,index=0)
-    with patch.object(auto,'udp_bound',return_value=False):
-        auto.prepare_game(game,prefix,source_host)
+    for address in ('192.168.1.141','192.168.1.162'):
+        with patch.object(auto,'udp_bound',return_value=False), \
+             patch.object(auto,'lan_ipv4_address',return_value=address):
+            auto.prepare_game(game,prefix,source_host)
+        assert json.loads(auto.marker(source_client).read_text())['address']==address
+        with patch.object(auto,'source_ready',return_value=True) as probe:
+            assert auto.wait_host(source_client,timeout=1)==address
+        probe.assert_called_once_with(27015,address=address)
+    with patch.object(auto,'source_ready',side_effect=[False,True]) as probe:
+        assert auto.wait_host(source_client,timeout=1)=='127.0.0.1'
     assert original_host_cfg.read_text()=='sv_allow_lobby_connect_only 1\n'
     assert (cfg/auto.SOURCE_HOST).read_text().splitlines()[:3]==[
         'exec listenserver.cfg','sv_lan 1','sv_allow_lobby_connect_only 0']
@@ -334,7 +342,7 @@ with tempfile.TemporaryDirectory() as folder:
 
 # Real UDP challenge and response, not a mocked readiness boolean.
 with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as server:
-    server.bind(('127.0.0.1',0));server.settimeout(3)
+    server.bind(('127.0.0.2',0));server.settimeout(3)
     def respond():
         request,addr=server.recvfrom(2048)
         server.sendto(b'\xff\xff\xff\xffAabcd',addr)
@@ -342,7 +350,7 @@ with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as server:
         assert request.endswith(b'abcd')
         server.sendto(b'\xff\xff\xff\xffI\x11name\0map\0folder\0game\0'+struct.pack('<H',550),addr)
     thread=threading.Thread(target=respond);thread.start()
-    assert auto.source_ready(server.getsockname()[1],timeout=2)
+    assert auto.source_ready(server.getsockname()[1],timeout=2,address='127.0.0.2')
     thread.join(timeout=3);assert not thread.is_alive()
 
 print('Autoconnect: launch args, private batches/rollback, session tokens, Source query, SDK conflicts and BL2 readiness verified.')

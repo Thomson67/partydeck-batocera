@@ -114,7 +114,7 @@ def marker(plan):
     return Path(plan['player']).parent/f'j{plan["host_player"]}'/'autoconnect-host.json'
 
 
-def bl2_lan_address():
+def lan_ipv4_address():
     # Route lookup selects a source address without sending traffic.
     commands=(['route','get','1.1.1.1'],['addr','show','scope','global'])
     for command in commands:
@@ -129,6 +129,12 @@ def bl2_lan_address():
         candidates={address for address in candidates if not address.is_loopback and
                     not address.is_unspecified and not address.is_multicast}
         if len(candidates)==1:return str(candidates.pop())
+    return None
+
+
+def bl2_lan_address():
+    address=lan_ipv4_address()
+    if address:return address
     raise ValueError(tr('Borderlands 2 : adresse IPv4 LAN introuvable. Utilisez le LAN manuel.'))
 
 
@@ -200,11 +206,11 @@ def udp_bound(port):
     return False
 
 
-def source_ready(port, timeout=.4):
+def source_ready(port, timeout=.4, address='127.0.0.1'):
     """A2S_INFO, including the modern challenge round-trip; verify AppID 550."""
     try:
         with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
-            sock.settimeout(timeout);sock.connect(('127.0.0.1',port))
+            sock.settimeout(timeout);sock.connect((address,port))
             request=b'\xff\xff\xff\xffTSource Engine Query\0'
             sock.send(request);data=sock.recv(4096)
             if data[:5]==b'\xff\xff\xff\xffA' and len(data)==9:
@@ -223,10 +229,17 @@ def wait_host(plan, timeout=120):
     deadline=time.monotonic()+timeout
     print(tr('J{p0} : attente de la partie de J{p1}.',p0=plan['index']+1,p1=plan['host_player']),flush=True)
     while time.monotonic()<deadline:
-        try:started=json.loads(marker(plan).read_text()).get('token')==plan['token']
-        except (OSError,ValueError):started=False
-        if started and (source_ready(plan['port']) if plan['kind']=='l4d2' else udp_bound(plan['port'])):
-            return True
+        try:host=json.loads(marker(plan).read_text())
+        except (OSError,ValueError):host=None
+        if isinstance(host,dict) and host.get('token')==plan['token']:
+            if plan['kind']=='l4d2':
+                try:address=str(ipaddress.IPv4Address(host.get('address')))
+                except ValueError:address='127.0.0.1'
+                for candidate in dict.fromkeys((address,'127.0.0.1')):
+                    if source_ready(plan['port'],address=candidate):
+                        return candidate
+            elif udp_bound(plan['port']):
+                return True
         time.sleep(.5)
     print(tr('Hôte non prêt : connexion automatique abandonnée ; utilisez les menus du jeu.'),flush=True)
     return False
@@ -268,14 +281,15 @@ def arm_source_join(cfg, allowed, plan):
 
 
 def source_join(plan, join):
-    ready=wait_host(plan,timeout=300)
+    address=wait_host(plan,timeout=300)
     command=SOURCE_STOP
-    if ready:
-        command+=f'echo PARTYDECK_L4D2_CONNECT\nconnect 127.0.0.1:{plan["port"]}\n'
+    if address:
+        endpoint=f'{address}:{plan["port"]}'
+        command+=f'echo PARTYDECK_L4D2_CONNECT\nconnect {endpoint}\n'
     write_bytes(join,command.encode())
-    if ready:
-        print(tr('Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée.',
-                 p0=plan['index']+1),flush=True)
+    if address:
+        print(tr('Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée vers {p1}.',
+                 p0=plan['index']+1,p1=endpoint),flush=True)
 
 
 def restore_batches(directory, player, allowed):
@@ -334,9 +348,11 @@ def prepare_game(directory, prefix, plan):
         return
     if not bl2 and host:
         if udp_bound(plan['port']):raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
+        host_data=dict(token=plan['token'])
         if plan['kind']=='l4d2':
             configure_source_host(source_cfg(directory,allowed),allowed)
-        write_bytes(marker(plan),json.dumps(dict(token=plan['token'])).encode())
+            host_data['address']=lan_ipv4_address() or '127.0.0.1'
+        write_bytes(marker(plan),json.dumps(host_data).encode())
     elif plan['kind']=='l4d2':
         arm_source_join(source_cfg(directory,allowed),allowed,plan)
     elif not bl2 and not wait_host(plan):

@@ -115,7 +115,7 @@ EN = {
     '{p0}  Lancer': '{p0}  Start',
     '{p0}  Retour': '{p0}  Back',
     'Mode de campagne Left 4 Dead 2 invalide.': 'Invalid Left 4 Dead 2 campaign mode.',
-    'Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée.': 'Left 4 Dead 2 P{p0}: local game ready, join requested.',
+    'Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée vers {p1}.': 'Left 4 Dead 2 P{p0}: local game ready, join requested at {p1}.',
     'Connexion automatique à l’hôte (SDK privé)': 'Automatically join the host (private SDK)',
     'Choisir dans le jeu': 'Choose in game',
     'Campagne Left 4 Dead 2 invalide.': 'Invalid Left 4 Dead 2 campaign.',
