@@ -16,6 +16,7 @@ from unittest.mock import Mock,patch
 import zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import partydeck_autoconnect as auto
+import partydeck_bl2_session as bl2_session
 from partydeck_bl2_session import Session
 from partydeck_profiles import defaults,save_profile
 from partydeck_i18n import EN
@@ -121,6 +122,30 @@ with tempfile.TemporaryDirectory() as folder:
     path=player/'bl2-ready.json';clock=[0]
     cfg=dict(blplan,host_marker=str(path));host=Session(cfg,now=lambda:clock[0]);pc=Mock()
     host.tick(pc,SimpleNamespace(NetMode=0));assert not path.exists()
+
+    # Willow2 auto_enable restores saved settings only. A fresh PartyDeck
+    # session must explicitly activate the registered local-player hook.
+    module_path=game/'sdk_mods/partydeck_session/__init__.py'
+    config_path=module_path.parent.parent/'partydeck_session.json'
+    config_path.write_text(json.dumps(cfg))
+    mod=Mock()
+    local_pc=Mock(WorldInfo=SimpleNamespace(NetMode=2))
+    hook=Mock(side_effect=lambda path:lambda callback:callback)
+    sdk=SimpleNamespace(build_mod=Mock(return_value=mod),get_pc=lambda:local_pc,hook=hook)
+    with patch.object(bl2_session,'__file__',str(module_path)),patch.dict(sys.modules,{
+            'mods_base':sdk,'unrealsdk':SimpleNamespace(logging=Mock())}):
+        bl2_session.load()
+        mod.enable.assert_called_once_with()
+        hook.assert_called_once_with('Engine.PlayerController:PlayerTick')
+        callback,=sdk.build_mod.call_args.kwargs['hooks']
+        callback(Mock(),None,None,None)
+        assert not path.exists()
+        callback(local_pc,None,None,None)
+        assert path.exists()
+        mod.reset_mock()
+        config_path.write_text('{"automatic":false}')
+        bl2_session.load()
+        mod.enable.assert_not_called()
     clock[0]=1;host.tick(pc,SimpleNamespace(NetMode=2))
     assert json.loads(path.read_text())==dict(token='a'*32,ready=True)
     client=Session(dict(cfg,index=1),now=lambda:clock[0]);client_pc=Mock()

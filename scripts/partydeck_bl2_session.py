@@ -56,33 +56,36 @@ class Session:
 
 
 def load():
-    from mods_base import ENGINE, build_mod, hook
+    from mods_base import build_mod, get_pc, hook
+    from unrealsdk import logging
     config_path=Path(__file__).parent.parent/'partydeck_session.json'
     try:config=json.loads(config_path.read_text())
     except (OSError,ValueError):config={}
     session=Session(config)
 
-    def update():
+    @hook('Engine.PlayerController:PlayerTick')
+    def tick(obj,args,ret,func):
         try:
-            players=ENGINE.GamePlayers
-            if players and players[0].Actor:
-                pc=players[0].Actor
+            pc=get_pc()
+            if pc is not None and pc==obj:
                 session.tick(pc,pc.WorldInfo)
+        except IndexError:
+            # The SDK's player list can still be empty on the first frames.
+            pass
         except Exception as error:
             # SDK failures must never abort the game or spin on every frame.
-            session.next_tick=session.now()+10
-            print('Windows Party / Borderlands 2:',error)
+            if session.now()>=session.next_tick:
+                session.next_tick=session.now()+10
+                logging.error(f'Windows Party / Borderlands 2: {error}')
 
-    @hook('WillowGame.WillowPlayerController.PlayerTick')
-    def tick(obj,args,ret,func):
-        update()
-
-    @hook('WillowGame.WillowGFxMoviePressStart.BeginStartupProcess')
-    def startup(obj,args,ret,func):
-        update()
-
-    return build_mod(name='Windows Party LAN',version='0.1',author='Windows Party',
-                     hooks=[startup,tick],auto_enable=True)
+    mod=build_mod(name='Windows Party LAN',version='0.2',author='Windows Party',
+                  hooks=[tick],auto_enable=False)
+    # The SDK's auto_enable only restores an earlier enabled state. The
+    # PartyDeck session plan, rather than an SDK preference, owns activation.
+    if config.get('automatic'):
+        mod.enable()
+        logging.info(f'Windows Party LAN: J{config["index"]+1}, host J{config["host_player"]}')
+    return mod
 
 
 if os.name=='nt':
