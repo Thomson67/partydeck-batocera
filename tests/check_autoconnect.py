@@ -158,7 +158,8 @@ with tempfile.TemporaryDirectory() as folder:
         mod.enable.assert_not_called()
     clock[0]=1;host.tick(pc,SimpleNamespace(NetMode=2))
     assert json.loads(path.read_text())==dict(token='a'*32,ready=True)
-    client=Session(dict(cfg,index=1),now=lambda:clock[0]);client_pc=Mock()
+    events=[]
+    client=Session(dict(cfg,index=1),now=lambda:clock[0],log=events.append);client_pc=Mock()
     client.tick(client_pc,SimpleNamespace(NetMode=0))
     client_pc.ConsoleCommand.assert_called_once_with('open 127.0.0.1:7777',False)
     # Joining and leaving can both happen inside the 20-second retry delay.
@@ -166,6 +167,9 @@ with tempfile.TemporaryDirectory() as folder:
     clock[0]=2;client.tick(client_pc,SimpleNamespace(NetMode=3))
     clock[0]=21;client.tick(client_pc,SimpleNamespace(NetMode=0))
     assert client_pc.ConsoleCommand.call_count==1 # No forced rejoin after leaving.
+    assert events==['LAN transition requested.', 'Host ready signal received.',
+                    'Automatic join attempt 1: 127.0.0.1:7777.',
+                    'Entered client mode.', 'Left client mode.']
     host.tick(pc,SimpleNamespace(NetMode=0));assert not path.exists()
 
 # Real UDP challenge and response, not a mocked readiness boolean.
