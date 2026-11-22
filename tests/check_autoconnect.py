@@ -182,6 +182,17 @@ with tempfile.TemporaryDirectory() as folder:
                     'Automatic join attempt 1: ClientTravel 192.168.1.141:7777.',
                     'Entered client mode.', 'Left client mode.']
     host.close();assert not path.exists()
+    trigger=player/'bl2-native-trace.start'
+    toggles=[]
+    trace=bl2_session.NativeTrace(trigger,toggles.append,events.append,now=lambda:clock[0])
+    trace.tick();assert toggles==[]
+    trigger.touch()
+    trace.tick();assert toggles==[True] and not trigger.exists()
+    clock[0]+=14
+    trace.tick();assert toggles==[True]
+    clock[0]+=1
+    trace.tick();assert toggles==[True,False]
+    trace.tick();assert toggles==[True,False]
 
 # Real UDP challenge and response, not a mocked readiness boolean.
 with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as server:

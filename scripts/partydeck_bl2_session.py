@@ -3,9 +3,34 @@ from pathlib import Path
 from ipaddress import IPv4Address
 import json
 import os
+import re
 import time
 
 TRAVEL_ABSOLUTE = 0
+
+
+class NativeTrace:
+    """Record one explicitly requested pass through the native LAN menus."""
+    def __init__(self, trigger, toggle, log, now=time.monotonic):
+        self.trigger=trigger
+        self.toggle=toggle
+        self.log=log
+        self.now=now
+        self.deadline=None
+        self.done=False
+
+    def tick(self):
+        if self.done:return
+        if self.deadline is None:
+            if not self.trigger.exists():return
+            self.trigger.unlink()
+            self.toggle(True)
+            self.deadline=self.now()+15
+            self.log('Native LAN trace started (15 seconds).')
+        elif self.now()>=self.deadline:
+            self.toggle(False)
+            self.done=True
+            self.log('Native LAN trace finished.')
 
 
 class Session:
@@ -78,6 +103,28 @@ def load():
         except OSError as error:
             logging.error(f'Windows Party LAN log: {error}')
 
+    native_trace=None
+    if trace is not None and trace.with_name('bl2-native-trace.mode').is_file():
+        from unrealsdk.hooks import log_all_calls
+        trigger=trace.with_name('bl2-native-trace.start')
+        trigger.unlink(missing_ok=True)
+        native_log=config_path.parent.parent/'Binaries'/'Win32'/'Plugins'/'unrealsdk.calls.tsv'
+        summary=trace.with_name('bl2-native-lan.log')
+        summary.unlink(missing_ok=True)
+
+        def record(enabled):
+            log_all_calls(enabled)
+            if enabled:return
+            relevant=re.compile(r'find.*(game|session)|join|matchmak|lanbeacon|connect|travel',re.I)
+            with native_log.open(errors='replace') as source, summary.open('w',encoding='utf-8') as out:
+                seen=set()
+                for line in source:
+                    fields=line.split('\t',2)
+                    if len(fields)<2 or not relevant.search(fields[1]) or fields[1] in seen:continue
+                    seen.add(fields[1])
+                    print(fields[1],file=out)
+
+        native_trace=NativeTrace(trigger,record,log)
     session=Session(config,log=log)
     next_error=0
 
@@ -85,6 +132,9 @@ def load():
     def tick(obj,args,ret,func):
         nonlocal next_error
         try:
+            if native_trace is not None:
+                native_trace.tick()
+                return
             pc=get_pc()
             if pc is not None and pc==obj:
                 session.tick(pc,pc.WorldInfo)
@@ -106,6 +156,8 @@ def load():
         log(f'J{config["index"]+1}; host J{config["host_player"]}; port {config["port"]}.',reset=True)
         mod.enable()
         log('LAN module enabled.')
+        if native_trace is not None:
+            log('Native LAN trace armed. Automatic join disabled for this launch.')
         logging.info(f'Windows Party LAN: J{config["index"]+1}, host J{config["host_player"]}')
     return mod
 
