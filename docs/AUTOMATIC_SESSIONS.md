@@ -16,7 +16,7 @@ la session ou un port UDP déjà occupé provoque un refus avant le lancement.
 | --- | --- | --- |
 | Borderlands 2 | Joueurs → Connexion automatique à l’hôte (SDK privé) | Sélectionnez Réseau local sur les deux jeux, puis faites Continuer uniquement sur l’hôte. PartyDeck détecte son port UDP avant de connecter les clients à l’adresse LAN du PC. |
 | SM64CoopDX | Options → Héberger et rejoindre automatiquement | L'hôte démarre un serveur avec la sauvegarde choisie dans le profil ; les clients attendent son ouverture de port, puis démarrent en connexion directe. |
-| Left 4 Dead 2 | Options → Héberger et rejoindre automatiquement | Avec « Choisir dans le jeu », l'hôte lance une campagne depuis les menus. Avec une campagne sélectionnée dans le profil, sa première carte est lancée automatiquement en coop. Les clients attendent une réponse A2S_INFO du serveur (AppID 550, carte chargée) puis rejoignent. |
+| Left 4 Dead 2 | Options → Héberger et rejoindre automatiquement | Avec « Choisir dans le jeu », l'hôte choisit le mode et le type de serveur dans le salon. Avec une campagne sélectionnée dans le profil, sa première carte est lancée en Coop, Réalisme ou Versus selon le mode choisi. Les clients démarrent au menu et rejoignent après une réponse A2S_INFO du serveur (AppID 550, carte chargée). |
 | SoH / Anchor | Réseau → Connexion automatique Anchor | Fonction existante : chaque joueur rejoint le serveur et la salle communs. Il faut charger les sauvegardes compatibles. |
 | Hollow Knight | Réseau → Héberger et rejoindre automatiquement | Fonction existante des compagnons HKMP et HKMultiplayer. |
 | Most Wanted 2005 | Réseau → LAN privé et raccourci LB+RB | Configuration réseau et saisie/validation du nom existantes. Création des serveurs et du salon encore manuelle. Le handler Nucleus v10 demande lui aussi ces opérations manuelles ; aucun script de touches à délai fixe n'est ajouté. |
@@ -24,6 +24,13 @@ la session ou un port UDP déjà occupé provoque un refus avant le lancement.
 Pour SM64CoopDX, la sauvegarde 1 reprend la valeur initiale du modèle commun.
 Le choix 1–4 est explicite dans le profil. Les sauvegardes des clients restent
 individuelles ; le fichier de l'hôte n'est pas copié sur leurs profils.
+
+En LAN automatique, Left 4 Dead 2 ouvre un écran de préparation à la manette
+avant de lancer les joueurs. Les modes Campagne, Mutation, Réalisme, Versus,
+Versus Réalisme, Survie, Survie versus et Collecte proposent une campagne ou
+une sélection de cartes compatibles. La difficulté est réglable en Campagne
+et Réalisme. Les choix s'appliquent à la session en cours. « Choisir dans le
+jeu » ouvre le salon pour les cartes et variantes supplémentaires.
 
 ## Borderlands 2 : SDK privé
 
@@ -62,12 +69,14 @@ Les batchs ne sont modifiés que dans la vue privée. Leur état précédent est
 restauré au changement de mode et avant de réappliquer des arguments, sauf si
 le fichier a été modifié entre-temps. Les arguments ne s'accumulent pas.
 
-SM64CoopDX et Left 4 Dead 2 attendent jusqu'à 120 secondes l'hôte. Un batch
+SM64CoopDX attend jusqu'à 120 secondes l'hôte. Un batch
 peut alors démarrer sans la commande de connexion ; une commande directe
 conserve son argument de connexion, annulable dans le jeu. La vérification
 de port SM64 est une vérification d'ouverture, pas une preuve de handshake
-complet. Left 4 Dead 2 utilise la réponse A2S de son serveur, y compris le
-challenge. Ces jeux gèrent ensuite eux-mêmes leurs échanges réseau.
+complet. Left 4 Dead 2 lance le client tout de suite et attend en parallèle
+jusqu'à cinq minutes la réponse A2S du serveur, y compris le challenge.
+Le client lit la commande de connexion dans un fichier CFG privé. Si l'hôte
+ne répond pas à temps, le client reste disponible au menu.
 
 ## Vérification sur Batocera
 
@@ -122,9 +131,10 @@ test requirement. No character/save is rewritten by the companion.
 SM64CoopDX uses native `--server` / `--client` arguments and the selected host
 save slot (1–4). Clients wait for the host port to open. L4D2 uses native Source
 LAN settings and either the host's menu-selected campaign or the profile's
-selected starting map in co-op mode. Clients wait for a valid AppID 550 A2S
-response before connecting. Host waits are bounded at 120 seconds; direct EXE
-launches may retain their connect argument after the wait expires.
+selected starting map in Co-op, Realism or Versus mode. L4D2 clients open
+immediately and join when the host provides a valid AppID 550 A2S response.
+They remain at the menu if the host is not ready within five minutes.
+The pre-launch wait in SM64CoopDX remains bounded at 120 seconds.
 
 Known direct commands and referenced entry batches are supported. Unknown
 complex/nested launchers remain manual; existing network arguments are not

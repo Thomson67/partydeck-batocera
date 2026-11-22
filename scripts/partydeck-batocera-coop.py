@@ -4,6 +4,7 @@ import argparse
 import ctypes as C
 from dataclasses import dataclass
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -582,7 +583,7 @@ def run_compositor(command):
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
-                 session_token=None,player_count=1):
+                 session_token=None,player_count=1,l4d2_launch=None):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -620,6 +621,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_SESSION_TOKEN',None)
     environment['PARTYDECK_SESSION_PLAYERS']=str(player_count)
     if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token
+    environment.pop('PARTYDECK_L4D2_LAUNCH',None)
+    if l4d2_launch is not None:environment['PARTYDECK_L4D2_LAUNCH']=json.dumps(l4d2_launch)
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
@@ -761,6 +764,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     bl2_lan=None
+    l4d2_launch=None
     if party and len(players)>1:
         from partydeck_autoconnect import prepare_sdk, options as session_options, ADAPTERS, udp_bound, bl2_lan_address, BL2Host
         kind=ADAPTERS.get((profile or {}).get('adapter'))
@@ -772,6 +776,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
             if kind=='borderlands2' and automatic['automatic']:
                 bl2_lan=(automatic['host_player'],automatic['port'],bl2_lan_address())
+            if kind=='l4d2' and automatic['automatic']:
+                from partydeck_couch import choose_l4d2_session
+                l4d2_launch=choose_l4d2_session(profile[kind],len(players))
+                if l4d2_launch is None:
+                    return 0
         prepare_sdk(base,profile)
     print(tr('Écran demandé : {p0} · zone active : {p1}',p0=desktop['output'],p1=monitor),flush=True)
     print(f"Joueurs : {len(players)} | demande : {count} | entrées : {input_mode} | "
@@ -838,7 +847,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                           window_classes[index - 1],
                                           shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
                                           network=network,network_index=index-1,
-                                          session_token=session_token,player_count=len(players)))
+                                          session_token=session_token,player_count=len(players),
+                                          l4d2_launch=l4d2_launch))
             states.append(state)
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)

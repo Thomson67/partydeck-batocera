@@ -44,6 +44,32 @@ with tempfile.TemporaryDirectory() as folder:
     assert auto.game_arguments(other)==['--client','127.0.0.1','7777']
     assert '+map' not in auto.game_arguments(dict(plan,kind='l4d2',campaign='menu'))
     assert auto.game_arguments(dict(plan,kind='l4d2',campaign='c1m1_hotel'))[-3:]==['+map','c1m1_hotel','coop']
+    startup=dict(plan,kind='l4d2',campaign='c1m1_hotel',difficulty='hard')
+    assert auto.game_arguments(startup)[-5:]==['+z_difficulty','hard','+map','c1m1_hotel','coop']
+    assert '+z_difficulty' not in auto.game_arguments(dict(startup,campaign_mode='versus'))
+    assert '+z_difficulty' not in auto.game_arguments(dict(startup,campaign='menu'))
+    for mode in ('realism','versus'):
+        campaign=dict(plan,kind='l4d2',campaign='c1m1_hotel',campaign_mode=mode)
+        assert auto.game_arguments(campaign)[-3:]==['+map','c1m1_hotel',mode]
+        assert '+map' not in auto.game_arguments(dict(campaign,campaign='menu'))
+        assert '+map' not in auto.game_arguments(dict(campaign,index=1))
+    source_client=dict(plan,kind='l4d2',index=1,direct=True,port=27015)
+    for command in ('left4dead2.exe -novid','start "" "left4dead2.exe" -novid'):
+        out,found=auto.command_arguments(command,source_client)
+        assert found and '+connect' not in out and out.endswith('+exec '+auto.SOURCE_POLL)
+    with patch.object(auto,'wait_host',side_effect=AssertionError('client launch blocked')), \
+         patch.object(auto.subprocess,'Popen') as start_worker:
+        auto.prepare_game(game,prefix,source_client)
+    cfg=game/'left4dead2/cfg'
+    join=cfg/auto.SOURCE_JOIN
+    assert start_worker.call_args.args[0][-2:]==[str(player/'autoconnect-launch.json'),str(join)]
+    assert 'connect ' not in join.read_text()
+    assert f'exec {auto.SOURCE_JOIN}; wait 60' in (cfg/auto.SOURCE_POLL).read_text()
+    for ready in (True,False):
+        with patch.object(auto,'wait_host',return_value=ready) as wait:
+            auto.source_join(source_client,join)
+        wait.assert_called_once_with(source_client,timeout=300)
+        assert join.read_text()==auto.SOURCE_STOP+('connect 127.0.0.1:27015\n' if ready else '')
     command='"Borderlands2.exe"'
     for index in (0,1):
         assert auto.command_arguments(command,dict(plan,kind='borderlands2',index=index))==(command,True)
@@ -104,6 +130,22 @@ with tempfile.TemporaryDirectory() as folder:
     result=subprocess.run(['bash',str(replacement)],env=dict(os.environ,**env),capture_output=True,text=True,timeout=10)
     assert result.returncode==0,(result.stdout,result.stderr)
     assert '--server' not in result.stdout
+
+    rom=root/'Left 4 Dead 2.wsquashfs';rom.touch()
+    profile=defaults(rom)
+    profile['l4d2'].update(campaign='c1m1_hotel',campaign_mode='versus')
+    with patch('partydeck_profiles.profile_path',return_value=rom),patch('partydeck_profiles.read_profile',return_value=profile), \
+         patch('shutil.which',return_value=str(native)),patch.object(auto.subprocess,'run'),patch.dict(os.environ,env):
+        auto.install_hook(scripts,rom,player)
+    assert json.loads((player/'autoconnect-launch.json').read_text())['campaign_mode']=='versus'
+    chosen=dict(campaign='c2m1_highway',campaign_mode='realism',difficulty='impossible')
+    with patch('partydeck_profiles.profile_path',return_value=rom),patch('partydeck_profiles.read_profile',return_value=profile), \
+         patch('shutil.which',return_value=str(native)),patch.object(auto.subprocess,'run'), \
+         patch.dict(os.environ,dict(env,PARTYDECK_L4D2_LAUNCH=json.dumps(chosen))):
+        auto.install_hook(scripts,rom,player)
+    loaded=json.loads((player/'autoconnect-launch.json').read_text())
+    assert {key:loaded[key] for key in chosen}==chosen
+    assert profile['l4d2']['campaign']=='c1m1_hotel'
 
     # Pinned SDK fixture: files stay under the player's game view. Never
     # overwrite an existing loader or change the source SDK zip.

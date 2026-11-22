@@ -20,6 +20,9 @@ EXECUTABLES = {'sm64coopdx': ('sm64coopdx.exe',), 'l4d2': ('left4dead2.exe',),
                'borderlands2': ('borderlands2.exe',)}
 SDK_SHA256 = 'e1862ddb282cf845369c9ca1ca70ac180d6104cce25d8a133557fc74e157b4c7'
 SDK_URL = 'https://github.com/bl-sdk/willow2-mod-manager/releases/download/v3.8/willow2-sdk.zip'
+SOURCE_POLL = 'partydeck_l4d2_poll.cfg'
+SOURCE_JOIN = 'partydeck_l4d2_join.cfg'
+SOURCE_STOP = 'alias partydeck_l4d2_tick ""\n'
 
 
 def context(player):
@@ -74,8 +77,12 @@ def game_arguments(plan):
         result=['-port',port if host else str(0),'+sv_lan','1','+sv_allow_lobby_connect_only','0']
         if host:
             campaign=plan.get('campaign','menu')
-            if campaign!='menu':result+=['+map',campaign,'coop']
-        else:result+=['+connect','127.0.0.1:'+port]
+            if campaign!='menu':
+                mode=plan.get('campaign_mode','coop')
+                if mode in ('coop','realism') and plan.get('difficulty'):
+                    result+=['+z_difficulty',plan['difficulty']]
+                result+=['+map',campaign,mode]
+        else:result+=['+exec',SOURCE_POLL]
         return result
     return [f'-port={port}'] if host and port!='7777' else []
 
@@ -218,6 +225,39 @@ def wait_host(plan, timeout=120):
     return False
 
 
+def arm_source_join(directory, allowed, plan):
+    game=directory if directory.name.casefold()=='left4dead2' else child(directory,'left4dead2')
+    cfg=safe_path(child(game,'cfg'),allowed)
+    poll=safe_path(cfg/SOURCE_POLL,allowed)
+    join=safe_path(cfg/SOURCE_JOIN,allowed)
+    # Keep the command queue bounded even if the engine ignores wait.
+    tick='partydeck_l4d2_tick'
+    ten='partydeck_l4d2_ten'
+    hundred='partydeck_l4d2_hundred'
+    script=[
+        f'alias {tick} "exec {SOURCE_JOIN}; wait 60"',
+        f'alias {ten} "'+'; '.join([tick]*10)+'"',
+        f'alias {hundred} "'+'; '.join([ten]*10)+'"',
+        *([hundred]*20),
+    ]
+    write_bytes(join,b'// Waiting for the LAN host.\n')
+    write_bytes(poll,('\n'.join(script)+'\n').encode())
+    payload=Path(plan['player'])/'autoconnect-launch.json'
+    subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'_source_join',str(payload),str(join)],
+                     stdin=subprocess.DEVNULL)
+
+
+def source_join(plan, join):
+    ready=wait_host(plan,timeout=300)
+    command=SOURCE_STOP
+    if ready:
+        command+=f'connect 127.0.0.1:{plan["port"]}\n'
+    write_bytes(join,command.encode())
+    if ready:
+        print(tr('Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée.',
+                 p0=plan['index']+1),flush=True)
+
+
 def restore_batches(directory, player, allowed):
     manifest=player/'autoconnect-batches.json'
     if not manifest.exists():return
@@ -275,6 +315,8 @@ def prepare_game(directory, prefix, plan):
     if not bl2 and host:
         if udp_bound(plan['port']):raise ValueError(tr('Le port de la partie est déjà occupé. Changez le port dans le profil.'))
         write_bytes(marker(plan),json.dumps(dict(token=plan['token'])).encode())
+    elif plan['kind']=='l4d2':
+        arm_source_join(directory,allowed,plan)
     elif not bl2 and not wait_host(plan):
         # A batch can fall back cleanly; direct EXE arguments already include
         # connect, which the game can cancel back to its main menu.
@@ -349,6 +391,10 @@ def install_hook(base, rom, player):
         session=dict(token='0'*32,count=1,player=str(player))
     plan=dict(session,**options(settings,kind),kind=kind,base=str(base),
         index=int(player.name.removeprefix('j'))-1,campaign=settings.get('campaign','menu'))
+    if kind=='l4d2':
+        from partydeck_l4d2 import launch_options
+        startup=os.environ.get('PARTYDECK_L4D2_LAUNCH')
+        plan.update(launch_options(json.loads(startup) if startup and plan['automatic'] else settings))
     if session['count']==1:plan['automatic']=False
     if plan['automatic'] and plan['host_player']>plan['count']:raise ValueError(tr('Le joueur hôte choisi ne participe pas à cette session.'))
     payload=player/'autoconnect-launch.json';atomic_write(payload,json.dumps(plan))
@@ -398,6 +444,7 @@ if __name__=='__main__':
             result,direct=command_arguments(args[0],plan)
             plan.update(direct=direct,original_command=args[0]);write_bytes(path,json.dumps(plan).encode());print(result)
         elif action=='_prepare':prepare_game(Path(args[0]),Path(args[1]),plan)
+        elif action=='_source_join':source_join(plan,Path(args[0]))
         else:raise ValueError('unknown action')
     except (OSError,ValueError,KeyError,TypeError) as error:
         print(str(error),file=sys.stderr);raise SystemExit(1)

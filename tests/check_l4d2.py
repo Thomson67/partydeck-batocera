@@ -37,6 +37,19 @@ for name in ('','A\nB','A#B','A;B','é'*32):
 
 assert l4d2.validate(dict(names=['A','B','C','D']))['language']=='keep'
 assert l4d2.validate(dict(names=['A','B','C','D']))['gamepad'] is True
+assert l4d2.validate(dict(names=['A','B','C','D']))['campaign_mode']=='coop'
+assert l4d2.validate(dict(l4d2.defaults(),campaign_mode='versus'))['campaign_mode']=='versus'
+for mode in l4d2.SOURCE_MODES:
+    map_id=l4d2.mode_maps(mode)[0]
+    assert l4d2.launch_options(dict(campaign_mode=mode,campaign=map_id))['campaign']==map_id
+for invalid in (dict(campaign_mode='survival',campaign='c1m1_hotel'),
+                dict(campaign_mode='coop',campaign='c1m4_atrium'),
+                dict(campaign_mode='mutation',campaign='c1m1_hotel')):
+    try:l4d2.launch_options(invalid);raise AssertionError('incompatible mode or map accepted')
+    except ValueError:pass
+for mode in ('unknown',[],1):
+    try:l4d2.validate(dict(l4d2.defaults(),campaign_mode=mode));raise AssertionError('invalid campaign mode accepted')
+    except ValueError:pass
 for changes in (dict(language='bogus'),dict(language=[]),dict(gamepad=1)):
     try:l4d2.validate(dict(l4d2.defaults(),**changes));raise AssertionError('invalid options accepted')
     except ValueError:pass
@@ -319,6 +332,29 @@ with tempfile.TemporaryDirectory() as folder:
     for lang in ('fr','en'):
         set_language(lang)
         for tab in (1,2):app.tab=tab;app.draw()
-    app.pg.quit()
+    pg=app.pg
+    from partydeck_couch import l4d2_session_screen
+    def press(key):
+        return [pg.event.Event(pg.KEYDOWN,key=key)]
+    for language in ('fr','en'):
+        set_language(language)
+        with patch.object(pg.event,'get',side_effect=[
+            press(pg.K_RIGHT),press(pg.K_DOWN),press(pg.K_RIGHT),
+            press(pg.K_DOWN),press(pg.K_RIGHT),press(pg.K_F5),
+        ]):
+            choices=l4d2_session_screen(pg,app.screen,l4d2.defaults(),2)
+        assert choices==dict(campaign='c2m1_highway',campaign_mode='coop',difficulty='hard')
+    with patch.object(pg.event,'get',side_effect=[
+        press(pg.K_RIGHT),press(pg.K_RIGHT),press(pg.K_DOWN),press(pg.K_RIGHT),press(pg.K_F5),
+    ]):
+        choices=l4d2_session_screen(pg,app.screen,l4d2.defaults(),2)
+    assert choices==dict(campaign='c1m1_hotel',campaign_mode='mutation3',difficulty=None)
+    for mode,steps in (('mutation12',5),('survival',6),('mutation15',7),('scavenge',8)):
+        with patch.object(pg.event,'get',side_effect=[*[press(pg.K_RIGHT) for _ in range(steps)],press(pg.K_F5)]):
+            choices=l4d2_session_screen(pg,app.screen,l4d2.defaults(),2)
+        assert choices==dict(campaign=l4d2.mode_maps(mode)[0],campaign_mode=mode,difficulty=None)
+    with patch.object(pg.event,'get',return_value=press(pg.K_ESCAPE)):
+        assert l4d2_session_screen(pg,app.screen,l4d2.defaults(),2) is None
+    pg.quit()
 
 print('Left 4 Dead 2 : identités J1–J4, langue, manette, sans bordure/résolution, fichiers privés, hook et UI vérifiés.')

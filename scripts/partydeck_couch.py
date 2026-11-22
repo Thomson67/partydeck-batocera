@@ -21,7 +21,10 @@ from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LAB
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
 from partydeck_hkmp import defaults as hkmp_defaults, matches as matches_hkmp
 from partydeck_hkmultiplayer import defaults as multi_defaults, matches as matches_multi, HOST_CHOICES
-from partydeck_l4d2 import defaults as l4d2_defaults, matches as matches_l4d2, LANGUAGES as L4D2_LANGUAGES, CAMPAIGNS
+from partydeck_l4d2 import (defaults as l4d2_defaults, matches as matches_l4d2,
+                            LANGUAGES as L4D2_LANGUAGES, CAMPAIGNS, CAMPAIGN_MODES, DIFFICULTIES,
+                            ARENAS, ARENA_MODES, MUTATIONS, SESSION_MODES, mode_maps,
+                            launch_options as l4d2_launch_options)
 from partydeck_sm64coopdx import (defaults as sm64_defaults, matches as matches_sm64, LANGUAGES as SM64_LANGUAGES,
                                   LANGUAGE_LABELS, DRAW_LABELS, BASE_VOLUMES as SM64_VOLUMES,
                                   VOLUME_FIELDS as SM64_VOLUME_FIELDS)
@@ -131,7 +134,8 @@ def fields(tab, adapter='standard'):
                     ('l4d2.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
                     ('l4d2.host_player',tr('Joueur hôte'),[1,2,3,4]),
                     ('l4d2.port',tr('Port de la partie'),None),
-                    ('l4d2.campaign',tr('Campagne au lancement'),list(CAMPAIGNS))]
+                    ('l4d2.campaign',tr('Campagne au lancement'),list(CAMPAIGNS)),
+                    ('l4d2.campaign_mode',tr('Mode de la campagne au lancement'),list(CAMPAIGN_MODES))]
         return [(f'l4d2.names.{i}',tr('J{p0} · {p1}',p0=i+1,p1=tr('Nom')),None) for i in range(4)]
     if adapter == 'sm64coopdx':
         if tab == 1:
@@ -216,7 +220,11 @@ def label_value(key, value):
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental'),'hollowknight-hkmp':'Hollow Knight / HKMP','hollowknight-hkmultiplayer':'Hollow Knight / HKMultiplayer'}.get(value, value)
-    if key == 'l4d2.campaign':return tr(CAMPAIGNS[value])
+    if key == 'l4d2.campaign':
+        title=tr(CAMPAIGNS[value])
+        return title if value=='menu' else f'{value[1:value.index("m")]} · {title}'
+    if key == 'l4d2.campaign_mode':
+        return tr(CAMPAIGN_MODES[value])
     if key == 'hkmultiplayer.world':
         return tr('Dernier monde joué' if value=='latest' else 'Monde portant ce nom')
     if key.startswith('hkmultiplayer.host.') and key.split('.')[-1] in ('revive','sharedMap','stagTogether','showNames','showPartnerHealth'):
@@ -510,6 +518,136 @@ class Pads:
                 self.timers[action] = now + .12
         self.previous = held
         return actions
+
+
+def choose_l4d2_session(settings, count):
+    """Collect one session's choices before any Wine instances are started."""
+    try:
+        import pygame as pg
+    except ImportError:
+        print(tr('Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.'),flush=True)
+        return l4d2_launch_options(settings)
+    try:
+        pg.display.init()
+        pg.font.init()
+        pg.joystick.init()
+        screen=pg.display.set_mode((0,0),pg.FULLSCREEN)
+    except pg.error:
+        pg.quit()
+        print(tr('Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.'),flush=True)
+        return l4d2_launch_options(settings)
+
+    try:
+        return l4d2_session_screen(pg,screen,settings,count)
+    finally:
+        pg.quit()
+
+
+def l4d2_session_screen(pg, screen, settings, count):
+    pg.display.set_caption('Left 4 Dead 2 · Windows Party')
+    pg.mouse.set_visible(False)
+    canvas=pg.Surface((1080,660))
+    clock=pg.time.Clock()
+    pads=Pads(pg)
+    pg.event.pump()
+    pads.poll()  # Ignore buttons still held from the EmulationStation launch.
+    family=pads.family if pads.devices else 'keyboard'
+    fonts={size:pg.font.SysFont('DejaVu Sans',size,bold=size>=28) for size in (20,23,28,52)}
+    orange=(255,177,97)
+    white=(239,243,246)
+    muted=(179,194,206)
+    area=canvas.get_rect().fit(screen.get_rect())
+    area.center=screen.get_rect().center
+
+    def text(value, size, color, x, y, right=False):
+        image=fonts[size].render(value,True,color)
+        canvas.blit(image,(x-image.get_width() if right else x,y))
+
+    selected=dict(mode=settings['campaign_mode'] if settings['campaign']!='menu' else 'menu',
+                  campaign=settings['campaign'] if settings['campaign']!='menu' else 'c1m1_hotel',
+                  arena=None,mutation=next(iter(MUTATIONS)),difficulty='normal')
+    keymap={pg.K_UP:'up',pg.K_DOWN:'down',pg.K_LEFT:'left',pg.K_RIGHT:'right',
+            pg.K_RETURN:'ok',pg.K_ESCAPE:'back',pg.K_F5:'launch'}
+    row=0
+    while True:
+        mode=selected['mode']
+        source_mode=selected['mutation'] if mode=='mutation' else mode
+        choices=[('mode',tr('Mode de jeu'),('menu',*SESSION_MODES))]
+        if mode=='mutation':
+            choices.append(('mutation',tr('Mutation'),tuple(MUTATIONS)))
+        if mode!='menu':
+            maps=mode_maps(source_mode)
+            map_key='arena' if source_mode in ARENA_MODES else 'campaign'
+            if selected[map_key] not in maps:
+                selected[map_key]=maps[0]
+            choices.append((map_key,tr('Campagne' if map_key=='campaign' else 'Carte'),maps))
+        else:
+            map_key=None
+        if mode in ('coop','realism'):
+            choices.append(('difficulty',tr('Difficulté'),tuple(DIFFICULTIES)))
+        row=min(row,len(choices))
+        actions=[]
+        for event in pg.event.get():
+            if event.type==pg.QUIT:
+                return None
+            if event.type in (pg.JOYDEVICEADDED,pg.JOYDEVICEREMOVED):
+                pads.refresh()
+            if event.type==pg.KEYDOWN and event.key in keymap:
+                family='keyboard'
+                actions.append(keymap[event.key])
+        pad_actions=pads.poll()
+        if pad_actions:
+            family=pads.family
+            actions.extend(pad_actions)
+        for action in actions:
+            if action in ('back','quit'):
+                return None
+            if action=='launch' or (action=='ok' and row==len(choices)):
+                return l4d2_launch_options(dict(campaign=selected[map_key] if map_key else 'menu',
+                                                 campaign_mode='coop' if mode=='menu' else source_mode,
+                                                 difficulty=selected['difficulty'] if mode in ('coop','realism') else None))
+            if action in ('up','down'):
+                row=(row+(-1 if action=='up' else 1))%(len(choices)+1)
+            elif row<len(choices) and action in ('left','right','ok'):
+                key,_,values=choices[row]
+                selected[key]=values[(values.index(selected[key])+(-1 if action=='left' else 1))%len(values)]
+                break  # Rebuild the rows when the mode or map changes.
+
+        canvas.fill((15,22,32))
+        pg.draw.rect(canvas,(27,39,53),(36,26,1008,608),border_radius=26)
+        pg.draw.rect(canvas,orange,(76,70,42,5),border_radius=2)
+        text('Left 4 Dead 2',52,white,76,88)
+        text(tr('Partie locale · {p0} joueurs · hôte J{p1}',p0=count,p1=settings['host_player']),
+             23,muted,77,158)
+        for i,(key,title,_) in enumerate(choices):
+            value=selected[key]
+            if key=='mode':
+                label=tr(CAMPAIGNS['menu'] if value=='menu' else SESSION_MODES[value])
+            elif key=='campaign':
+                label=label_value('l4d2.campaign',value)
+            elif key=='arena':
+                campaign,arena=ARENAS[value]
+                label=f'{tr(CAMPAIGNS[campaign])} · {tr(arena)}'
+            elif key=='mutation':
+                label=tr(MUTATIONS[value])
+            else:
+                label=tr(DIFFICULTIES[value])
+            y=215+i*76
+            pg.draw.rect(canvas,(56,68,83) if i==row else (34,46,60),(76,y,928,61),border_radius=12)
+            if i==row:
+                pg.draw.rect(canvas,orange,(76,y,928,61),width=2,border_radius=12)
+            text(title,23,white,102,y+16)
+            text('‹  '+label+'  ›',23,orange if i==row else muted,977,y+16,right=True)
+        if mode=='menu':
+            text(tr('Choisissez le mode et le serveur dans le salon du jeu.'),20,muted,102,301)
+        pg.draw.rect(canvas,orange if row==len(choices) else (56,68,83),(76,469,928,68),border_radius=12)
+        text(tr('Lancer la partie locale'),28,(23,30,38) if row==len(choices) else white,102,486)
+        text(tr('{p0}  Lancer',p0=control_label('launch',family)),20,muted,78,571)
+        text(tr('{p0}  Retour',p0=control_label('back',family)),20,muted,1000,571,right=True)
+        screen.fill((15,22,32))
+        screen.blit(pg.transform.smoothscale(canvas,area.size),area)
+        pg.display.flip()
+        clock.tick(30)
 
 
 class App:

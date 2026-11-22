@@ -28,6 +28,13 @@ WINE_LOCALES = dict(zip(tuple(LANGUAGES)[1:],('fr_FR.UTF-8','en_US.UTF-8','de_DE
     'cs_CZ.UTF-8','ru_RU.UTF-8','ja_JP.UTF-8')))
 BEGIN = '// Windows Party begin'
 END = '// Windows Party end'
+CAMPAIGN_MODES = {'coop': 'Campagne', 'realism': 'Réalisme', 'versus': 'Versus'}
+SESSION_MODES = {
+    'coop':'Campagne', 'mutation':'Mutation', 'realism':'Réalisme',
+    'versus':'Versus', 'mutation12':'Versus Réalisme', 'survival':'Survie',
+    'mutation15':'Survie versus', 'scavenge':'Collecte',
+}
+DIFFICULTIES = {'easy':'Facile', 'normal':'Normal', 'hard':'Avancé', 'impossible':'Expert'}
 CAMPAIGNS = {'menu':'Choisir dans le jeu', 'c1m1_hotel':'Dead Center',
     'c2m1_highway':'Dark Carnival','c3m1_plankcountry':'Swamp Fever',
     'c4m1_milltown_a':'Hard Rain','c5m1_waterfront':'The Parish',
@@ -36,6 +43,56 @@ CAMPAIGNS = {'menu':'Choisir dans le jeu', 'c1m1_hotel':'Dead Center',
     'c10m1_caves':'Death Toll','c11m1_greenhouse':'Dead Air',
     'c12m1_hilltop':'Blood Harvest','c13m1_alpinecreek':'Cold Stream',
     'c14m1_junkyard':'The Last Stand'}
+MUTATIONS = {
+    'mutation2':'Headshot!', 'mutation3':'Bleed Out', 'mutation4':'Hard Eight',
+    'mutation5':'Four Swordsmen', 'mutation7':'Chainsaw Massacre', 'mutation8':'Iron Man',
+    'mutation9':'Last Gnome On Earth', 'mutation11':'Healthpackalypse!',
+    'mutation13':'Follow the Liter', 'mutation14':'Gib Fest', 'mutation16':'Hunting Party',
+    'mutation18':'Bleed Out Versus', 'mutation19':'Taaannnkk!', 'mutation20':'Healing Gnome',
+    'community1':'Special Delivery', 'community2':'Flu Season', 'community3':'Riding My Survivor',
+    'community4':'Nightmare', 'community5':"Death's Door", 'community6':'Confogl',
+}
+ARENAS = {
+    'c1m3_mall':('c1m1_hotel','Armurerie'),
+    'c1m4_atrium':('c1m1_hotel','Atrium'),
+    'c2m1_highway':('c2m1_highway','Motel'),
+    'c2m5_concert':('c2m1_highway','Concert'),
+    'c3m1_plankcountry':('c3m1_plankcountry','Village'),
+    'c4m1_milltown_a':('c4m1_milltown_a','Bourg'),
+    'c4m2_sugarmill_a':('c4m1_milltown_a','Sucrerie'),
+    'c5m2_park':('c5m1_waterfront','Parc'),
+    'c6m1_riverbank':('c6m1_riverbank','Rive'),
+    'c6m2_bedlam':('c6m1_riverbank','Souterrains'),
+    'c6m3_port':('c6m1_riverbank','Port'),
+    'c7m1_docks':('c7m1_docks','Briqueterie'),
+    'c7m2_barge':('c7m1_docks','Barge'),
+    'c8m1_apartment':('c8m1_apartment','Appartements'),
+    'c8m5_rooftop':('c8m1_apartment','Toit'),
+    'c9m1_alleys':('c9m1_alleys','Ruelles'),
+    'c9m2_lots':('c9m1_alleys','Dépôt de camions'),
+    'c10m3_ranchhouse':('c10m1_caves','Église'),
+    'c11m4_terminal':('c11m1_greenhouse','Terminal'),
+    'c12m5_cornfield':('c12m1_hilltop','Ferme'),
+    'c14m1_junkyard':('c14m1_junkyard','Village'),
+    'c14m2_lighthouse':('c14m1_junkyard','Phare'),
+}
+SCAVENGE_MAPS = tuple(key for key in ARENAS if key not in
+                      ('c1m3_mall','c2m5_concert','c9m2_lots'))
+SURVIVAL_MAPS = (
+    'c1m3_mall','c1m4_atrium','c2m1_highway','c2m5_concert','c3m1_plankcountry',
+    'c4m2_sugarmill_a','c7m2_barge','c8m5_rooftop','c9m2_lots','c11m4_terminal',
+    'c12m5_cornfield','c14m1_junkyard','c14m2_lighthouse',
+)
+ARENA_MODES = {
+    'survival':SURVIVAL_MAPS, 'mutation15':SURVIVAL_MAPS, 'community4':SURVIVAL_MAPS,
+    'scavenge':SCAVENGE_MAPS, 'mutation13':SCAVENGE_MAPS,
+}
+CAMPAIGN_MAPS = tuple(key for key in CAMPAIGNS if key!='menu')
+SOURCE_MODES = (SESSION_MODES.keys() - {'mutation'}) | MUTATIONS.keys()
+
+
+def mode_maps(mode):
+    return ARENA_MODES.get(mode,CAMPAIGN_MAPS)
 
 
 def matches(rom):
@@ -44,7 +101,22 @@ def matches(rom):
 
 def defaults():
     return dict(names=[tr('Joueur{p0}',p0=i) for i in range(1,5)],language='keep',gamepad=True,
-                automatic=True,host_player=1,port=27015,campaign='menu')
+                automatic=True,host_player=1,port=27015,campaign='menu',campaign_mode='coop')
+
+
+def launch_options(data):
+    if not isinstance(data,dict):
+        raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
+    campaign=data.get('campaign','menu')
+    mode=data.get('campaign_mode','coop')
+    if not isinstance(mode,str) or mode not in SOURCE_MODES:
+        raise ValueError(tr('Mode de campagne Left 4 Dead 2 invalide.'))
+    if campaign!='menu' and campaign not in mode_maps(mode):
+        raise ValueError(tr('Campagne Left 4 Dead 2 invalide.'))
+    difficulty=data.get('difficulty')
+    if difficulty is not None and (not isinstance(difficulty,str) or difficulty not in DIFFICULTIES):
+        raise ValueError(tr('Difficulté Left 4 Dead 2 invalide.'))
+    return dict(campaign=campaign,campaign_mode=mode,difficulty=difficulty)
 
 
 def validate(options):
@@ -59,9 +131,11 @@ def validate(options):
     if not isinstance(language,str) or language not in LANGUAGES or type(gamepad) is not bool:
         raise ValueError(tr('Réglages Left 4 Dead 2 invalides.'))
     from partydeck_autoconnect import options as network_options
-    campaign=options.get('campaign','menu')
-    if campaign not in CAMPAIGNS:raise ValueError(tr('Campagne Left 4 Dead 2 invalide.'))
-    return dict(names=list(names),language=language,gamepad=gamepad,campaign=campaign,
+    startup=launch_options(options)
+    if startup['campaign_mode'] not in CAMPAIGN_MODES:
+        raise ValueError(tr('Mode de campagne Left 4 Dead 2 invalide.'))
+    return dict(names=list(names),language=language,gamepad=gamepad,
+                campaign=startup['campaign'],campaign_mode=startup['campaign_mode'],
                 **network_options(options,'l4d2'))
 
 
