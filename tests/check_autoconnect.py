@@ -192,6 +192,17 @@ with tempfile.TemporaryDirectory() as folder:
     trace.tick();assert toggles==[True]
     clock[0]+=1
     trace.tick();assert toggles==[True,False]
+    # Native discovery/join calls are observed without changing their arguments.
+    args=SimpleNamespace(SessionName='Game',URL='192.168.1.141:7777?Name=Player',
+                         PlatformData=123456,UserIndex=0)
+    args._type=SimpleNamespace(_properties=lambda: [SimpleNamespace(Name=name)
+                                                   for name in ('SessionName','URL','PlatformData','UserIndex')])
+    records=[]
+    observers=bl2_session.native_argument_hooks(lambda name,post: lambda callback:callback,
+                                               'POST',records.append)
+    observers[-1](None,args,True,None)
+    assert records==[dict(call='Engine.PlayerController:ClientTravel',result=True,
+                         params=dict(SessionName='Game',URL='192.168.1.141:7777',UserIndex=0))]
     trace.tick();assert toggles==[True,False]
 
 # Real UDP challenge and response, not a mocked readiness boolean.

@@ -7,6 +7,54 @@ import re
 import time
 
 TRAVEL_ABSOLUTE = 0
+NATIVE_LAN_CALLS = (
+    'WillowGame.LANServerBrowserGFxMovie:FindGames',
+    'IpDrv.OnlineGameInterfaceImpl:FindOnlineGames',
+    'WillowGame.LANServerBrowserGFxMovie:OnFindGamesComplete',
+    'WillowGame.LANServerBrowserGFxMovie:JoinMatchmakingSession',
+    'IpDrv.OnlineGameInterfaceImpl:JoinOnlineGame',
+    'WillowGame.LANServerBrowserGFxMovie:OnJoinMatchComplete',
+    'OnlineSubsystemSteamworks.OnlineGameInterfaceSteamworks:GetResolvedConnectString',
+    'Engine.PlayerController:ClientTravel',
+)
+
+
+def describe_params(params, depth=1):
+    """Read reflected values without interpreting native session pointers."""
+    fields={}
+    for prop in params._type._properties():
+        name=str(prop.Name)
+        if name.casefold() in {'platformdata','returnvalue'}:continue
+        try:
+            value=getattr(params,name)
+            if isinstance(value,str):
+                fields[name]=value.split('?',1)[0][:120]
+            elif value is None or isinstance(value,(bool,int,float)):
+                fields[name]=value
+            elif depth and hasattr(value,'_type'):
+                fields[name]=describe_params(value,depth-1)
+            else:
+                fields[name]=type(value).__name__
+        except Exception as error:
+            fields[name]=type(error).__name__
+    return fields
+
+
+def native_argument_hooks(register, post, record):
+    hooks=[]
+    for name in NATIVE_LAN_CALLS:
+        def capture(obj,args,ret,func,*,name=name):
+            try:
+                data=dict(call=name,params=describe_params(args),
+                          result=ret if isinstance(ret,(bool,int,float)) else None)
+                if name.endswith((':OnFindGamesComplete',':JoinMatchmakingSession')):
+                    data['browser_members']=[field for field in dir(obj) if
+                        re.search(r'find|search|server|selected|results|session',field,re.I)][:50]
+                record(data)
+            except Exception as error:
+                record(dict(call=name,error=type(error).__name__))
+        hooks.append(register(name,post)(capture))
+    return hooks
 
 
 class NativeTrace:
@@ -104,13 +152,25 @@ def load():
             logging.error(f'Windows Party LAN log: {error}')
 
     native_trace=None
+    argument_hooks=[]
     if trace is not None and trace.with_name('bl2-native-trace.mode').is_file():
-        from unrealsdk.hooks import log_all_calls
+        from unrealsdk.hooks import Type, log_all_calls
         trigger=trace.with_name('bl2-native-trace.start')
         trigger.unlink(missing_ok=True)
         native_log=config_path.parent.parent/'Binaries'/'Win32'/'Plugins'/'unrealsdk.calls.tsv'
         summary=trace.with_name('bl2-native-lan.log')
         summary.unlink(missing_ok=True)
+        arguments=trace.with_name('bl2-native-args.log')
+        arguments.unlink(missing_ok=True)
+
+        def record_args(data):
+            try:
+                with arguments.open('a',encoding='utf-8') as stream:
+                    stream.write(json.dumps(data)+'\n')
+            except OSError as error:
+                logging.error(f'Windows Party LAN argument trace: {error}')
+
+        argument_hooks=native_argument_hooks(hook,Type.POST_UNCONDITIONAL,record_args)
 
         def record(enabled):
             log_all_calls(enabled)
@@ -149,7 +209,7 @@ def load():
                 log(f'{type(error).__name__}: {error}')
 
     mod=build_mod(name='Windows Party LAN',version='0.3',author='Windows Party',
-                  hooks=[tick],auto_enable=False)
+                  hooks=[tick,*argument_hooks],auto_enable=False)
     # The SDK's auto_enable only restores an earlier enabled state. The
     # PartyDeck session plan, rather than an SDK preference, owns activation.
     if config.get('automatic'):
@@ -158,6 +218,7 @@ def load():
         log('LAN module enabled.')
         if native_trace is not None:
             log('Native LAN trace armed. Automatic join disabled for this launch.')
+            log('Recording native LAN parameters without a trigger.')
         logging.info(f'Windows Party LAN: J{config["index"]+1}, host J{config["host_player"]}')
     return mod
 
