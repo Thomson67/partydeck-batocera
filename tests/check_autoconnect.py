@@ -54,23 +54,28 @@ with tempfile.TemporaryDirectory() as folder:
         assert '+map' not in auto.game_arguments(dict(campaign,campaign='menu'))
         assert '+map' not in auto.game_arguments(dict(campaign,index=1))
     source_client=dict(plan,kind='l4d2',index=1,direct=True,port=27015)
-    for command in ('left4dead2.exe -novid','start "" "left4dead2.exe" -novid'):
-        out,found=auto.command_arguments(command,source_client)
-        assert found and '+connect' not in out and out.endswith('+exec '+auto.SOURCE_POLL)
-    with patch.object(auto,'wait_host',side_effect=AssertionError('client launch blocked')), \
-         patch.object(auto.subprocess,'Popen') as start_worker:
-        auto.prepare_game(game,prefix,source_client)
     cfg=game/'left4dead2/cfg'
-    join=cfg/auto.SOURCE_JOIN
-    assert start_worker.call_args.args[0][-2:]==[str(player/'autoconnect-launch.json'),str(join)]
-    assert 'connect ' not in join.read_text()
-    assert f'exec {auto.SOURCE_JOIN}; wait 60' in (cfg/auto.SOURCE_POLL).read_text()
+    cfg.mkdir(parents=True)
     for address in ('192.168.1.141','192.168.1.162',False):
+        client=dict(source_client)
         with patch.object(auto,'wait_host',return_value=address) as wait:
-            auto.source_join(source_client,join)
-        wait.assert_called_once_with(source_client,timeout=300)
-        assert join.read_text()==auto.SOURCE_STOP+(
-            f'echo PARTYDECK_L4D2_CONNECT\nconnect {address}:27015\n' if address else '')
+            out=auto.launch_command('left4dead2.exe -novid',client)
+        wait.assert_called_once_with(client,timeout=120)
+        assert client['direct']
+        if address:
+            assert out.endswith(f'+connect {address}:27015')
+        else:
+            assert '+connect' not in out
+    source_batch=game/'source.bat'
+    source_batch.write_bytes(b'@echo off\r\nstart "" left4dead2.exe -novid\r\n')
+    client=dict(source_client)
+    with patch.object(auto,'wait_host',return_value='192.168.1.141') as wait:
+        assert auto.launch_command('cmd /c source.bat',client)=='cmd /c source.bat'
+        auto.prepare_game(game,prefix,client)
+    wait.assert_called_once()
+    assert b'+connect 192.168.1.141:27015' in source_batch.read_bytes()
+    auto.prepare_game(game,prefix,dict(client,automatic=False))
+    assert b'+connect' not in source_batch.read_bytes()
     original_host_cfg=cfg/'listenserver.cfg'
     original_host_cfg.write_text('sv_allow_lobby_connect_only 1\n')
     source_host=dict(source_client,index=0)

@@ -20,9 +20,6 @@ EXECUTABLES = {'sm64coopdx': ('sm64coopdx.exe',), 'l4d2': ('left4dead2.exe',),
                'borderlands2': ('borderlands2.exe',)}
 SDK_SHA256 = 'e1862ddb282cf845369c9ca1ca70ac180d6104cce25d8a133557fc74e157b4c7'
 SDK_URL = 'https://github.com/bl-sdk/willow2-mod-manager/releases/download/v3.8/willow2-sdk.zip'
-SOURCE_POLL = 'partydeck_l4d2_poll.cfg'
-SOURCE_JOIN = 'partydeck_l4d2_join.cfg'
-SOURCE_STOP = 'alias partydeck_l4d2_tick ""\n'
 SOURCE_HOST = 'partydeck_l4d2_host.cfg'
 SOURCE_LOG = 'partydeck_l4d2_console.log'
 
@@ -86,7 +83,8 @@ def game_arguments(plan):
                 if mode in ('coop','realism') and plan.get('difficulty'):
                     result+=['+z_difficulty',plan['difficulty']]
                 result+=['+map',campaign,mode]
-        else:result+=['+exec',SOURCE_POLL]
+        elif plan.get('connect_address'):
+            result+=['+connect',f'{plan["connect_address"]}:{port}']
         return result
     return [f'-port={port}'] if host and port!='7777' else []
 
@@ -227,7 +225,8 @@ def source_ready(port, timeout=.4, address='127.0.0.1'):
 def wait_host(plan, timeout=120):
     if plan['index']+1==plan['host_player']:return True
     deadline=time.monotonic()+timeout
-    print(tr('J{p0} : attente de la partie de J{p1}.',p0=plan['index']+1,p1=plan['host_player']),flush=True)
+    print(tr('J{p0} : attente de la partie de J{p1}.',p0=plan['index']+1,p1=plan['host_player']),
+          file=sys.stderr,flush=True)
     while time.monotonic()<deadline:
         try:host=json.loads(marker(plan).read_text())
         except (OSError,ValueError):host=None
@@ -241,7 +240,8 @@ def wait_host(plan, timeout=120):
             elif udp_bound(plan['port']):
                 return True
         time.sleep(.5)
-    print(tr('Hôte non prêt : connexion automatique abandonnée ; utilisez les menus du jeu.'),flush=True)
+    print(tr('Hôte non prêt : connexion automatique abandonnée ; utilisez les menus du jeu.'),
+          file=sys.stderr,flush=True)
     return False
 
 
@@ -259,37 +259,19 @@ def configure_source_host(cfg, allowed):
     write_bytes(safe_path(cfg/SOURCE_HOST,allowed),('\n'.join(commands)+'\n').encode())
 
 
-def arm_source_join(cfg, allowed, plan):
-    poll=safe_path(cfg/SOURCE_POLL,allowed)
-    join=safe_path(cfg/SOURCE_JOIN,allowed)
-    # Keep the command queue bounded even if the engine ignores wait.
-    tick='partydeck_l4d2_tick'
-    ten='partydeck_l4d2_ten'
-    hundred='partydeck_l4d2_hundred'
-    script=[
-        'echo PARTYDECK_L4D2_CLIENT_CFG',
-        f'alias {tick} "exec {SOURCE_JOIN}; wait 60"',
-        f'alias {ten} "'+'; '.join([tick]*10)+'"',
-        f'alias {hundred} "'+'; '.join([ten]*10)+'"',
-        *([hundred]*20),
-    ]
-    write_bytes(join,b'// Waiting for the LAN host.\n')
-    write_bytes(poll,('\n'.join(script)+'\n').encode())
-    payload=Path(plan['player'])/'autoconnect-launch.json'
-    subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'_source_join',str(payload),str(join)],
-                     stdin=subprocess.DEVNULL)
-
-
-def source_join(plan, join):
-    address=wait_host(plan,timeout=300)
-    command=SOURCE_STOP
-    if address:
-        endpoint=f'{address}:{plan["port"]}'
-        command+=f'echo PARTYDECK_L4D2_CONNECT\nconnect {endpoint}\n'
-    write_bytes(join,command.encode())
-    if address:
-        print(tr('Left 4 Dead 2 J{p0} : partie locale prête, connexion demandée vers {p1}.',
-                 p0=plan['index']+1,p1=endpoint),flush=True)
+def launch_command(command, plan):
+    result,direct=command_arguments(command,plan)
+    if (plan['kind']=='l4d2' and plan['automatic']
+            and plan['index']+1!=plan['host_player']
+            and (direct or re.search(r'(?i)\.(?:bat|cmd)(?=["\s]|$)',command))):
+        address=wait_host(plan,timeout=120)
+        plan['connect_address']=address or None
+        if address:
+            print(tr('Left 4 Dead 2 J{p0} : lancement vers {p1}.',p0=plan['index']+1,
+                     p1=f'{address}:{plan["port"]}'),file=sys.stderr,flush=True)
+            result,direct=command_arguments(command,plan)
+    plan.update(direct=direct,original_command=command)
+    return result
 
 
 def restore_batches(directory, player, allowed):
@@ -353,9 +335,7 @@ def prepare_game(directory, prefix, plan):
             configure_source_host(source_cfg(directory,allowed),allowed)
             host_data['address']=lan_ipv4_address() or '127.0.0.1'
         write_bytes(marker(plan),json.dumps(host_data).encode())
-    elif plan['kind']=='l4d2':
-        arm_source_join(source_cfg(directory,allowed),allowed,plan)
-    elif not bl2 and not wait_host(plan):
+    elif not bl2 and plan['kind']!='l4d2' and not wait_host(plan):
         # A batch can fall back cleanly; direct EXE arguments already include
         # connect, which the game can cancel back to its main menu.
         if not direct:return
@@ -479,10 +459,9 @@ if __name__=='__main__':
         if os.environ.get('PARTYDECK_PRIVATE_PLAYER')!=plan['player']:
             raise ValueError(tr('Contexte de connexion automatique invalide.'))
         if action=='_args':
-            result,direct=command_arguments(args[0],plan)
-            plan.update(direct=direct,original_command=args[0]);write_bytes(path,json.dumps(plan).encode());print(result)
+            result=launch_command(args[0],plan)
+            write_bytes(path,json.dumps(plan).encode());print(result)
         elif action=='_prepare':prepare_game(Path(args[0]),Path(args[1]),plan)
-        elif action=='_source_join':source_join(plan,Path(args[0]))
         else:raise ValueError('unknown action')
     except (OSError,ValueError,KeyError,TypeError) as error:
         print(str(error),file=sys.stderr);raise SystemExit(1)
