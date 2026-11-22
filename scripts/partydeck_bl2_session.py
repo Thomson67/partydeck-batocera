@@ -144,11 +144,13 @@ def host_ready(config):
 
 
 class LanFrontend:
-    def __init__(self, config, log, now=time.monotonic):
+    def __init__(self, config, log, now=time.monotonic, *, weak):
         self.config=config
         self.log=log
         self.now=now
+        self.weak=weak
         self.frontend=None
+        self.menu_world=None
         self.requested=False
         self.browser_opened=False
         self.next_check=0
@@ -173,17 +175,21 @@ class LanFrontend:
                 self.reported_missing_menu=True
                 self.log('Main menu object is no longer available.')
             return
-        if pc.WorldInfo is None:return
+        world=pc.WorldInfo
+        if world is None:return
         if not self.requested:
             # Run after the front-end is initialized, outside its Start hook.
+            self.menu_world=self.weak(world)
             self.requested=True
-            self.log(f'Requesting LAN from the main menu (NetMode={int(pc.WorldInfo.NetMode)}).')
+            self.log(f'Requesting LAN from the main menu (NetMode={int(world.NetMode)}).')
             pc.AttemptNetworkTransition(1,2,True)
             self.log('Native LAN mode requested from the main menu.')
             return
-        if int(pc.WorldInfo.NetMode)!=0 or not can_join or not host_ready(self.config):return
+        # A LAN front-end can already have a local listen lobby. Match the
+        # world seen at menu initialization instead of requiring standalone.
+        if not can_join or self.menu_world()!=world or not host_ready(self.config):return
         self.browser_opened=True
-        self.log('Opening the native LAN browser.')
+        self.log(f'Host UDP endpoint verified; opening the native LAN browser (NetMode={int(world.NetMode)}).')
         menu.ShowLanBrowser()
 
 
@@ -264,7 +270,7 @@ def load():
     if auto_lan:
         from unrealsdk.hooks import Type
         from unrealsdk.unreal import WeakPointer
-        lan=LanFrontend(config,log)
+        lan=LanFrontend(config,log,weak=WeakPointer)
 
         @hook(FRONTEND+'Start',Type.PRE)
         def frontend(obj,args,ret,func):

@@ -249,7 +249,8 @@ with tempfile.TemporaryDirectory() as folder:
     click.assert_called_once_with(wrapped)
     local_pc=Mock(WorldInfo=SimpleNamespace(NetMode=0))
     menu=Mock()
-    boot=bl2_session.LanFrontend(native_config,events.append,now=lambda:clock[0])
+    boot=bl2_session.LanFrontend(native_config,events.append,now=lambda:clock[0],
+                                 weak=lambda obj:lambda:obj)
     boot.tick(local_pc,True)
     local_pc.AttemptNetworkTransition.assert_not_called()
     boot.menu_started(lambda:menu)
@@ -261,10 +262,12 @@ with tempfile.TemporaryDirectory() as folder:
     local_pc.AttemptNetworkTransition.assert_called_once_with(1,2,True)
     assert events[-1]=='Native LAN mode requested from the main menu.'
     menu.ShowLanBrowser.assert_not_called()
+    original_world=local_pc.WorldInfo
+    local_pc.WorldInfo=SimpleNamespace(NetMode=0)
     clock[0]+=1
     boot.tick(local_pc,True)
     menu.ShowLanBrowser.assert_not_called()
-    local_pc.WorldInfo.NetMode=0
+    local_pc.WorldInfo=original_world
     clock[0]+=1
     boot.tick(local_pc,False)
     menu.ShowLanBrowser.assert_not_called()
