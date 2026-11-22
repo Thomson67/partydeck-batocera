@@ -161,8 +161,10 @@ with tempfile.TemporaryDirectory() as folder:
     client=Session(dict(cfg,index=1),now=lambda:clock[0]);client_pc=Mock()
     client.tick(client_pc,SimpleNamespace(NetMode=0))
     client_pc.ConsoleCommand.assert_called_once_with('open 127.0.0.1:7777',False)
-    clock[0]=22;client.tick(client_pc,SimpleNamespace(NetMode=3))
-    clock[0]=50;client.tick(client_pc,SimpleNamespace(NetMode=0))
+    # Joining and leaving can both happen inside the 20-second retry delay.
+    # The still-ready host must not pull the client back into the game.
+    clock[0]=2;client.tick(client_pc,SimpleNamespace(NetMode=3))
+    clock[0]=21;client.tick(client_pc,SimpleNamespace(NetMode=0))
     assert client_pc.ConsoleCommand.call_count==1 # No forced rejoin after leaving.
     host.tick(pc,SimpleNamespace(NetMode=0));assert not path.exists()
 

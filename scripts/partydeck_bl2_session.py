@@ -18,17 +18,21 @@ class Session:
     def tick(self, pc, world):
         c=self.config
         if not c.get('automatic') or pc is None or world is None:return
+        host=c['index']+1==c['host_player']
+        # Notice a connection even during the retry delay. A short visit to
+        # NM_Client is enough to stop automatic retries after a disconnect.
+        if not host and (self.joined or int(world.NetMode)==3):
+            self.joined=True
+            return
         now=self.now()
         if now<self.next_tick:return
         self.next_tick=now+1
         if not self.lan:
             pc.AttemptNetworkTransition(1,2,False)
             self.lan=True
-        host=c['index']+1==c['host_player']
-        netmode=int(world.NetMode)
         path=Path(c['host_marker'])
         if host:
-            if netmode==2:
+            if int(world.NetMode)==2:
                 # A listen server is the readiness signal; startup/menu timing
                 # is not enough to let the other players connect.
                 data=json.dumps(dict(token=c['token'],ready=True))
@@ -40,11 +44,6 @@ class Session:
                     if json.loads(path.read_text()).get('token')==c['token']:path.unlink()
                 except (OSError,ValueError):pass
             return
-        if netmode==3:
-            self.joined=True
-            return
-        # Do not pull a player back into a party after an intentional leave.
-        if self.joined:return
         try:ready=json.loads(path.read_text())
         except (OSError,ValueError):return
         if ready.get('token')!=c['token'] or not ready.get('ready'):return
