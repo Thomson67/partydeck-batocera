@@ -58,7 +58,7 @@ def runner_views(player,runners=Path('/userdata/system/wine/custom'),
             subprocess.run(['mount','--bind',str(umu),str(original)],check=True)
             mounted.append(original)
             relay=area/'umu-relay.py'
-            relay.write_text(launcher_relay(original,aliases))
+            relay.write_text(launcher_relay(original, aliases, player))
             subprocess.run(['mount','--bind',str(relay),str(umu)],check=True)
             mounted.append(umu)
         print(tr('UMU : vues privées temporaires des runners préparées ({p0}).',p0=len(candidates)),flush=True)
@@ -78,25 +78,43 @@ def runner_views(player,runners=Path('/userdata/system/wine/custom'),
         else:print(tr('UMU : nettoyage différé de {p0}.',p0=area),flush=True)
 
 
-def pressure_vessel_environment(paths,environ=None):
+def pressure_vessel_environment(paths, environ=None, *, writable=True):
     env=dict(os.environ if environ is None else environ)
-    entries=[entry for entry in env.get('PRESSURE_VESSEL_FILESYSTEMS_RW','').split(':') if entry]
+    key = 'PRESSURE_VESSEL_FILESYSTEMS_RW' if writable else 'PRESSURE_VESSEL_FILESYSTEMS_RO'
+    entries=[entry for entry in env.get(key, '').split(':') if entry]
     entries.extend(str(path) for path in paths if str(path) not in entries)
-    if paths:env['PRESSURE_VESSEL_FILESYSTEMS_RW']=':'.join(entries)
+    if paths:env[key]=':'.join(entries)
     return env
 
 
-def launcher_relay(original,aliases):
-    """Redirect only Proton, after native runner choice, then run UMU unchanged.
+def launcher_relay(original, aliases, player=None):
+    """Prepare the selected private runner, then run the original UMU launcher.
 
     The original zipapp is pinned by a private bind before covering its normal
     path. Neither the installed runner nor the host UMU launcher is rewritten.
     """
+    hook = ''
+    if player is not None:
+        base = Path(__file__).resolve().parent
+        hook = (
+            "    if os.environ.get('PARTYDECK_CELESTENET') == '1':\n"
+            "        from pathlib import Path\n"
+            f"        sys.path.insert(0,{str(base)!r})\n"
+            "        from partydeck_celestenet import prepare_umu_viewport,unmount_variant\n"
+            f"        mounted=prepare_umu_viewport(Path({str(player)!r}))\n"
+            "        sys.path.pop(0)\n"
+        )
     return ("import os,runpy,sys\n"
             f"aliases={aliases!r}\n"
+            "mounted=()\n"
             "selected=os.path.realpath(os.environ.get('PROTONPATH',''))\n"
             "if selected in aliases:\n"
             "    os.environ['PROTONPATH']=aliases[selected]\n"
             "    print('Windows Party UMU PROTONPATH='+aliases[selected],flush=True)\n"
+            + hook +
             f"sys.argv[0]={str(original)!r}\n"
-            "runpy.run_path(sys.argv[0],run_name='__main__')\n")
+            "try:\n"
+            "    runpy.run_path(sys.argv[0],run_name='__main__')\n"
+            "finally:\n"
+            "    if mounted:\n"
+            "        unmount_variant(mounted)\n")

@@ -158,6 +158,43 @@ with tempfile.TemporaryDirectory() as name:
             mount.assert_not_called()
     assert (game/'Celeste.dll').read_bytes() == b'standard'
 
+    compatdata = root/'compatdata'
+    compat_prefix = compatdata/'Celeste'
+    final_game = compat_prefix/'pfx'/'drive_c'/'Celeste'
+    final_game.mkdir(parents=True)
+    (final_game/'Celeste.exe').touch()
+    final_variant = final_game/'PartyDeck-8x9'
+    final_variant.mkdir()
+    for assembly in celeste.VARIANT_ASSEMBLIES:
+        (final_game/assembly).write_bytes(b'standard')
+        (final_variant/assembly).write_bytes(b'portrait')
+    (final_variant/'normal.sha256').write_text(hashlib.sha256(b'standard').hexdigest())
+    environment = dict(PARTYDECK_PRIVATE_PLAYER=str(player), PARTYDECK_CELESTENET='1',
+                       PARTYDECK_PLAYER_WIDTH='960', PARTYDECK_PLAYER_HEIGHT='1080',
+                       WINEPREFIX=str(compat_prefix), PRESSURE_VESSEL_FILESYSTEMS_RO='/existing')
+    with patch.dict(os.environ, environment, clear=True), \
+            patch.object(celeste.Path, 'cwd', return_value=final_game), \
+            patch.object(celeste.subprocess, 'run') as mount:
+        mounted = celeste.prepare_umu_viewport(player, compatdata)
+        assert mounted == tuple(final_game/name for name in celeste.VARIANT_ASSEMBLIES)
+        assert [call.args[0] for call in mount.call_args_list] == [
+            ['mount', '--bind', str(final_variant/name), str(final_game/name)]
+            for name in celeste.VARIANT_ASSEMBLIES
+        ]
+        assert os.environ['PRESSURE_VESSEL_FILESYSTEMS_RO'].split(':') == [
+            '/existing', *(str(final_game/name) for name in celeste.VARIANT_ASSEMBLIES)
+        ]
+        mount.return_value.returncode = 0
+        mount.reset_mock()
+        celeste.unmount_variant(mounted)
+        assert [call.args[0] for call in mount.call_args_list] == [
+            ['umount', '--', str(path)] for path in reversed(mounted)
+        ]
+        mount.reset_mock()
+        os.environ['PARTYDECK_PRIVATE_PLAYER'] = str(root/'j1')
+        celeste.prepare_umu_viewport(player, compatdata)
+        mount.assert_not_called()
+
     # Exercise the actual hook as a separate process, including its imports.
     flags.write_bytes(b'--disable-splash\n')
     with ZipFile(game/'Mods'/'test-skins.zip', 'w') as archive:

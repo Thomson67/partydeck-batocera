@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='umu relay ') as temp:
      +f"Path({str(out)!r}).write_text(json.dumps([os.environ['PROTONPATH'],sys.argv[1:]]))\n")
  original=root/'original.pyz';zipapp.create_archive(app,original)
  relay=root/'relay.py';source=root/'installed UMU';alias=root/'private view'
- relay.write_text(u.launcher_relay(original,{str(source):str(alias)}))
+ relay.write_text(u.launcher_relay(original,{str(source):str(alias)},root/'j1'))
  for selected,expected in ((source,alias),(root/'other',root/'other')):
   subprocess.run([sys.executable,str(relay),'game.exe','arg with space'],
       env=dict(os.environ,PROTONPATH=str(selected)),check=True)

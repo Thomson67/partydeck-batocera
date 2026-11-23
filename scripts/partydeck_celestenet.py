@@ -174,7 +174,7 @@ def patch_settings(data, values):
     return data
 
 
-def configure_viewport_variant(directory, allowed, player, width, height):
+def configure_viewport_variant(directory, allowed, player, width, height, *, accept_existing_mounts=False):
     ratio = viewport_variant(width, height)
     if ratio is None:
         return
@@ -186,22 +186,72 @@ def configure_viewport_variant(directory, allowed, player, width, height):
         print(tr('CelesteNet {p0} : variante {p1} absente ou incomplète ; rendu standard.',
                  p0=player.upper(), p1=ratio), flush=True)
         return
+    expected = fingerprint.read_text(encoding='utf-8-sig').strip().lower()
     with pairs[0][1].open('rb') as normal:
         actual = hashlib.file_digest(normal, 'sha256').hexdigest()
-    if actual != fingerprint.read_text(encoding='utf-8-sig').strip().lower():
+    with pairs[0][0].open('rb') as alternate:
+        variant_hash = hashlib.file_digest(alternate, 'sha256').hexdigest()
+    if (accept_existing_mounts and actual == variant_hash != expected
+            and all(source.samefile(target) for source, target in pairs)):
+        return tuple(target for _, target in pairs), ()
+    if actual != expected:
         print(tr('CelesteNet {p0} : la variante {p1} correspond à une autre installation Everest ; rendu standard.',
                  p0=player.upper(), p1=ratio), flush=True)
         return
-    with pairs[0][0].open('rb') as alternate:
-        if hashlib.file_digest(alternate, 'sha256').hexdigest() == actual:
-            print(tr('CelesteNet {p0} : la DLL de la variante {p1} est identique à la version standard.',
-                     p0=player.upper(), p1=ratio), flush=True)
-            return
+    if variant_hash == actual:
+        print(tr('CelesteNet {p0} : la DLL de la variante {p1} est identique à la version standard.',
+                 p0=player.upper(), p1=ratio), flush=True)
+        return
     # Both mounts exist inside the player's launch namespace only.
-    for source, target in pairs:
-        subprocess.run(['mount', '--bind', str(source), str(target)], check=True)
+    mounted = []
+    try:
+        for source, target in pairs:
+            subprocess.run(['mount', '--bind', str(source), str(target)], check=True)
+            mounted.append(target)
+    except (OSError, subprocess.SubprocessError):
+        unmount_variant(mounted)
+        raise
     print(tr('CelesteNet {p0} : variante {p1} activée ({p2}×{p3}).',
              p0=player.upper(), p1=ratio, p2=width, p3=height), flush=True)
+    return tuple(mounted), tuple(mounted)
+
+
+def unmount_variant(paths):
+    for target in reversed(paths):
+        result = subprocess.run(['umount', '--', str(target)], check=False)
+        if result.returncode:
+            subprocess.run(['umount', '-l', '--', str(target)], check=True)
+
+
+def prepare_umu_viewport(player, compatdata=Path('/userdata/system/umu/compatdata')):
+    """Rebind the variant after the UMU wrapper exposes the game under C:."""
+    if os.environ.get('PARTYDECK_CELESTENET') != '1' or os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
+        return
+    prefix = Path(os.environ.get('WINEPREFIX', ''))
+    directory = Path.cwd()
+    if (prefix.parent != compatdata or directory.parent != (prefix/'pfx'/'drive_c').resolve()
+            or any(char in str(directory) for char in ':\n\r')):
+        return
+    try:
+        width = int(os.environ.get('PARTYDECK_PLAYER_WIDTH', '0'))
+        height = int(os.environ.get('PARTYDECK_PLAYER_HEIGHT', '0'))
+        if not viewport_variant(width, height) or not child(directory, 'Celeste.exe').is_file():
+            return
+        variant = configure_viewport_variant(directory, (directory,), player.name, width, height,
+                                             accept_existing_mounts=True)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(tr('CelesteNet {p0} : variante UMU indisponible : {p1}', p0=player.name.upper(), p1=error),
+              flush=True)
+        return
+    if variant:
+        files, mounted = variant
+        # Export the exact bind targets. Exporting the parent alone can hide
+        # nested file mounts when Steam Runtime reconstructs its game view.
+        from partydeck_umu import pressure_vessel_environment
+        environment = pressure_vessel_environment(files, writable=False)
+        os.environ['PRESSURE_VESSEL_FILESYSTEMS_RO'] = environment['PRESSURE_VESSEL_FILESYSTEMS_RO']
+        print(tr('CelesteNet {p0} : DLL de la variante transmises à UMU.', p0=player.name.upper()), flush=True)
+        return mounted
 
 
 def patch_game_settings(data, language, debug):

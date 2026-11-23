@@ -79,6 +79,8 @@ EN = {
     'CelesteNet {p0} : la variante {p1} correspond à une autre installation Everest ; rendu standard.': 'CelesteNet {p0}: {p1} variant belongs to a different Everest installation. Using standard rendering.',
     'CelesteNet {p0} : variante {p1} activée ({p2}×{p3}).': 'CelesteNet {p0}: {p1} variant enabled ({p2}×{p3}).',
     'CelesteNet {p0} : la DLL de la variante {p1} est identique à la version standard.': 'CelesteNet {p0}: the DLL for the {p1} variant is identical to the standard version.',
+    'CelesteNet {p0} : variante UMU indisponible : {p1}': 'CelesteNet {p0}: UMU variant unavailable: {p1}',
+    'CelesteNet {p0} : DLL de la variante transmises à UMU.': 'CelesteNet {p0}: variant DLLs provided to UMU.',
     'CelesteNet : empreinte de téléchargement invalide.': 'CelesteNet: download checksum mismatch.',
     'CelesteNet : préparation du serveur local au premier lancement.': 'CelesteNet: preparing the local server on first launch.',
     'CelesteNet : serveur local prêt sur {p0}:{p1}.': 'CelesteNet: local server ready at {p0}:{p1}.',
