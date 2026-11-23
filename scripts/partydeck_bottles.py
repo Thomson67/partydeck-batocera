@@ -7,6 +7,7 @@ against live mounts. OverlayFS supplies copy-on-write, even on ext4/mergerfs.
 """
 import filecmp
 from functools import lru_cache
+from glob import escape as glob_escape
 import hashlib
 import json
 import os
@@ -377,6 +378,39 @@ def collect_objects():
     return removed
 
 
+def retire_runner_bottles(player, original, report):
+    """Retire only archive prefixes for this game after a verified replacement."""
+    from partydeck_storage import umu_mounts
+    expected = Path('/userdata/system/wine-bottles/windows')
+    active = Path(report)
+    name = original.name + '.wine'
+    if (original.suffix.lower() != '.wsquashfs' or active.parent.parent != expected
+            or active.name != name or active.parent.name in ('', '.', '..')):
+        return 0
+    area = location(player)
+    prefixes = area/'prefixes'
+    current = prefixes/active.parent.name/name
+    if current.resolve() != current or not current.is_dir():
+        return 0
+    mounts = umu_mounts()
+    if any(area.parts[-3:] == parent.parts[-3:] for mount in mounts
+           for parent in (mount, *mount.parents)):
+        return 0
+    previous = [candidate for candidate in prefixes.glob(f'*/{glob_escape(name)}')
+                if candidate != current and candidate.is_dir() and candidate.resolve() == candidate]
+    if not previous:
+        return 0
+    stage = regular_directory(area/'.retired-runner-bottles')
+    for candidate in previous:
+        relative = candidate.relative_to(area)/'drive_c/windows'
+        slot = area/'windows'/hashlib.sha256(os.fsencode(relative)).hexdigest()[:24]
+        if slot.resolve() == slot and slot.is_dir():
+            slot.rename(stage/uuid.uuid4().hex)
+        candidate.rename(stage/uuid.uuid4().hex)
+    shutil.rmtree(stage)
+    return len(previous)
+
+
 def prune_inherited_dependencies(area, target):
     """Drop legacy copy-up files when the original .wine already supplies them."""
     from partydeck_storage import files, mounted_paths
@@ -432,6 +466,11 @@ def prune_inherited_dependencies(area, target):
 
 def prepare(player, saves, original, target):
     area = migrate(player, saves)
+    retired = area/'.retired-runner-bottles'
+    if retired.is_dir() and retired.resolve() == retired:
+        from partydeck_storage import mounted_paths
+        if not any(m == retired or retired in m.parents for m in mounted_paths()):
+            shutil.rmtree(retired)
     prepare_windows(player, original, target)
     return area
 

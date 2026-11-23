@@ -149,4 +149,52 @@ time.sleep(60)
     subprocess.run([sys.executable, coop.__file__, '_await-display', str(state), *command],
                    env=environment, check=True, timeout=3)
 
+    context = root/'hotkeygen.state'
+    previous = ('ports', {'exit': 'native-exit', 'screenshot': 'take-shot'}, True)
+    context.write_text(json.dumps({'context': {'name': previous[0], 'keys': previous[1]},
+                                   'include_common': previous[2]}))
+    def set_context(_binary, current):
+        context.write_text(json.dumps({'context': {'name': current[0], 'keys': current[1]},
+                                       'include_common': current[2]}))
+    with patch.object(coop, 'HOTKEY_STATE', (context,)), \
+         patch.object(coop.shutil, 'which', return_value='/usr/bin/hotkeygen'), \
+         patch.object(coop, 'set_hotkey_context', side_effect=set_context) as set_context_mock:
+        hotkey = coop.SessionHotkey()
+        hotkey.start()
+        name, keys, common = coop.hotkey_context()
+        assert name == 'windows-party' and common
+        assert keys['screenshot'] == 'take-shot' and '_stop-session' in keys['exit']
+        hotkey.close()
+        assert coop.hotkey_context() == previous
+        hotkey.start()
+        set_context('/usr/bin/hotkeygen', ('another-emulator', {}, True))
+        calls = set_context_mock.call_count
+        hotkey.close()
+        assert set_context_mock.call_count == calls
+    with patch.object(coop, 'process_start_time', return_value='live'), \
+         patch.object(coop.os, 'kill') as kill:
+        coop.stop_session_from_hotkey(1234, 'stale')
+        kill.assert_not_called()
+        coop.stop_session_from_hotkey(1234, 'live')
+        kill.assert_called_once_with(1234, signal.SIGTERM)
+
+    from partydeck_profiles import track_squashfs_runner
+    script = """play_squashfs() {
+    SAVEPOINT=/runner/prefix
+    if [[ -n "${FAIL:-}" ]]; then false; else true; fi
+    waitWineServer 0
+}
+waitWineServer() { return 0; }
+play_squashfs
+"""
+    updated, count = track_squashfs_runner(script)
+    assert count == 1
+    target = root/'runner-check.json'
+    marker = target.with_suffix('.runner')
+    for failure in (True, False):
+        env = dict(os.environ, PARTYDECK_EXIT_STATE=str(target), FAIL='1' if failure else '')
+        subprocess.run(['bash', '-c', updated], env=env, check=True)
+        assert marker.exists() is not failure
+    assert marker.read_text().strip() == '/runner/prefix'
+
 print('Fermeture : suivi Wine indépendant, fin globale Wayland, Xorg conservé, codes réels, groupes isolés et nettoyage vérifiés.')

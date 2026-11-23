@@ -68,6 +68,15 @@ for language,title,choice in (('fr','GPU de rendu','Configuration système'),('e
     assert next(label for key,label,_ in fields(0) if key=='gpu')==title
     assert label_value('gpu','system')==choice
 
+for language, label in (('fr', 'Supprimer les bottles des anciens runners'),
+                        ('en', 'Delete bottles from previous runners')):
+    lang.set_language(language)
+    model = SimpleNamespace(data={'adapter':'standard'}, rom=Path('/roms/Game.wsquashfs'), celeste_skins=[])
+    view = SimpleNamespace(tab=0, model=model)
+    assert App.current_fields(view)[-1] == ('keep_latest_runner', label, [False, True])
+    model.rom = Path('/roms/Game.wine')
+    assert not any(row[0] == 'keep_latest_runner' for row in App.current_fields(view))
+
 for language,prefix in (('fr','Contrôles virtuels toolbox'),('en','Toolbox virtual controls')):
     lang.set_language(language)
     assert lang.tr('Contrôles virtuels toolbox : {p0}',p0='test').startswith(prefix)

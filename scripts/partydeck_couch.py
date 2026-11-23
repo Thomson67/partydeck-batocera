@@ -337,6 +337,7 @@ class Model:
         self.data.setdefault('adapter', 'standard')
         self.data.setdefault('keyboard_player', True)
         self.data.setdefault('gpu','auto')
+        self.data.setdefault('keep_latest_runner',False)
         self.data.setdefault('anchor', anchor_defaults())
         self.data.setdefault('borderlands2', bl2_defaults())
         self.data.setdefault('sm64coopdx', sm64_defaults())
@@ -777,6 +778,8 @@ class App:
     def current_fields(self):
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
                     self.model.celeste_skins)
+        if self.tab == 0 and self.model.rom and self.model.rom.suffix.lower() == '.wsquashfs':
+            rows.append(('keep_latest_runner', tr('Supprimer les bottles des anciens runners'), [False, True]))
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows
@@ -1819,6 +1822,10 @@ class App:
                     else navigation + ' · ' + quit_hint)
         if volume_selected and context == 'main' and self.model.data.get('adapter') == 'sm64coopdx':
             subtitle = tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok',self.input_mode) + tr(' : valeur de la configuration commune')
+        if context == 'main' and self.model.data and self.pane == 'settings':
+            rows = self.current_fields()
+            if self.row < len(rows) and rows[self.row][0] == 'keep_latest_runner':
+                subtitle = tr('Les sauvegardes internes aux anciennes bottles sont supprimées avec celles-ci.')
         if context in ('confirm','missing','remove','game-cleanup'):
             subtitle = ''
         elif context == 'browser':

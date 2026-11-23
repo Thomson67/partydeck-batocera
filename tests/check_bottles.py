@@ -118,7 +118,33 @@ def run():
     print('Bottles: private saves/registries, shared Windows inodes, migration recovery/conflicts, safe hardlink fallback and accounting verified.')
 
 
+def test_retire():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        rom = root/'Left 4 Dead 2.wsquashfs'
+        player = root/'runtime'/'0123456789abcdef'/'j1'
+        with patch.object(b, 'ROOT', root/'bottles'), patch('partydeck_storage.umu_mounts', return_value=set()):
+            area = b.location(player)
+            prior, current = (area/'prefixes'/runner/(rom.name + '.wine')
+                              for runner in ('wine-proton', 'modern-UMU'))
+            for prefix in (prior, current):
+                prefix.mkdir(parents=True)
+            from hashlib import sha256
+            slot = area/'windows'/sha256(os.fsencode(prior.relative_to(area)/'drive_c/windows')).hexdigest()[:24]
+            slot.mkdir(parents=True)
+            exports = root/'saves'
+            exports.mkdir()
+            other = prior.parent/'other.wine'
+            other.mkdir()
+            report = '/userdata/system/wine-bottles/windows/modern-UMU/' + current.name
+            assert b.retire_runner_bottles(player, rom, str(current)) == 0
+            assert b.retire_runner_bottles(player, rom, report) == 1
+            assert current.is_dir() and other.is_dir() and exports.is_dir()
+            assert not prior.exists() and not slot.exists()
+
+
 if __name__=='__main__':run()
+if __name__=='__main__':test_retire()
 
 # UMU authorization remains confined to this player's known Windows views.
 with tempfile.TemporaryDirectory() as folder:

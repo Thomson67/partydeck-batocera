@@ -570,7 +570,10 @@ def _run_wine(original, target, player, saves=None):
             subprocess.run(["mount", "--bind", str(private), str(destination)], check=True)
     if saves is not None:
         from partydeck_profiles import install_party_runner_hook
-        install_party_runner_hook(original,player)
+        if os.environ.get('PARTYDECK_TRACK_RUNNER') == '1':
+            install_party_runner_hook(original,player,track_runner=True)
+        else:
+            install_party_runner_hook(original,player)
         from partydeck_mangohud import install_hook as install_mangohud
         install_mangohud(original,player)
         from partydeck_anchor import install_hook
@@ -611,7 +614,8 @@ def _run_wine(original, target, player, saves=None):
                 adapt_prefix_isolation(views,windows_views)
             exports=[*views,*windows_views]
             environment={'env':pressure_vessel_environment(exports)} if exports else {}
-            status = run_native_wine(original, environment, watch_umu=bool(views))
+            status = run_native_wine(original, environment, watch_umu=bool(views) or
+                                     os.environ.get('PARTYDECK_TRACK_RUNNER') == '1')
             if goldberg_result is not None:
                 status=finish_l4d2(goldberg_result,status)
             if nfsmw_result is not None:
@@ -651,11 +655,16 @@ def run_native_wine(original, options, watch_umu=False):
                     pass
                 if stop_command is None:
                     stop_command = umu_stop_command()
+                    command_env = None
+                    if stop_command is None:
+                        native = native_stop_command(state, options.get('env', os.environ))
+                        if native is not None:
+                            stop_command, command_env = native
                     if stop_command is not None:
                         ready.touch()
                 if stop_command is not None and request.exists():
                     try:
-                        subprocess.run(stop_command, check=True, timeout=12)
+                        subprocess.run(stop_command, env=command_env, check=True, timeout=12)
                     except (OSError, subprocess.SubprocessError) as error:
                         ready.unlink(missing_ok=True)
                         print(f"UMU stop: {error}", flush=True)
@@ -682,6 +691,20 @@ def umu_stop_command():
     return None
 
 
+def native_stop_command(state, environment):
+    if os.environ.get('PARTYDECK_TRACK_RUNNER') != '1':
+        return None
+    try:
+        server, prefix, libraries = state.with_suffix('.native').read_text().splitlines()
+    except (OSError, ValueError):
+        return None
+    binary = Path(server)
+    if (binary.name != 'wineserver' or not binary.is_file() or not binary.is_absolute()
+            or not Path(prefix).is_absolute() or not Path(prefix).is_dir()):
+        return None
+    return [server, '-k'], dict(environment, WINEPREFIX=prefix, LD_LIBRARY_PATH=libraries)
+
+
 def run_compositor(command):
     # ES can pass a low soft limit to its ports. Raise it in the freshly
     # spawned child only, before Gamescope creates Vulkan/Wayland descriptors.
@@ -701,7 +724,8 @@ def run_compositor(command):
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
-                 session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None):
+                 session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
+                 track_runner=False):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -752,6 +776,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if celestenet:
         environment['PARTYDECK_CELESTENET']='1'
     environment.pop('PARTYDECK_EXIT_STATE',None)
+    environment.pop('PARTYDECK_TRACK_RUNNER',None)
+    if track_runner:
+        environment['PARTYDECK_TRACK_RUNNER'] = '1'
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
     supervise_wine = exit_state is not None and UMU_HOME.is_dir()
@@ -776,7 +803,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     return process
 
 
-def stop_players(processes, timeout=5, states=(), sync_timeout=30):
+def stop_players(processes, timeout=5, states=(), sync_timeout=120):
     # Every compositor has its own process group. Never use a global process
     # name or wineserver kill: solo games and unrelated sessions must survive.
     sandboxes = [vars(process).get('wine_sandbox') for process in processes]
@@ -786,6 +813,7 @@ def stop_players(processes, timeout=5, states=(), sync_timeout=30):
         if owner.poll() is None and state.with_suffix('.umu-ready').exists():
             state.with_suffix('.stop').touch()
             syncing.append((owner, state))
+            print(f"Windows Party {state.parent.name.upper()}: graceful Wine stop requested.", flush=True)
     deadline = time.monotonic() + sync_timeout
     while syncing and time.monotonic() < deadline:
         syncing = [(process, state) for process, state in syncing
@@ -837,6 +865,83 @@ def handle_exit(signum, _frame):
     raise SessionStopped(signum)
 
 
+HOTKEY_STATE = (Path('/run/hotkeygen.state'), Path('/run/hotkeygen.context'))
+
+
+def hotkey_context():
+    for path in HOTKEY_STATE:
+        try:
+            state = json.loads(path.read_text())
+            context = state.get('context', state)
+            if isinstance(context['name'], str) and isinstance(context['keys'], dict):
+                return context['name'], context['keys'], state.get('include_common', False)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return None
+
+
+def process_start_time(pid):
+    try:
+        return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+def stop_session_from_hotkey(pid, start):
+    if start and process_start_time(pid) == start:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    return 0
+
+
+def set_hotkey_context(binary, context):
+    name, keys, common = context
+    command = [binary, '--new-context', name, json.dumps(keys)]
+    if not common:
+        command.append('--disable-common')
+    subprocess.run(command, check=True, timeout=5)
+
+
+class SessionHotkey:
+    def __init__(self):
+        self.binary = shutil.which('hotkeygen')
+        self.previous = None
+        self.action = None
+
+    def start(self):
+        pid = os.getpid()
+        stamp = process_start_time(pid)
+        if not self.binary or not stamp:
+            return
+        self.previous = hotkey_context()
+        _, keys, common = self.previous or ('', {}, True)
+        if self.previous and self.previous[0] == 'windows-party':
+            self.previous = None
+        self.action = shlex.join([sys.executable, str(Path(__file__).resolve()),
+                                  '_stop-session', str(pid), stamp])
+        try:
+            set_hotkey_context(self.binary, ('windows-party', {**keys, 'exit': self.action}, common))
+            print('Windows Party: session hotkey registered.', flush=True)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f'Windows Party hotkey: {error}', flush=True)
+
+    def close(self):
+        if not self.action:
+            return
+        current = hotkey_context()
+        if current is None or current[0] != 'windows-party' or current[1].get('exit') != self.action:
+            return
+        try:
+            if self.previous:
+                set_hotkey_context(self.binary, self.previous)
+            else:
+                subprocess.run([self.binary, '--default-context'], check=True, timeout=5)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f'Windows Party hotkey restore: {error}', flush=True)
+
+
 def read_wine_exit(path):
     import json
     try:
@@ -845,6 +950,22 @@ def read_wine_exit(path):
         return code if type(code) is int and 0 <= code <= 255 else None
     except (OSError,ValueError):
         return None
+
+
+def successful_runner(state, started):
+    report = state.with_suffix('.runner')
+    if read_wine_exit(state) != 0 or report.is_symlink() or not report.is_file():
+        return None
+    active = report.read_text().rstrip('\n')
+    if Path(active).parent.name.endswith('-UMU'):
+        logs = [path for path in (state.parent/'umu-logs').glob('runner-*.log')
+                if not path.is_symlink() and path.stat().st_mtime_ns >= started]
+        if not logs:
+            return None
+        last = max(logs, key=lambda path: path.stat().st_mtime_ns)
+        if 'wine_persistence_rc=0' not in last.read_text(errors='replace').splitlines():
+            return None
+    return active
 
 
 def exit_code(status):
@@ -930,6 +1051,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     monitor=primary_monitor(desktop['output'])
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
+    started = time.time_ns()
+    keep_latest_runner = (party and original.suffix.lower() == '.wsquashfs'
+                          and (profile or {}).get('keep_latest_runner', False))
     from partydeck_celestenet import ADAPTER as CELESTENET
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1
@@ -989,6 +1113,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
+    hotkey = SessionHotkey()
     try:
         shared_runtimes = prepare_shared_steam_runtimes(
             UMU_HOME, base / ('runtime' if party else 'coop') / game_id)
@@ -1020,6 +1145,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
+        hotkey.start()
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
             player = base / ("runtime" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
@@ -1037,7 +1163,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                           network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
                                           l4d2_launch=l4d2_launch,celestenet=celestenet,
-                                          celeste_options=celeste_options))
+                                          celeste_options=celeste_options,track_runner=keep_latest_runner))
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
@@ -1121,6 +1247,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     finally:
                         if network is not None:network.close()
         finally:
+            hotkey.close()
             if bl2_host is not None:bl2_host.close()
             if states:
                 try:
@@ -1146,6 +1273,14 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                             print(f"UMU {player.name.upper()}: inherited dependency bytes removed={freed}", flush=True)
                         if not shared_runtimes:
                             compact_steam_runtime(player)
+                    if keep_latest_runner and len(states) == len(players):
+                        from partydeck_bottles import retire_runner_bottles
+                        reports = [successful_runner(state, started) for state in states]
+                        if all(reports):
+                            for (player, _), report in zip(bottle_players, reports):
+                                count = retire_runner_bottles(player, original, report)
+                                if count:
+                                    print(f"Windows Party {player.name.upper()}: retired runner bottles={count}", flush=True)
                     collect_objects()
                 except (OSError,RuntimeError,ValueError,subprocess.SubprocessError) as error:
                     print(tr('Optimisation des bottles différée : {p0}',p0=error),flush=True)
@@ -1161,6 +1296,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 path.with_suffix('.umu-ready').unlink(missing_ok=True)
                 path.with_suffix('.stop').unlink(missing_ok=True)
                 path.with_suffix('.display').unlink(missing_ok=True)
+                path.with_suffix('.runner').unlink(missing_ok=True)
+                path.with_suffix('.native').unlink(missing_ok=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
 
@@ -1169,6 +1306,8 @@ def main():
     if len(sys.argv) > 2 and sys.argv[1] == "_gamescope":
         run_compositor(sys.argv[2:])
         return 0
+    if len(sys.argv) == 4 and sys.argv[1] == "_stop-session":
+        return stop_session_from_hotkey(int(sys.argv[2]), sys.argv[3])
     if sys.argv[1:] == ["install-system"]:
         install_system()
         return 0

@@ -78,6 +78,8 @@ def validate(data, rom):
         raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError(tr("Option clavier comme joueur invalide."))
+    if type(data.get('keep_latest_runner', False)) is not bool:
+        raise ValueError(tr('Option de nettoyage des anciens runners invalide.'))
     if data.get('gpu','auto') not in ('auto','system','nvidia'):
         raise ValueError(tr('Choix du GPU invalide.'))
     if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet"):
@@ -394,15 +396,47 @@ def instrument_runner(source, runner, hidraw=None):
     return pattern.sub(lambda m:m[0]+override,source)
 
 
-def install_party_runner_hook(rom, player):
+def track_squashfs_runner(source):
+    """Report the actual archive upper only after the launch and native wait succeed."""
+    block = re.compile(r'(?ms)(^play_squashfs\(\) \{\s*\n.*?)(^[ \t]*waitWineServer 0[ \t]*\n)(^\})')
+    launch = '    if [[ -n "${WINE_LANG}" ]]; then\n'
+
+    def replace(match):
+        start = match[1].replace(launch,
+            '    if [[ "${WINE_VERSION}" != *-UMU && -n "${PARTYDECK_EXIT_STATE:-}" ]]; then\n'
+            '        printf "%s\\n" "$WINESERVER" "$WINEPOINT" "${LD_LIBRARY_PATH:-}" > "${PARTYDECK_EXIT_STATE%.json}.native"\n'
+            '    fi\n' + launch, 1)
+        return start + (
+            '    local partydeck_launch_status=$?\n'
+            '    waitWineServer 0 || return $?\n'
+            '    if [[ "$partydeck_launch_status" == 0 && -n "${PARTYDECK_EXIT_STATE:-}" ]]; then\n'
+            '        printf "%s\\n" "$SAVEPOINT" > "${PARTYDECK_EXIT_STATE%.json}.runner"\n'
+            '    fi\n'
+            '    return 0\n'
+        ) + match[3]
+    return block.subn(replace, source)
+
+
+def install_party_runner_hook(rom, player, *, track_runner=False):
     runner=selected_party_runner(rom)
     hidraw=selected_party_hidraw(rom)
-    if runner is None and hidraw is None:return
+    if runner is None and hidraw is None and not track_runner:return
     binary=shutil.which('batocera-wine')
     if binary is None:raise RuntimeError(tr('batocera-wine introuvable.'))
     binary=Path(binary).resolve()
     replacement=player/'batocera-wine-party-runner'
-    atomic_write(replacement,instrument_runner(binary.read_text(),runner,hidraw),0o755)
+    source = binary.read_text()
+    if runner is not None or hidraw is not None:
+        source = instrument_runner(source,runner,hidraw)
+    if track_runner:
+        tracked, count = track_squashfs_runner(source)
+        if count != 1:
+            print('Windows Party: native runner tracking unavailable.', flush=True)
+            if runner is None and hidraw is None:
+                return
+        else:
+            source = tracked
+    atomic_write(replacement,source,0o755)
     subprocess.run(['bash','-n',str(replacement)],check=True)
     subprocess.run(['mount','--bind',str(replacement),str(binary)],check=True)
     if runner is not None:print(tr('Windows Party : runner dédié {p0}.',p0=runner),flush=True)
