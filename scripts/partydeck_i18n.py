@@ -62,6 +62,17 @@ def get_language():
 
 
 EN = {
+    'CelesteNet {p0} : variante 32:9 absente ou incomplète ; rendu standard.': 'CelesteNet {p0}: 32:9 variant missing or incomplete. Using standard rendering.',
+    'CelesteNet {p0} : la variante 32:9 correspond à une autre installation Everest ; rendu standard.': 'CelesteNet {p0}: 32:9 variant belongs to a different Everest installation. Using standard rendering.',
+    'CelesteNet {p0} : variante 32:9 activée ({p1}×{p2}).': 'CelesteNet {p0}: 32:9 variant enabled ({p1}×{p2}).',
+    'CelesteNet : empreinte de téléchargement invalide.': 'CelesteNet: download checksum mismatch.',
+    'CelesteNet : préparation du serveur local au premier lancement.': 'CelesteNet: preparing the local server on first launch.',
+    'CelesteNet : serveur local prêt sur {p0}:{p1}.': 'CelesteNet: local server ready at {p0}:{p1}.',
+    'CelesteNet : le serveur ne démarre pas. Consultez {p0}.': 'CelesteNet: the server failed to start. See {p0}.',
+    'CelesteNet : lancez un Celeste.exe équipé d’Everest et de CelesteNet.': 'CelesteNet: launch Celeste.exe with Everest and CelesteNet installed.',
+    'CelesteNet {p0} : connexion demandée vers {p1}.': 'CelesteNet {p0}: requested a connection to {p1}.',
+    'CelesteNet {p0} : la console Everest répond, mais la commande con manque.': 'CelesteNet {p0}: the Everest console responded, but the con command is missing.',
+    'CelesteNet {p0} : console Everest inaccessible sur le port {p1}.': 'CelesteNet {p0}: Everest console unavailable on port {p1}.',
     'Sauvegarde de l’hôte': 'Host save slot',
     'Sauvegarde hôte SM64CoopDX invalide.': 'Invalid SM64CoopDX host save slot.',
     'Réglages de connexion automatique invalides.': 'Invalid automatic connection settings.',

@@ -519,6 +519,8 @@ def _run_wine(original, target, player, saves=None):
         hkmp_result=install_hkmp(Path(__file__).resolve().parent,original,player)
         from partydeck_hkmultiplayer import install_hook as install_multi, finish_launch as finish_multi
         hkmultiplayer_result=install_multi(Path(__file__).resolve().parent,original,player)
+        from partydeck_celestenet import install_hook as install_celestenet
+        install_celestenet(Path(__file__).resolve().parent,player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     if saves is not None:
         from partydeck_autoconnect import install_hook as install_autoconnect
@@ -583,7 +585,7 @@ def run_compositor(command):
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
-                 session_token=None,player_count=1,l4d2_launch=None):
+                 session_token=None,player_count=1,l4d2_launch=None,celestenet=False):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -623,6 +625,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token
     environment.pop('PARTYDECK_L4D2_LAUNCH',None)
     if l4d2_launch is not None:environment['PARTYDECK_L4D2_LAUNCH']=json.dumps(l4d2_launch)
+    environment.pop('PARTYDECK_CELESTENET',None)
+    if celestenet:
+        environment['PARTYDECK_CELESTENET']='1'
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
@@ -763,6 +768,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     monitor=primary_monitor(desktop['output'])
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
+    from partydeck_celestenet import ADAPTER as CELESTENET
+    celestenet=bool(party and len(players)>1 and (profile or {}).get('adapter')==CELESTENET)
     bl2_lan=None
     l4d2_launch=None
     if party and len(players)>1:
@@ -812,6 +819,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     bottle_players=[]
     virtual_watcher=None
     network=None
+    celeste_processes=[]
     bl2_host=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
@@ -824,14 +832,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         requested=os.environ.get('PARTYDECK_PRIVATE_LAN',os.environ.get('PARTYDECK_NFSMW_PRIVATE_LAN'))
         use_private=private_lan_enabled(profile,len(players))
         if requested=='1':
-            if not profile or profile.get('adapter') not in PRIVATE_LAN_PROFILES:
+            if not celestenet and (not profile or profile.get('adapter') not in PRIVATE_LAN_PROFILES):
                 raise ValueError(tr('Le LAN privé exige un profil compatible.'))
             use_private=True
         elif requested=='0':use_private=False
+        if celestenet:
+            use_private=True
         if use_private:
             from partydeck_private_lan import PrivateLAN
-            network=PrivateLAN(len(players))
+            network=PrivateLAN(len(players),shared=True) if celestenet else PrivateLAN(len(players))
             network.start()
+        if celestenet:
+            from partydeck_celestenet import start_server, start_join
+            celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
             player = base / ("runtime" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
@@ -846,9 +859,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
                                           shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
-                                          network=network,network_index=index-1,
+                                          network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
-                                          l4d2_launch=l4d2_launch))
+                                          l4d2_launch=l4d2_launch,celestenet=celestenet))
+            if celestenet:
+                celeste_processes.append(start_join(network,index-1))
             states.append(state)
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)
@@ -922,7 +937,13 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             finally:
                 try:stop_players(processes)
                 finally:
-                    if network is not None:network.close()
+                    try:
+                        if celeste_processes:
+                            from partydeck_celestenet import stop
+                            for process in reversed(celeste_processes):
+                                stop(process)
+                    finally:
+                        if network is not None:network.close()
         finally:
             if bl2_host is not None:bl2_host.close()
             # All Wine namespaces must be gone before touching physical uppers.

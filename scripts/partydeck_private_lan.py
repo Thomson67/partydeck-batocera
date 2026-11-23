@@ -34,13 +34,15 @@ def enter_path(path,expected,host,command):
 
 
 class PrivateLAN:
-    def __init__(self,count):
+    def __init__(self,count,*,shared=False):
         if type(count) is not int or count not in (2,3,4):
             raise ValueError(tr('LAN privé : choisissez de 2 à 4 joueurs.'))
-        self.count=count;self.holders=[];self.fds=[]
+        self.count=1 if shared else count
+        self.shared=shared
+        self.holders=[];self.fds=[]
         self.host=os.stat('/proc/self/ns/net')
 
-    def address(self,index):return f'192.168.247.{11+index}'
+    def address(self,index):return '127.0.0.1' if self.shared else f'192.168.247.{11+index}'
 
     def prefix(self,index):
         fd=self.fds[index];stat=os.fstat(fd)
@@ -78,6 +80,8 @@ class PrivateLAN:
                 process.stdout.close()
                 self.fds.append(os.open(f'/proc/{process.pid}/ns/net',os.O_RDONLY|os.O_CLOEXEC))
                 self.command(index,['ip','link','set','lo','up'])
+            if self.shared:
+                return self
             self.command(0,['ip','link','add','br0','type','bridge'])
             self.command(0,['ip','addr','add',self.address(0)+'/24','dev','br0'])
             self.command(0,['ip','link','set','br0','up'])

@@ -24,22 +24,26 @@ pseudos et options coop, activation privée d'ESoulLink et GhostHunter déjà in
 
 ## Installation
 
-Cette branche de test combine **HKMultiplayer 0.36.2 / Native Wide 0.1.1** et les **bottles Windows mutualisées** : `test/shared-windows-bottles`.
+La branche `test/l4d2-session-setup` réunit les profils multijoueurs de test,
+les bottles Windows mutualisées et le catalogue EmulationStation déplacé vers
+`/userdata/system/windows-party-library`.
 Fermez les jeux et le configurateur avant installation ou migration.
 
 ```bash
 (
   fichier=$(mktemp /tmp/windows-party-install.XXXXXX) || exit 1
   trap 'rm -f -- "$fichier"' EXIT
-  revision=test/shared-windows-bottles
+  revision=test/l4d2-session-setup
   curl --http1.1 --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
     "https://raw.githubusercontent.com/Thomson67/partydeck-batocera/$revision/install.sh" \
     -o "$fichier" && PARTYDECK_REVISION="$revision" bash "$fichier"
 )
 ```
 
-Après installation, actualisez les listes de jeux d’EmulationStation. Le système
-**Windows Party** contient le configurateur et les jeux ajoutés.
+Après installation, redémarrez EmulationStation. Le système **Windows Party**
+contient le configurateur et les jeux ajoutés. Lors d’une mise à jour,
+l’installateur migre les lanceurs et les métadonnées du catalogue existant
+vers le nouveau chemin et conserve l’ancien dossier en secours.
 
 Au démarrage de chaque Gamescope, la limite souple de fichiers ouverts est relevée
 jusqu’à 65 536, dans la limite du maximum système existant. La modification reste
@@ -73,6 +77,37 @@ manual fallback. Live Batocera validation is required; see the linked guide.
 /userdata/system/windows-party/windows-party ajouter \
   "/userdata/roms/windows/Mon jeu.wsquashfs" 2 horizontal auto
 ```
+
+### CelesteNet en LAN
+
+Préparez la version Windows de Celeste avec **Everest** et le **client
+CelesteNet**. Lancez d’abord le jeu en solo pour vérifier que le mod apparaît.
+Dans Windows Party, ouvrez **Session → Profil du jeu → Celeste / CelesteNet**
+et choisissez de deux à quatre joueurs. Le premier lancement télécharge le
+serveur officiel et, si nécessaire, le runtime .NET Linux. Les lancements
+suivants réutilisent ces fichiers.
+
+PartyDeck lance un serveur dans un réseau privé partagé et connecte les
+clients à `localhost` au titre. Choisissez ensuite le même chapitre sur chaque
+instance. Le jeu démarre en mode debug Everest pendant cette session pour
+utiliser sa console locale. Le journal du serveur se trouve sous
+`runtime/<jeu>/celestenet/server.log`.
+
+**English:** Install Everest and the CelesteNet client in the Windows game,
+then select **Celeste / CelesteNet** under **Session → Game profile** for two
+to four players. The first launch downloads the private server dependencies.
+PartyDeck starts the server and requests each client's connection at the
+title screen. Pick the same chapter in each instance. Everest debug mode
+provides the local console during the session.
+
+Pour le partage horizontal en 32:9, placez les versions 32:9 de
+`Celeste.dll` et `MMHOOK_Celeste.dll` dans `PartyDeck-32x9`, à côté de
+`Celeste.exe`. Préparez ces deux DLL sur une copie vanilla patchée avant
+l'installation de la **même version d'Everest**. Ajoutez dans ce dossier
+`normal.sha256`, qui contient l'empreinte SHA-256 du `Celeste.dll` standard
+à la racine du jeu. Lorsqu'une vue est au format 32:9, PartyDeck utilise
+cette variante dans la session privée. Les autres vues, notamment le 2×2
+sur un téléviseur 16:9, utilisent les fichiers standard.
 
 La bibliothèque affiche uniquement les jeux ajoutés ; une nouvelle installation
 commence avec une liste vide. **Inser / Select → Ajouter** propose deux choix :
