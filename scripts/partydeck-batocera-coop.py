@@ -486,11 +486,19 @@ def await_nested_display(state, command):
     return 1
 
 
-def mount_overlay(target, area):
+def mount_overlay(target, area, shared=None):
     upper, work, view = (area / name for name in ("upper", "work", "view"))
     for path in (upper, work, view):
         path.mkdir(parents=True, exist_ok=True)
-    options = f"lowerdir={target},upperdir={upper},workdir={work},redirect_dir=on"
+    lower = str(target)
+    if shared is not None and shared.is_dir():
+        from partydeck_bottles import regular_directory, _safe_path
+        regular_directory(shared)
+        _safe_path(shared)
+        subprocess.run(["mount", "--bind", str(shared), str(shared)], check=True)
+        subprocess.run(["mount", "-o", "remount,bind,ro", str(shared)], check=True)
+        lower = f"{shared}:{lower}"
+    options = f"lowerdir={lower},upperdir={upper},workdir={work},redirect_dir=on"
     subprocess.run(["mount", "-t", "overlay", "-o", options, "overlay", str(view)], check=True)
     subprocess.run(["mount", "--bind", str(view), str(target)], check=True)
 
@@ -525,7 +533,8 @@ def _run_wine(original, target, player, saves=None):
     if original.suffix.lower() != ".wsquashfs":
         mount_overlay(target, (location(player) if saves is not None else player) / "content")
     if UMU_HOME.is_dir():
-        mount_overlay(UMU_HOME, player / "umu")
+        area = player / "umu"
+        mount_overlay(UMU_HOME, area, shared=area / "shared")
         for name in UMU_PRIVATE:
             private = player / "umu-private" / name
             private.mkdir(parents=True, exist_ok=True)
@@ -1080,9 +1089,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 try:
                     from partydeck_storage import ensure_idle
                     from partydeck_bottles import prepare,collect_objects
+                    from partydeck_umu import compact_steam_runtime
                     ensure_idle(base)
                     for player,saves in bottle_players:
                         prepare(player,saves,original,target)
+                        compact_steam_runtime(player)
                     collect_objects()
                 except (OSError,RuntimeError,ValueError,subprocess.SubprocessError) as error:
                     print(tr('Optimisation des bottles différée : {p0}',p0=error),flush=True)

@@ -13,6 +13,44 @@ import tempfile
 from partydeck_i18n import tr
 
 
+STEAM_RUNTIMES = ('steamrt2', 'steamrt3', 'steamrt4', 'steamrt4-arm64',
+                  'soldier', 'sniper')
+
+
+def compact_steam_runtime(player):
+    """Share large Steam Runtime files, keeping the rest of UMU's home private."""
+    from functools import lru_cache
+    from partydeck_bottles import ROOT, compact_tree
+
+    area = player / 'umu'
+    upper, shared = area / 'upper', area / 'shared'
+    relative = Path('home/.local/share/umu')
+
+    @lru_cache(maxsize=None)
+    def visible_lower(directory):
+        # After an upper file is removed its lower copy must be visible.
+        # A previous Steam Runtime update may have hidden or redirected a
+        # parent directory in OverlayFS. Leave that generation alone.
+        if any(key in ('trusted.overlay.opaque', 'trusted.overlay.redirect',
+                       'user.overlay.opaque', 'user.overlay.redirect')
+               for key in os.listxattr(directory, follow_symlinks=False)):
+            return False
+        return directory == upper or visible_lower(directory.parent)
+
+    def eligible(path, info):
+        return info.st_size >= 256 * 1024 and visible_lower(path.parent)
+
+    size = 0
+    for name in STEAM_RUNTIMES:
+        path = relative / name
+        source = upper / path
+        if source.is_dir() and source.resolve() == source:
+            result = compact_tree(source, shared / path, ROOT / 'objects', eligible=eligible)
+            size += result['shared']
+    if size:
+        print(f"UMU {player.name.upper()}: Steam Runtime shared bytes={size}", flush=True)
+
+
 @contextmanager
 def runner_views(player,runners=Path('/userdata/system/wine/custom'),
                  umu=Path('/userdata/system/umu/umu-run')):

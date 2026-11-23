@@ -12,7 +12,10 @@ import tempfile
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import partydeck_bottles as b
+import partydeck_umu as umu
 from check_bottles import fixture
+import importlib
+coop = importlib.import_module('partydeck-batocera-coop')
 
 if os.geteuid()!=0:raise SystemExit('Run inside unshare -Urnm (private user and mount namespaces).')
 subprocess.run(['mount','--make-rprivate','/'],check=True)
@@ -26,7 +29,8 @@ def rootless_run(command,**kwargs):
         command[index]=command[index].replace('redirect_dir=on','redirect_dir=off')+',userxattr'
     return real_run(command,**kwargs)
 b.subprocess.run=rootless_run
-with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as folder:
+test_disk = os.environ.get('TMPDIR', Path(__file__).resolve().parents[2])
+with tempfile.TemporaryDirectory(dir=test_disk) as folder:
     root=Path(folder)
     with patch.object(b,'ROOT',root/'bottles'):
         original,players=fixture(root)
@@ -106,3 +110,42 @@ with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as fol
             subprocess.run(['umount',str(slot/'lower')],check=True)
             subprocess.run(['umount',str(original/'drive_c/windows')],check=True)
 print('Real OverlayFS: J1/J2 writes, deletions, materialized prefix copies, read-only lowers, HKMultiplayer private identities and restart persistence verified.')
+
+with tempfile.TemporaryDirectory(dir=test_disk) as folder:
+    root = Path(folder)
+    runtime = Path('home/.local/share/umu/steamrt4')
+    content = b'Steam Runtime' * 25600
+    host = root / 'umu-host'
+    host.mkdir()
+    with patch.object(b, 'ROOT', root / 'bottles'):
+        for number in (1, 2):
+            player = root / f'j{number}'
+            area = player / 'umu'
+            source = area / 'upper' / runtime
+            source.mkdir(parents=True)
+            library = source / 'library.so'
+            library.write_bytes(content)
+            os.utime(library, (1, 1))
+            (source / 'small').write_text('private')
+            (area / 'upper/home/save').write_bytes(content)
+            umu.compact_steam_runtime(player)
+            assert not library.exists() and (source / 'small').is_file()
+            assert (area / 'upper/home/save').is_file()
+        a, c = [root / f'j{number}/umu/shared' / runtime / 'library.so' for number in (1, 2)]
+        assert a.samefile(c)
+        for number in (1, 2):
+            area = root / f'j{number}/umu'
+            coop.mount_overlay(host, area, shared=area / 'shared')
+            library = host / runtime / 'library.so'
+            assert library.read_bytes() == content
+            if number == 1:
+                library.write_bytes(b'J1 override')
+                try:
+                    a.write_bytes(b'write through shared path')
+                    raise AssertionError('shared layer writable')
+                except OSError:
+                    pass
+            for target in (host, area / 'view', area / 'shared'):
+                subprocess.run(['umount', str(target)], check=True)
+        assert a.read_bytes() == c.read_bytes() == content
+print('Steam Runtime files have one shared inode and isolated OverlayFS writes.')

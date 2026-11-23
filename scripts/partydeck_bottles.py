@@ -115,7 +115,7 @@ def _key(path, info, attrs):
     return key.hexdigest()
 
 
-def compact_tree(upper, lower, objects):
+def compact_tree(upper, lower, objects, *, eligible=None):
     """Publish a lower hardlink BEFORE unlinking its identical private upper.
 
     Objects are never writable through a bottle: only OverlayFS can expose
@@ -135,6 +135,8 @@ def compact_tree(upper, lower, objects):
     result = dict(shared=0, files=0)
     from partydeck_storage import files
     for path, info in files(upper):
+        if eligible is not None and not eligible(path, info):
+            continue
         attrs = _attributes(path)
         if attrs is None or info.st_nlink != 1 or not stat.S_ISREG(info.st_mode) or not info.st_size or info.st_size > 512*1024**2:
             continue
