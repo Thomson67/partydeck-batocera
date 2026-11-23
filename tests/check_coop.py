@@ -221,13 +221,16 @@ with patch.object(coop.subprocess,'run') as run:
     assert run.call_count == 3  # Xorg fallback survives WM activation failure.
 print("Attribution auto, classes J1/J2, placement, GPU hybride, focus et entrée standard détachée vérifiés.")
 
-# Celeste keeps the previously working Gamescope internal mode.
+# Match the XWayland mode to the Celeste viewport in 32:9 sessions.
 with patch.object(coop.subprocess, 'Popen') as popen:
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540), 'celeste-j2',
                       celestenet=True, celeste_options={'language': 'french'})
     args = popen.call_args.args[0]
-    assert '-w' not in args and '-h' not in args
-    assert args[args.index('-W') + 1] == '1920' and args[args.index('-H') + 1] == '540'
+    for option, size in (('-w', '1920'), ('-h', '540'), ('-W', '1920'), ('-H', '540')):
+        assert args[args.index(option) + 1] == size
     assert popen.call_args.kwargs['env']['PARTYDECK_CELESTE_OPTIONS'] == '{"language": "french"}'
     coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080), 'celeste-j2', celestenet=True)
+    assert '-w' not in popen.call_args.args[0]
+    coop.start_player(base, base/'j1', game, game, [], (0, 0, 1920, 1080), 'celeste-j1',
+                      celeste_options={'language': 'french'})
     assert '-w' not in popen.call_args.args[0]
