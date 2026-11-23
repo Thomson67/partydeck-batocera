@@ -36,6 +36,7 @@ from partydeck_storage import (settings as storage_settings, save_settings as sa
 
 from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
                                discover_outputs, output_choices, output_label)
+from partydeck_dst import matches as matches_dst
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
@@ -101,7 +102,7 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet'])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', 'dont-starve-together'])]
     if adapter == 'celestenet':
         if tab == 2:
             rows = [(f'celestenet.names.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Nom')), None)
@@ -242,6 +243,8 @@ def label_value(key, value):
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
+        if value == 'dont-starve-together':
+            return "Don't Starve Together · LAN"
         if value == 'celestenet':
             return 'Celeste / CelesteNet'
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental'),'hollowknight-hkmp':'Hollow Knight / HKMP','hollowknight-hkmultiplayer':'Hollow Knight / HKMultiplayer'}.get(value, value)
@@ -323,7 +326,7 @@ class Model:
         windows = self.windows
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
                          'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi),
-                         'celestenet':discover(windows,matches_celeste)}
+                         'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst)}
         return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
                 for recipe in COMMON]
 

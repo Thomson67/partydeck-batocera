@@ -313,6 +313,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
     cp -- "$source_dir/partydeck_celestenet.py" "$staging/partydeck_celestenet.py"
     mv -fT -- "$staging/partydeck_celestenet.py" "$base/partydeck_celestenet.py"
+    cp -- "$source_dir/partydeck_dst.py" "$staging/partydeck_dst.py"
+    mv -fT -- "$staging/partydeck_dst.py" "$base/partydeck_dst.py"
     cp -- "$source_dir/partydeck_umu.py" "$base/partydeck_umu.py"
     cp -- "$source_dir/partydeck_autoconnect.py" "$base/partydeck_autoconnect.py"
     cp -- "$source_dir/partydeck_bl2_session.py" "$base/partydeck_bl2_session.py"

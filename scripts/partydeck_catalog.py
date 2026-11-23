@@ -26,7 +26,8 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('nfsmw','Most Wanted 2005 · LAN expérimental','nfsmw-lan'),
           CommonGame('hkmp','Hollow Knight · HKMP (ancienne version)','hollowknight-hkmp'),
           CommonGame('hkmultiplayer','Hollow Knight · HKMultiplayer 0.36.2','hollowknight-hkmultiplayer'),
-          CommonGame('celestenet', 'Celeste · CelesteNet en LAN', 'celestenet'))
+          CommonGame('celestenet', 'Celeste · CelesteNet en LAN', 'celestenet'),
+          CommonGame('dst', "Don't Starve Together · LAN", 'dont-starve-together'))
 
 
 def is_rom(path):
@@ -48,6 +49,9 @@ def recipe_for(rom, adapter=None):
     from partydeck_nfsmw import matches as matches_mw
     from partydeck_hkmp import matches as matches_hkmp
     from partydeck_hkmultiplayer import matches as matches_multi
+    from partydeck_dst import ADAPTER as DST, matches as matches_dst
+    if adapter is None and matches_dst(rom):
+        adapter = DST
     if adapter is None and matches_multi(rom):return COMMON[6]
     if adapter is None and matches_celeste(rom):
         adapter = 'celestenet'

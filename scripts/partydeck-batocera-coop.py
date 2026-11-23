@@ -592,6 +592,9 @@ def _run_wine(original, target, player, saves=None):
         hkmultiplayer_result=install_multi(Path(__file__).resolve().parent,original,player)
         from partydeck_celestenet import install_hook as install_celestenet
         install_celestenet(Path(__file__).resolve().parent,player)
+        if os.environ.get('PARTYDECK_DST') == '1':
+            from partydeck_dst import install_hook as install_dst
+            install_dst(Path(__file__).resolve().parent, player)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     if saves is not None:
         from partydeck_autoconnect import install_hook as install_autoconnect
@@ -725,7 +728,7 @@ def run_compositor(command):
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
-                 track_runner=False):
+                 track_runner=False, dst=False):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -773,6 +776,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if celeste_options is not None:
         environment['PARTYDECK_CELESTE_OPTIONS'] = json.dumps(celeste_options)
     environment.pop('PARTYDECK_CELESTENET',None)
+    environment.pop('PARTYDECK_DST', None)
+    if dst:
+        environment['PARTYDECK_DST'] = '1'
     if celestenet:
         environment['PARTYDECK_CELESTENET']='1'
     environment.pop('PARTYDECK_EXIT_STATE',None)
@@ -1057,6 +1063,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     from partydeck_celestenet import ADAPTER as CELESTENET
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1
+    from partydeck_dst import ADAPTER as DST
+    dst = party and len(players) > 1 and (profile or {}).get('adapter') == DST
     bl2_lan=None
     l4d2_launch=None
     if party and len(players)>1:
@@ -1132,11 +1140,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         requested=os.environ.get('PARTYDECK_PRIVATE_LAN',os.environ.get('PARTYDECK_NFSMW_PRIVATE_LAN'))
         use_private=private_lan_enabled(profile,len(players))
         if requested=='1':
-            if not celestenet and (not profile or profile.get('adapter') not in PRIVATE_LAN_PROFILES):
+            if not (celestenet or dst) and (not profile or profile.get('adapter') not in PRIVATE_LAN_PROFILES):
                 raise ValueError(tr('Le LAN privé exige un profil compatible.'))
             use_private=True
         elif requested=='0':use_private=False
-        if celestenet:
+        if celestenet or dst:
             use_private=True
         if use_private:
             from partydeck_private_lan import PrivateLAN
@@ -1163,7 +1171,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                           network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
                                           l4d2_launch=l4d2_launch,celestenet=celestenet,
-                                          celeste_options=celeste_options,track_runner=track_runner))
+                                          celeste_options=celeste_options,track_runner=track_runner,dst=dst))
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
@@ -1298,6 +1306,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 path.with_suffix('.display').unlink(missing_ok=True)
                 path.with_suffix('.runner').unlink(missing_ok=True)
                 path.with_suffix('.native').unlink(missing_ok=True)
+                if dst:
+                    (path.parent/'dst-scripts.zip').unlink(missing_ok=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
 

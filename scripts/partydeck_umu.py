@@ -235,6 +235,13 @@ def launcher_relay(original, aliases, player=None, shared_runtimes=()):
             "        from partydeck_celestenet import prepare_umu_viewport,unmount_variant\n"
             f"        mounted=prepare_umu_viewport(Path({str(player)!r}))\n"
             "        sys.path.pop(0)\n"
+            "    if os.environ.get('PARTYDECK_DST') == '1':\n"
+            "        from pathlib import Path\n"
+            f"        sys.path.insert(0,{str(base)!r})\n"
+            "        from partydeck_celestenet import unmount_variant\n"
+            "        from partydeck_dst import prepare_umu\n"
+            f"        mounted=prepare_umu(Path({str(player)!r}))\n"
+            "        sys.path.pop(0)\n"
         )
     return ("import os,runpy,sys\n"
             f"aliases={aliases!r}\n"

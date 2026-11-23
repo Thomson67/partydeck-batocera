@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 from partydeck_migrate import MEDIA_FIELDS, PARTY_ROMS
+from partydeck_dst import ADAPTER as DST, matches as matches_dst
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
 MARKER = "# Entrée gérée par PartyDeck Wine"
@@ -65,6 +66,8 @@ def defaults(rom):
     from partydeck_celestenet import ADAPTER as celestenet, matches as matches_celeste, defaults as celeste_defaults
     if matches_celeste(rom):
         data.update(adapter=celestenet, celestenet=celeste_defaults())
+    if matches_dst(rom):
+        data['adapter'] = DST
     return data
 
 
@@ -82,7 +85,7 @@ def validate(data, rom):
     data.pop('keep_latest_runner', None)
     if data.get('gpu','auto') not in ('auto','system','nvidia'):
         raise ValueError(tr('Choix du GPU invalide.'))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet"):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet", DST):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
