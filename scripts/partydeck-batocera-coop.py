@@ -1052,8 +1052,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     started = time.time_ns()
-    keep_latest_runner = (party and original.suffix.lower() == '.wsquashfs'
-                          and (profile or {}).get('keep_latest_runner', False))
+    track_runner = party and original.suffix.lower() == '.wsquashfs'
+    keep_latest_runner = track_runner and (profile or {}).get('keep_latest_runner', False)
     from partydeck_celestenet import ADAPTER as CELESTENET
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1
@@ -1163,7 +1163,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                           network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
                                           l4d2_launch=l4d2_launch,celestenet=celestenet,
-                                          celeste_options=celeste_options,track_runner=keep_latest_runner))
+                                          celeste_options=celeste_options,track_runner=track_runner))
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)

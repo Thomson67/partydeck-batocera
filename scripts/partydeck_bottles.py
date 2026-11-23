@@ -118,7 +118,7 @@ def _key(path, info, attrs):
     return key.hexdigest()
 
 
-def compact_tree(upper, lower, objects, *, eligible=None):
+def compact_tree(upper, lower, objects, *, eligible=None, retained=None):
     """Publish a lower hardlink BEFORE unlinking its identical private upper.
 
     Objects are never writable through a bottle: only OverlayFS can expose
@@ -136,12 +136,30 @@ def compact_tree(upper, lower, objects, *, eligible=None):
     if any(m == upper or upper in m.parents for m in mounts):
         raise RuntimeError(tr('Bottle encore montée : {p0}', p0=upper))
     result = dict(shared=0, files=0)
+    measured = set()
+
+    def account(reason, info):
+        inode = (info.st_dev, info.st_ino)
+        if retained is not None and inode not in measured:
+            measured.add(inode)
+            retained[reason] = retained.get(reason, 0) + info.st_blocks*512
+
     from partydeck_storage import files
     for path, info in files(upper):
+        if not info.st_size:
+            continue
         if eligible is not None and not eligible(path, info):
+            account('filtered', info)
+            continue
+        if info.st_nlink != 1:
+            account('hardlinked', info)
+            continue
+        if info.st_size > 512*1024**2:
+            account('large', info)
             continue
         attrs = _attributes(path)
-        if attrs is None or info.st_nlink != 1 or not stat.S_ISREG(info.st_mode) or not info.st_size or info.st_size > 512*1024**2:
+        if attrs is None:
+            account('overlay', info)
             continue
         digest = _key(path, info, attrs)
         obj = objects/digest[:2]/digest
@@ -174,6 +192,7 @@ def compact_tree(upper, lower, objects, *, eligible=None):
         except OSError:
             candidate.unlink(missing_ok=True)
             # No original removed if hardlinking is unsupported/cross-device.
+            account('link_error', info)
             continue
         current = path.lstat()
         if (current.st_ino, current.st_dev, current.st_size, current.st_mtime_ns, current.st_ctime_ns) != (info.st_ino, info.st_dev, info.st_size, info.st_mtime_ns, info.st_ctime_ns):
@@ -315,7 +334,12 @@ def prepare_windows(player, original, target):
             atomic_json(state,data)
         for name in ('lower', 'work', 'view'):
             regular_directory(slot/name)
-        compact_tree(slot/'upper', slot/'lower', ROOT/'objects')
+        retained = {}
+        result = compact_tree(slot/'upper', slot/'lower', ROOT/'objects', retained=retained)
+        if retained or result['shared']:
+            sizes = ' '.join(f'{key}={size}' for key, size in sorted(retained.items()) if size)
+            print(f"Windows Party {player.name.upper()}: Windows layer {relative} "
+                  f"shared={result['shared']} {sizes}".rstrip(), flush=True)
 
 
 def mount_windows(player):
