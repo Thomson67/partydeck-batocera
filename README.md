@@ -91,15 +91,15 @@ suivants réutilisent ces fichiers.
 PartyDeck lance le serveur dans un réseau privé partagé. Par défaut, le
 mode debug est désactivé. Dans les options de CelesteNet, sélectionnez
 **Se connecter localement** sur chaque joueur, puis choisissez le même
-chapitre. L’onglet **Options** du profil permet de régler la langue, de passer
-l’accueil et la recherche de mises à jour au démarrage, et d’activer la
+chapitre. L’onglet **Options** du profil permet de régler la langue, d’ignorer
+les mises à jour de mods au démarrage et d’activer la
 connexion automatique. Cette dernière utilise la console debug d’Everest.
 Le journal du serveur se trouve dans `runtime/<jeu>/celestenet/server.log`.
 
 **English:** PartyDeck starts a server in a shared private network. Debug mode
 is off by default. Select **Connect Locally** in CelesteNet on each player and
 choose the same chapter. The profile's **Options** tab sets the language and
-can skip Everest welcome and startup updates. Automatic connection can be
+can skip mod updates at startup. Automatic connection can be
 enabled there and uses Everest's debug console.
 
 Pour le partage horizontal en 32:9, placez les versions 32:9 de

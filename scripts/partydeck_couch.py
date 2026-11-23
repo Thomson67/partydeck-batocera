@@ -94,7 +94,7 @@ def fields(tab, adapter='standard'):
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet'])]
     if adapter == 'celestenet':
         return [('celestenet.language', tr('Langue du jeu'), list(CELESTE_LANGUAGES)),
-                ('celestenet.skip_setup', tr('Passer l’accueil Everest et les mises à jour au démarrage'), [True, False]),
+                ('celestenet.skip_setup', tr('Ignorer les mises à jour des mods au démarrage'), [True, False]),
                 ('celestenet.automatic', tr('Connexion automatique (mode debug Everest)'), [False, True])]
     if adapter == 'hollowknight-hkmultiplayer':
         if tab == 1:

@@ -221,12 +221,13 @@ with patch.object(coop.subprocess,'run') as run:
     assert run.call_count == 3  # Xorg fallback survives WM activation failure.
 print("Attribution auto, classes J1/J2, placement, GPU hybride, focus et entrée standard détachée vérifiés.")
 
-# Celeste's internal display must match its wide split viewport.
+# Celeste keeps the previously working Gamescope internal mode.
 with patch.object(coop.subprocess, 'Popen') as popen:
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540), 'celeste-j2',
                       celestenet=True, celeste_options={'language': 'french'})
     args = popen.call_args.args[0]
-    assert args[args.index('-w') + 1] == '1920' and args[args.index('-h') + 1] == '540'
+    assert '-w' not in args and '-h' not in args
+    assert args[args.index('-W') + 1] == '1920' and args[args.index('-H') + 1] == '540'
     assert popen.call_args.kwargs['env']['PARTYDECK_CELESTE_OPTIONS'] == '{"language": "french"}'
     coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080), 'celeste-j2', celestenet=True)
     assert '-w' not in popen.call_args.args[0]

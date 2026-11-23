@@ -221,7 +221,14 @@ def configure_client(directory, prefix, player, options, lan=False):
                 write_bytes(backup, original)
             write_bytes(settings, changed)
 
-    debug = lan and options['automatic']
+    try:
+        configure_startup(directory, saves, allowed, player, options, debug=lan and options['automatic'])
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(tr('Celeste {p0} : options de démarrage ignorées : {p1}', p0=player.name.upper(), p1=error),
+              flush=True)
+
+
+def configure_startup(directory, saves, allowed, player, options, *, debug):
     game = safe_path(child(saves, 'settings.celeste'), allowed)
     original_game = game.read_bytes() if game.is_file() else b''
     try:
@@ -239,12 +246,10 @@ def configure_client(directory, prefix, player, options, lan=False):
         values['DebugRCPort'] = DEBUG_PORT + int(player.name[1:]) - 1
     if options['skip_setup']:
         values['AutoUpdateModsOnStartup'] = 'false'
-        # Everest uses a null CurrentVersion to show welcome. Zero still
-        # takes the original first-run save migration path in GameLoader.
-        current = re.search(rb'(?m)^CurrentVersion:[ \t]*([^\r\n#]*)', original_core)
-        if not current or current[1].strip() in (b'', b"''", b'""', b'null', b'~'):
-            values['CurrentVersion'] = "'0.0.0'"
-    changed_core = patch_settings(original_core, values)
+    # Remove the first-run placeholder from the previous PartyDeck build.
+    # An actual version written by Everest is kept.
+    restored_core = re.sub(rb"(?m)^CurrentVersion:[ \t]*'0\.0\.0'[ \t]*(?:\r?\n|$)", b'', original_core)
+    changed_core = patch_settings(restored_core, values)
     if changed_core != original_core:
         backup = safe_path(player/'celestenet-everest-before.celeste', (player.resolve(),))
         if original_core and not backup.exists():

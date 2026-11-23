@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory() as name:
     game_settings = settings.parent/'settings.celeste'
     game_settings.write_bytes(b'<Settings><LaunchInDebugMode>true</LaunchInDebugMode><Fullscreen>true</Fullscreen></Settings>')
     core_path = settings.parent/'modsettings-Everest.celeste'
-    core_path.write_bytes(b'DebugModeInEverest: true\nAutoUpdateModsOnStartup: true\nCurrentVersion: null\n')
+    core_path.write_bytes(b"DebugModeInEverest: true\nAutoUpdateModsOnStartup: true\nCurrentVersion: '0.0.0'\n")
     with patch.object(celeste.subprocess,'run') as run:
         celeste.configure_client(game, prefix, player, dict(celeste.defaults(), language='french'), lan=True)
         run.assert_called_once_with(['mount','--bind',str(player/'celestenet-everest-launch.txt'),str(flags)],check=True)
@@ -58,9 +58,9 @@ with tempfile.TemporaryDirectory() as name:
     assert b'<LaunchInDebugMode>false</LaunchInDebugMode>' in game_settings.read_bytes()
     assert b'<Fullscreen>true</Fullscreen>' in game_settings.read_bytes()
     assert b'DebugModeInEverest: false' in core_path.read_bytes()
-    assert b"CurrentVersion: '0.0.0'" in core_path.read_bytes()
+    assert b'CurrentVersion:' not in core_path.read_bytes()
     assert b'AutoUpdateModsOnStartup: false' in core_path.read_bytes()
-    core_path.write_bytes(core_path.read_bytes().replace(b"'0.0.0'", b"'1.6000.0'"))
+    core_path.write_bytes(core_path.read_bytes() + b"CurrentVersion: '1.6000.0'\n")
     with patch.object(celeste.subprocess,'run') as run:
         celeste.configure_client(game,prefix,player,dict(celeste.defaults(), automatic=True),lan=True)
         run.assert_called_once_with(['mount','--bind',str(player/'celestenet-everest-launch.txt'),str(flags)],check=True)
@@ -75,6 +75,9 @@ with tempfile.TemporaryDirectory() as name:
     assert b"CurrentVersion: '1.6000.0'" in core
     assert celeste.patch_game_settings(b'', 'keep', False) == b''
     assert b'<Language>english</Language>' in celeste.patch_game_settings(b'', 'english', False)
+    with patch.object(celeste, 'configure_startup', side_effect=PermissionError('read-only settings')):
+        celeste.configure_client(game, prefix, player, celeste.defaults(), lan=True)
+
     variant=game/'PartyDeck-32x9'
     variant.mkdir()
     for name in celeste.WIDE_ASSEMBLIES:
