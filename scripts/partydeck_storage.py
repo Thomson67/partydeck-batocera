@@ -78,6 +78,24 @@ def mounted_paths():
         raise RuntimeError(tr('Impossible de vérifier les montages ; nettoyage refusé.'))
 
 
+def umu_mounts():
+    """Check foreign namespaces too, including surviving Proton containers."""
+    namespaces, mounts = set(), set()
+    for process in Path('/proc').glob('[0-9]*'):
+        try:
+            namespace = (process/'ns/mnt').stat().st_ino
+            if namespace in namespaces:
+                continue
+            entries = (process/'mountinfo').read_text().splitlines()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        namespaces.add(namespace)
+        for line in entries:
+            for field in line.split()[3:5]:
+                mounts.add(Path(re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), field)))
+    return mounts
+
+
 def files(root, mounts=None):
     """No symlink traversal, including ancestors, and no nested mount traversal."""
     root = Path(root).absolute()
@@ -259,6 +277,61 @@ def maintenance_lock(base):
 def clean(base, purge=False):
     with maintenance_lock(base):
         return _clean(base, settings(base), purge)
+
+
+def clean_umu_work(game, *, discard_recovery=False):
+    """Under the session lock, collect closed materialized prefixes for this game."""
+    if game.resolve() != game or not re.fullmatch('[0-9a-f]{16}', game.name):
+        raise ValueError(f'Invalid UMU game directory: {game}')
+    players = [(game/f'j{i}') for i in range(1, 5)]
+    if not any((player/'umu-private/materialized-prefixes').is_dir() for player in players):
+        return {'removed': 0, 'retained': 0}
+    mounts = umu_mounts()
+    result = {'removed': 0, 'retained': 0}
+    for player in players:
+        root = player/'umu-private/materialized-prefixes'
+        upper = player/'umu/upper'
+        records = upper/'runtime-prefix-state'
+        if not root.is_dir() or root.resolve() != root or records.resolve() != records:
+            continue
+        lock = upper/'.materialized-prefix.lock'
+        if upper.resolve() != upper:
+            continue
+        # Match Btrfs mount roots even when mountinfo omits /userdata.
+        suffix = root.parts[-5:]
+        if any(any(parent.parts[-5:] == suffix for parent in (mount, *mount.parents))
+               for mount in mounts):
+            result['retained'] += sum(path.is_dir() for path in root.iterdir())
+            continue
+        upper.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, 'a') as stream:
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                result['retained'] += sum(path.is_dir() for path in root.iterdir())
+                continue
+            for prefix in root.iterdir():
+                if prefix.is_symlink() or not prefix.is_dir():
+                    continue
+                journal = records/(hashlib.sha256(os.fsencode(prefix.name)).hexdigest() + '.json')
+                disposable = False
+                if journal.is_file() and not journal.is_symlink():
+                    try:
+                        record = json.loads(journal.read_text())
+                        disposable = (isinstance(record, dict) and record.get('version') == 1
+                                      and record.get('prefix') ==
+                                      f'/userdata/system/umu/materialized-prefixes/{prefix.name}'
+                                      and record.get('phase') == 'disposable' and record.get('pid') == 0)
+                    except (OSError, ValueError):
+                        pass
+                if disposable or discard_recovery:
+                    shutil.rmtree(prefix)
+                    journal.unlink(missing_ok=True)
+                    result['removed'] += 1
+                else:
+                    result['retained'] += 1
+    return result
 
 
 def clean_game(base, rom, *, include_saves=False):
@@ -463,13 +536,21 @@ def snapshot(base, saves=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('bilan', 'nettoyer', 'purger-caches', 'reglages', '_maintenance'))
+    parser.add_argument('action', choices=('bilan', 'nettoyer', 'purger-caches', 'reglages',
+                                           'purger-travail-umu', '_maintenance'))
     parser.add_argument('base', type=Path)
+    parser.add_argument('--jeu', help='Identifiant du jeu / Game ID')
     args = parser.parse_args()
     if args.action == 'bilan':
         result = snapshot(args.base)
     elif args.action == 'reglages':
         result = settings(args.base)
+    elif args.action == 'purger-travail-umu':
+        if not args.jeu or not re.fullmatch('[0-9a-f]{16}', args.jeu):
+            parser.error('--jeu requires a 16-character game ID')
+        with maintenance_lock(args.base):
+            ensure_idle(args.base)
+            result = clean_umu_work(args.base.absolute()/'runtime'/args.jeu, discard_recovery=True)
     elif args.action == '_maintenance':
         # Only the installed shell launcher uses this while holding session.lock.
         with storage_lock(args.base):

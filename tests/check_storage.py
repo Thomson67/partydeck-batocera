@@ -1,6 +1,7 @@
 """Real temporary files: eviction, protected data, locks and low disk refusal."""
 import os
 os.environ['PARTYDECK_LANGUAGE'] = 'fr'  # Existing French UI contract checks.
+import hashlib
 import json
 import importlib.util
 from pathlib import Path
@@ -13,6 +14,34 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_storage as storage
 import partydeck_bottles as bottles
+
+
+with tempfile.TemporaryDirectory() as directory:
+    game = Path(directory)/'runtime'/'c762298afdf53e67'
+    player = game/'j1'
+    work = player/'umu-private/materialized-prefixes'
+    records = player/'umu/upper/runtime-prefix-state'
+    records.mkdir(parents=True)
+    for phase in ('disposable', 'recovery', 'running', 'unknown'):
+        (work/phase).mkdir(parents=True)
+        (work/phase/'user.reg').write_text(phase)
+        if phase != 'unknown':
+            key = hashlib.sha256(phase.encode()).hexdigest()
+            (records/f'{key}.json').write_text(json.dumps(dict(
+                version=1, prefix=f'/userdata/system/umu/materialized-prefixes/{phase}',
+                phase=phase, pid=42 if phase == 'running' else 0)))
+    other = player/'umu-private/compatdata'
+    other.mkdir()
+    with patch.object(storage, 'umu_mounts', return_value=set()):
+        assert storage.clean_umu_work(game) == {'removed': 1, 'retained': 3}
+        assert {p.name for p in work.iterdir()} == {'recovery', 'running', 'unknown'}
+    bind = Path('/system').joinpath(*work.parts[-5:], 'running')
+    with patch.object(storage, 'umu_mounts', return_value={bind}):
+        assert storage.clean_umu_work(game, discard_recovery=True) == {'removed': 0, 'retained': 3}
+    with patch.object(storage, 'umu_mounts', return_value=set()):
+        assert storage.clean_umu_work(game, discard_recovery=True) == {'removed': 3, 'retained': 0}
+        assert storage.clean_umu_work(game, discard_recovery=True) == {'removed': 0, 'retained': 0}
+    assert other.is_dir() and not list(records.iterdir())
 
 
 def file(path, size=4096, age=3600):

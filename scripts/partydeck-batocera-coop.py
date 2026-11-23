@@ -1122,6 +1122,15 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                         if network is not None:network.close()
         finally:
             if bl2_host is not None:bl2_host.close()
+            if states:
+                try:
+                    from partydeck_storage import clean_umu_work,ensure_idle
+                    ensure_idle(base)
+                    result = clean_umu_work(states[0].parent.parent)
+                    if result['removed']:
+                        print(f"UMU: deferred prefix cleanup removed={result['removed']}", flush=True)
+                except (OSError, RuntimeError, ValueError) as error:
+                    print(f"UMU: deferred prefix cleanup: {error}", flush=True)
             # All Wine namespaces must be gone before touching physical uppers.
             # A failed optimization never masks the game exit or removes saves.
             if bottle_players:
