@@ -597,9 +597,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
             if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if celestenet:
-        from partydeck_celestenet import is_wide_view
-        if is_wide_view(width, height):
-            # The game's XWayland display must match the 32:9 output as well.
+        from partydeck_celestenet import viewport_variant
+        if viewport_variant(width, height):
+            # The game's XWayland display must match the output as well.
             args.extend(['-w', str(width), '-h', str(height)])
     if not shared_keyboard_mouse:
         args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])

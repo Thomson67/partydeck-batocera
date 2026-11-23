@@ -18,7 +18,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste,
+from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
 from partydeck_hkmp import defaults as hkmp_defaults, matches as matches_hkmp
@@ -83,7 +83,7 @@ EN_KEYS = [list('qwertyuiop'), list('asdfghjkl'), list('zxcvbnm012'),
            list('3456789 .-_'), *KEYS[4:]]
 
 
-def fields(tab, adapter='standard'):
+def fields(tab, adapter='standard', celeste_skins=()):
     if tab == 0:
         return [('players', tr('Joueurs'), ['auto', '1', '2', '3', '4']),
                 ('split', tr('Partage de l’écran'), ['horizontal', 'vertical']),
@@ -93,9 +93,17 @@ def fields(tab, adapter='standard'):
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet'])]
     if adapter == 'celestenet':
+        if tab == 2:
+            rows = [(f'celestenet.names.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Nom')), None)
+                    for index in range(4)]
+            if celeste_skins:
+                rows.extend((f'celestenet.skins.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Skin')),
+                             ['', 'Original', *celeste_skins]) for index in range(4))
+            return rows
         return [('celestenet.language', tr('Langue du jeu'), list(CELESTE_LANGUAGES)),
                 ('celestenet.skip_setup', tr('Ignorer les mises à jour des mods au démarrage'), [True, False]),
-                ('celestenet.automatic', tr('Connexion automatique (mode debug Everest)'), [False, True])]
+                ('celestenet.automatic', tr('Connexion automatique (mode debug Everest)'), [False, True]),
+                ('celestenet.music_j1_only', tr('Musique uniquement pour J1'), [False, True])]
     if adapter == 'hollowknight-hkmultiplayer':
         if tab == 1:
             return [('hkmultiplayer.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
@@ -236,6 +244,8 @@ def label_value(key, value):
         return tr('Activé' if value else 'Désactivé')
     if key in ('hkmp.enemy_health','hkmp.enemy_ghosts'):
         return tr({'keep':'Conserver','on':'Activé','off':'Désactivé'}[value])
+    if key.startswith('celestenet.skins.'):
+        return {'': tr('Conserver'), 'Original': tr('Madeline standard')}.get(value, value)
     if key == 'celestenet.language':
         return tr(CELESTE_LANGUAGES[value])
     if key == 'l4d2.language':
@@ -275,6 +285,7 @@ class Model:
         self.saved = None
         self.rows = []
         self.filter = ''
+        self.celeste_skins = []
         self.reload()
         if rom is not None:
             self.select(Path(rom))
@@ -308,6 +319,7 @@ class Model:
 
     def select(self, rom, common=None):
         self.selected = rom
+        self.celeste_skins = []
         if isinstance(rom, CommonGame):
             self.rom, self.data, self.saved = None, None, None
             return
@@ -337,6 +349,8 @@ class Model:
         if recipe:
             self.data['adapter'] = recipe.adapter
             self.common_for_rom[rom] = recipe
+        if self.data['adapter'] == 'celestenet' or matches_celeste(rom):
+            self.celeste_skins = skin_choices(self.base, rom)
         self.saved = copy.deepcopy(self.data)
 
     def dirty(self):
@@ -748,7 +762,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
-        if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1)
+        if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'nfsmw-lan':return (0,1)
@@ -761,7 +775,8 @@ class App:
         return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
 
     def current_fields(self):
-        rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard')
+        rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
+                    self.model.celeste_skins)
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows
@@ -1723,7 +1738,7 @@ class App:
                 elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
                 elif self.model.data.get('adapter') == 'celestenet':
-                    title = tr(('Session','Options')[i])
+                    title = tr(('Session','Options','Joueurs')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
                     title = tr(('Session','Joueurs','Options')[i])
                 else:
@@ -1744,7 +1759,8 @@ class App:
                     subtitle = (tr('Sans bordure et résolution automatiques · langue : fichiers du jeu requis') if self.tab==2
                                 else tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables'))
                 if self.model.data['adapter'] == 'celestenet':
-                    subtitle = tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.')
+                    subtitle = (tr('CelesteNet · noms et skins des joueurs') if self.tab == 2 else
+                                tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.'))
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':
                     subtitle=tr('HKMultiplayer · J1 ouvre le monde · connexion et code automatiques')
                 if self.model.data['adapter']=='hollowknight-hkmp':

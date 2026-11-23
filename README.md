@@ -94,22 +94,43 @@ mode debug est désactivé. Dans les options de CelesteNet, sélectionnez
 chapitre. L’onglet **Options** du profil permet de régler la langue, d’ignorer
 les mises à jour de mods au démarrage et d’activer la
 connexion automatique. Cette dernière utilise la console debug d’Everest.
+L’option **Musique uniquement pour J1** coupe la musique des autres
+joueurs pendant le multijoueur en LAN et laisse leurs bruitages actifs.
+L’onglet **Joueurs** permet de choisir un nom CelesteNet et un skin par joueur.
+Les skins détectés proviennent des mods installés dans `Mods` et déclarés
+compatibles avec Skin Mod Helper Plus. Pour un jeu `.wsquashfs`, lancez
+d’abord une session multijoueur, puis rouvrez le configurateur pour afficher
+les choix.
 Le journal du serveur se trouve dans `runtime/<jeu>/celestenet/server.log`.
 
 **English:** PartyDeck starts a server in a shared private network. Debug mode
 is off by default. Select **Connect Locally** in CelesteNet on each player and
 choose the same chapter. The profile's **Options** tab sets the language and
 can skip mod updates at startup. Automatic connection can be
-enabled there and uses Everest's debug console.
+enabled there and uses Everest's debug console. **Music on player 1 only**
+mutes music for the other LAN players while keeping their sound effects.
+Use the **Players** tab to set each player’s CelesteNet name and choose an
+installed Skin Mod Helper Plus player skin. For a `.wsquashfs` game, start one
+multiplayer session and then reopen the configurator to display the choices.
 
-Pour le partage horizontal en 32:9, placez les versions 32:9 de
-`Celeste.dll` et `MMHOOK_Celeste.dll` dans `PartyDeck-32x9`, à côté de
-`Celeste.exe`. Préparez ces deux DLL sur une copie vanilla patchée avant
-l'installation de la **même version d'Everest**. Ajoutez dans ce dossier
-`normal.sha256`, qui contient l'empreinte SHA-256 du `Celeste.dll` standard
-à la racine du jeu. Lorsqu'une vue est au format 32:9, PartyDeck utilise
-cette variante dans la session privée. Les autres vues, notamment le 2×2
-sur un téléviseur 16:9, utilisent les fichiers standard.
+Pour les variantes d’affichage, conservez les DLL 16:9 à côté de
+`Celeste.exe`. Dans chaque dossier de variante, placez la paire
+`Celeste.dll` et `MMHOOK_Celeste.dll` produite en installant la même
+version d’Everest sur une copie patchée, ainsi que `normal.sha256` contenant
+l’empreinte SHA-256 du `Celeste.dll` 16:9 à la racine du jeu.
+
+| Vue par joueur | Dossier de variante |
+| --- | --- |
+| 32:9, 1920 × 540 en split horizontal Full HD | `PartyDeck-32x9` |
+| 8:9, 960 × 1080 en split vertical Full HD | `PartyDeck-8x9` |
+
+PartyDeck choisit selon le ratio de chaque vue multijoueur. Les autres vues
+utilisent les DLL standard, notamment le 2×2 sur un écran 16:9.
+
+**English:** Keep the 16:9 DLLs beside `Celeste.exe`. Use `PartyDeck-32x9`
+or `PartyDeck-8x9` for each matching DLL pair, built with the same Everest
+version. In each folder put a `normal.sha256` with the SHA-256 of the root
+16:9 `Celeste.dll`. PartyDeck selects the variant by each player's viewport.
 
 La bibliothèque affiche uniquement les jeux ajoutés ; une nouvelle installation
 commence avec une liste vide. **Inser / Select → Ajouter** propose deux choix :

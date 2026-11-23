@@ -10,10 +10,11 @@ import tempfile
 from threading import Thread
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
+from zipfile import ZipFile
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import partydeck_celestenet as celeste
-from partydeck_couch import fields, label_value
+from partydeck_couch import Model, fields, label_value
 from partydeck_profiles import defaults, read_profile, save_profile
 
 with tempfile.TemporaryDirectory() as name:
@@ -28,12 +29,43 @@ with tempfile.TemporaryDirectory() as name:
     assert saved['adapter'] == celeste.ADAPTER
     assert saved['celestenet'] == celeste.defaults()
     assert [key for key, _, _ in fields(1, celeste.ADAPTER)] == [
-        'celestenet.language', 'celestenet.skip_setup', 'celestenet.automatic']
+        'celestenet.language', 'celestenet.skip_setup', 'celestenet.automatic', 'celestenet.music_j1_only']
     from partydeck_i18n import set_language
     set_language('en')
     assert label_value('celestenet.language', 'french') == 'French'
     set_language('fr')
     assert label_value('celestenet.language', 'french') == 'Français'
+    assert len(fields(2, celeste.ADAPTER)) == 4
+    names = ['Alpha', '  Étoile : 2  ', '', 'Quatre']
+    assert celeste.validate({'names': names})['names'] == ['Alpha', 'Étoile : 2', 'J3', 'Quatre']
+    assert 'Name: "Étoile : 2"' in celeste.patch_client_settings(b'', 'Étoile : 2').decode()
+    quoted_name = 'Étoile "2" ' + chr(92)
+    rewritten = celeste.patch_client_settings(b'Name: J2\n', quoted_name).decode().splitlines()
+    assert json.loads(rewritten[0].removeprefix('Name: ')) == quoted_name
+
+    directory_rom = root/'Celeste.wine'
+    root_game = directory_rom/'drive_c'/'game'
+    mods = root_game/'Mods'
+    mods.mkdir(parents=True)
+    (root_game/'Celeste.exe').touch()
+    config = '''- SkinName: 'Tea: Green'
+  Player_List: true
+  Character_ID: custom_player
+- SkinName: GeneralOnly
+  General_List: true
+- SkinName: Hidden
+  Player_List: false
+  Character_ID: another_player
+'''
+    with ZipFile(mods/'test-skins.zip', 'w') as archive:
+        archive.writestr('SkinModHelperConfig.yaml', config)
+    assert celeste.skin_choices(root, directory_rom) == ['Tea: Green']
+    model = Model(root, directory_rom)
+    assert model.celeste_skins == ['Tea: Green']
+    assert fields(2, celeste.ADAPTER, model.celeste_skins)[4][2] == ['', 'Original', 'Tea: Green']
+    assert label_value('celestenet.skins.0', 'Original') == 'Madeline standard'
+
+
     assert celeste.ADAPTER in next(values for key,_,values in fields(0) if key=='adapter')
     assert label_value('adapter',celeste.ADAPTER)=='Celeste / CelesteNet'
 
@@ -70,7 +102,7 @@ with tempfile.TemporaryDirectory() as name:
     assert flags.read_bytes() == original_flags
     assert (player/'celestenet-everest-launch.txt').read_bytes().endswith(b'--debug\n')
     assert (player/'celestenet-client-before.celeste').read_bytes()==original
-    assert b'Name: J2\r\nClientIDSending: Off\r\nExtraServers:\r\n- localhost\r\n' in settings.read_bytes()
+    assert b'Name: "J2"\r\nClientIDSending: Off\r\nExtraServers:\r\n- localhost\r\n' in settings.read_bytes()
     assert b'LoginMode: Guest' in settings.read_bytes()
     assert b'SettingsVersionDoNotEdit: 2' in celeste.patch_client_settings(b'', 'j1')
     core=(settings.parent/'modsettings-Everest.celeste').read_bytes()
@@ -81,35 +113,61 @@ with tempfile.TemporaryDirectory() as name:
     with patch.object(celeste, 'configure_startup', side_effect=PermissionError('read-only settings')):
         celeste.configure_client(game, prefix, player, celeste.defaults(), lan=True)
 
-    variant=game/'PartyDeck-32x9'
-    variant.mkdir()
-    for name in celeste.WIDE_ASSEMBLIES:
+    game_settings.write_bytes(b'<Settings><MusicVolume>8</MusicVolume><SFXVolume>6</SFXVolume></Settings>')
+    music_backup = game_settings.with_name('partydeck-celeste-music.json')
+    for _ in range(2):
+        celeste.configure_music(game_settings, music_backup, True)
+        assert b'<MusicVolume>0</MusicVolume>' in game_settings.read_bytes()
+        assert b'<SFXVolume>6</SFXVolume>' in game_settings.read_bytes()
+    celeste.configure_music(game_settings, music_backup, False)
+    assert b'<MusicVolume>8</MusicVolume>' in game_settings.read_bytes() and not music_backup.exists()
+    game_settings.write_bytes(b'<Settings><SFXVolume>6</SFXVolume></Settings>')
+    celeste.configure_music(game_settings, music_backup, True)
+    celeste.configure_music(game_settings, music_backup, False)
+    assert b'MusicVolume' not in game_settings.read_bytes()
+
+    for name in celeste.VARIANT_ASSEMBLIES:
         (game/name).write_bytes(b'standard')
-        (variant/name).write_bytes(b'wide')
-    fingerprint=variant/'normal.sha256'
-    fingerprint.write_text(hashlib.sha256(b'standard').hexdigest(),encoding='utf-8-sig')
-    with patch.object(celeste.subprocess,'run') as mount:
-        for width,height in ((1920,1080),(960,1080),(960,540)):
-            celeste.configure_wide_view(game,(prefix,),player.name,width,height)
-        mount.assert_not_called()
-        celeste.configure_wide_view(game,(prefix,),player.name,1920,540)
-        assert [call.args[0] for call in mount.call_args_list]==[
-            ['mount','--bind',str(variant/name),str(game/name)] for name in celeste.WIDE_ASSEMBLIES
-        ]
-    fingerprint.write_text('0'*64)
-    with patch.object(celeste.subprocess,'run') as mount:
-        celeste.configure_wide_view(game,(prefix,),player.name,1920,540)
-        mount.assert_not_called()
-    assert (game/'Celeste.dll').read_bytes()==b'standard'
+    for folder, dimensions in (('PartyDeck-32x9', (1920, 540)), ('PartyDeck-8x9', (960, 1080))):
+        variant = game/folder
+        variant.mkdir()
+        for name in celeste.VARIANT_ASSEMBLIES:
+            (variant/name).write_bytes(folder.encode())
+        fingerprint = variant/'normal.sha256'
+        fingerprint.write_text(hashlib.sha256(b'standard').hexdigest(), encoding='utf-8-sig')
+        with patch.object(celeste.subprocess, 'run') as mount:
+            for width, height in ((1920, 1080), (960, 540)):
+                celeste.configure_viewport_variant(game, (prefix,), player.name, width, height)
+            mount.assert_not_called()
+            celeste.configure_viewport_variant(game, (prefix,), player.name, *dimensions)
+            assert [call.args[0] for call in mount.call_args_list] == [
+                ['mount', '--bind', str(variant/name), str(game/name)] for name in celeste.VARIANT_ASSEMBLIES
+            ]
+        with patch.object(celeste.subprocess, 'run') as mount:
+            (variant/'Celeste.dll').write_bytes(b'standard')
+            celeste.configure_viewport_variant(game, (prefix,), player.name, *dimensions)
+            fingerprint.write_text('0'*64)
+            celeste.configure_viewport_variant(game, (prefix,), player.name, *dimensions)
+            mount.assert_not_called()
+    assert (game/'Celeste.dll').read_bytes() == b'standard'
 
     # Exercise the actual hook as a separate process, including its imports.
     flags.write_bytes(b'--disable-splash\n')
+    with ZipFile(game/'Mods'/'test-skins.zip', 'w') as archive:
+        archive.writestr('SkinModHelperConfig.yaml', config)
+    skin_settings = settings.parent/'modsettings-SkinModHelperPlus.celeste'
+    skin_settings.write_text('Backpack: Default\nSelectedPlayerSkin: Original\n')
     env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
-               PARTYDECK_CELESTE_OPTIONS=json.dumps(dict(celeste.defaults(), language='english')),
+               PARTYDECK_CELESTE_OPTIONS=json.dumps(dict(celeste.defaults(), language='english',
+                                                         names=names, music_j1_only=True,
+                                                         skins=['', 'Tea: Green', '', ''])),
                PARTYDECK_CELESTENET='1', PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='1080')
     subprocess.run([sys.executable, celeste.__file__, '_prepare', str(player), str(game), str(prefix)],
                    env=env, check=True, timeout=10)
     assert b'<Language>english</Language>' in game_settings.read_bytes()
+    assert b'<MusicVolume>0</MusicVolume>' in game_settings.read_bytes()
+    assert 'Name: "Étoile : 2"' in settings.read_text()
+    assert skin_settings.read_text() == 'Backpack: Default\nSelectedPlayerSkin: "Tea: Green"\n'
     assert b'DebugModeInEverest: false' in core_path.read_bytes()
 
 

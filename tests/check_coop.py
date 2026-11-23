@@ -221,7 +221,7 @@ with patch.object(coop.subprocess,'run') as run:
     assert run.call_count == 3  # Xorg fallback survives WM activation failure.
 print("Attribution auto, classes J1/J2, placement, GPU hybride, focus et entrée standard détachée vérifiés.")
 
-# Match the XWayland mode to the Celeste viewport in 32:9 sessions.
+# Match the XWayland mode to the Celeste viewport in 32:9 and 8:9 sessions.
 with patch.object(coop.subprocess, 'Popen') as popen:
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540), 'celeste-j2',
                       celestenet=True, celeste_options={'language': 'french'})
@@ -230,6 +230,11 @@ with patch.object(coop.subprocess, 'Popen') as popen:
         assert args[args.index(option) + 1] == size
     assert popen.call_args.kwargs['env']['PARTYDECK_CELESTE_OPTIONS'] == '{"language": "french"}'
     coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080), 'celeste-j2', celestenet=True)
+    args = popen.call_args.args[0]
+    assert args[args.index('-w') + 1] == '960' and args[args.index('-h') + 1] == '1080'
+    for players in (3, 4):
+        assert all(box[2:] == (960, 540) for box in coop.layout((0, 0, 1920, 1080), players, 'vertical'))
+    coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 540), 'celeste-j2', celestenet=True)
     assert '-w' not in popen.call_args.args[0]
     coop.start_player(base, base/'j1', game, game, [], (0, 0, 1920, 1080), 'celeste-j1',
                       celeste_options={'language': 'french'})
