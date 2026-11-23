@@ -1,7 +1,10 @@
 """CelesteNet profile, private configuration, rendering and console exchange."""
 import hashlib
+import json
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 from threading import Thread
@@ -98,6 +101,16 @@ with tempfile.TemporaryDirectory() as name:
         celeste.configure_wide_view(game,(prefix,),player.name,1920,540)
         mount.assert_not_called()
     assert (game/'Celeste.dll').read_bytes()==b'standard'
+
+    # Exercise the actual hook as a separate process, including its imports.
+    flags.write_bytes(b'--disable-splash\n')
+    env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
+               PARTYDECK_CELESTE_OPTIONS=json.dumps(dict(celeste.defaults(), language='english')),
+               PARTYDECK_CELESTENET='1', PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='1080')
+    subprocess.run([sys.executable, celeste.__file__, '_prepare', str(player), str(game), str(prefix)],
+                   env=env, check=True, timeout=10)
+    assert b'<Language>english</Language>' in game_settings.read_bytes()
+    assert b'DebugModeInEverest: false' in core_path.read_bytes()
 
 
 calls = []
