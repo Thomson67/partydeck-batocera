@@ -1,4 +1,5 @@
-"""CelesteNet profile, private configuration, and Everest console exchange."""
+"""CelesteNet profile, private configuration, rendering and console exchange."""
+import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import sys
@@ -45,6 +46,26 @@ with tempfile.TemporaryDirectory() as name:
     assert b'SettingsVersionDoNotEdit: 2' in celeste.patch_client_settings(b'', 'j1')
     core=(settings.parent/'modsettings-Everest.celeste').read_bytes()
     assert b'DebugRCPort: 32271' in core and b'DebugModeInEverest: true' in core
+    variant=game/'PartyDeck-32x9'
+    variant.mkdir()
+    for name in celeste.WIDE_ASSEMBLIES:
+        (game/name).write_bytes(b'standard')
+        (variant/name).write_bytes(b'wide')
+    fingerprint=variant/'normal.sha256'
+    fingerprint.write_text(hashlib.sha256(b'standard').hexdigest(),encoding='utf-8-sig')
+    with patch.object(celeste.subprocess,'run') as mount:
+        for width,height in ((1920,1080),(960,1080),(960,540)):
+            celeste.configure_wide_view(game,(prefix,),player.name,width,height)
+        mount.assert_not_called()
+        celeste.configure_wide_view(game,(prefix,),player.name,1920,540)
+        assert [call.args[0] for call in mount.call_args_list]==[
+            ['mount','--bind',str(variant/name),str(game/name)] for name in celeste.WIDE_ASSEMBLIES
+        ]
+    fingerprint.write_text('0'*64)
+    with patch.object(celeste.subprocess,'run') as mount:
+        celeste.configure_wide_view(game,(prefix,),player.name,1920,540)
+        mount.assert_not_called()
+    assert (game/'Celeste.dll').read_bytes()==b'standard'
 
 
 calls = []

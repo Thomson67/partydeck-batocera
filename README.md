@@ -96,6 +96,15 @@ PartyDeck starts the server and requests each client's connection at the
 title screen. Pick the same chapter in each instance. Everest debug mode
 provides the local console during the session.
 
+Pour le partage horizontal en 32:9, placez les versions 32:9 de
+`Celeste.dll` et `MMHOOK_Celeste.dll` dans `PartyDeck-32x9`, à côté de
+`Celeste.exe`. Préparez ces deux DLL sur une copie vanilla patchée avant
+l'installation de la **même version d'Everest**. Ajoutez dans ce dossier
+`normal.sha256`, qui contient l'empreinte SHA-256 du `Celeste.dll` standard
+à la racine du jeu. Lorsqu'une vue est au format 32:9, PartyDeck utilise
+cette variante dans la session privée. Les autres vues, notamment le 2×2
+sur un téléviseur 16:9, utilisent les fichiers standard.
+
 La bibliothèque affiche uniquement les jeux ajoutés ; une nouvelle installation
 commence avec une liste vide. **Inser / Select → Ajouter** propose deux choix :
 **Depuis le catalogue** pour appliquer un profil prédéfini, ou **Manuellement**

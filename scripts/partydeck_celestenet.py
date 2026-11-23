@@ -22,6 +22,7 @@ ADAPTER = 'celestenet'
 PORT = 17230
 DEBUG_PORT = 32270
 SETTINGS_FILE = 'modsettings-CelesteNet.Client.celeste'
+WIDE_ASSEMBLIES = ('Celeste.dll', 'MMHOOK_Celeste.dll')
 SERVER_URL = ('https://github.com/0x0ade/CelesteNet/releases/download/v2.4.1-server/'
               'CelesteNet.Server-2024-09-23_fixed.zip')
 SERVER_SHA256 = 'adad07a6f6aa3bd9b1c954daf6bf870802ff483afadb9fc22cc420f543b5ff4b'
@@ -128,11 +129,38 @@ def patch_settings(data, values):
     return data
 
 
+def configure_wide_view(directory, allowed, player, width, height):
+    # Gamescope divides odd output dimensions with integer rounding.
+    if min(width,height) < 1 or abs(9*width - 32*height) > 31:
+        return
+    variant = safe_path(child(directory,'PartyDeck-32x9'),allowed)
+    fingerprint = safe_path(child(variant,'normal.sha256'),allowed)
+    pairs = [(safe_path(child(variant,name),allowed),safe_path(child(directory,name),allowed))
+             for name in WIDE_ASSEMBLIES]
+    if not fingerprint.is_file() or not all(source.is_file() and target.is_file() for source,target in pairs):
+        print(tr('CelesteNet {p0} : variante 32:9 absente ou incomplète ; rendu standard.',p0=player.upper()),flush=True)
+        return
+    with pairs[0][1].open('rb') as normal:
+        actual = hashlib.file_digest(normal,'sha256').hexdigest()
+    if actual != fingerprint.read_text(encoding='utf-8-sig').strip().lower():
+        print(tr('CelesteNet {p0} : la variante 32:9 correspond à une autre installation Everest ; rendu standard.',
+                 p0=player.upper()),flush=True)
+        return
+    # Both mounts exist inside the player's launch namespace only.
+    for source,target in pairs:
+        subprocess.run(['mount','--bind',str(source),str(target)],check=True)
+    print(tr('CelesteNet {p0} : variante 32:9 activée ({p1}×{p2}).',
+             p0=player.upper(),p1=width,p2=height),flush=True)
+
+
 def configure_client(directory, prefix, player):
     allowed = tuple(path.resolve() for path in (prefix, player, *PRIVATE_BINDS))
     directory = safe_path(directory, allowed)
     if not child(directory,'Celeste.exe').is_file() or not child(directory,'Mods').is_dir():
         raise ValueError(tr('CelesteNet : lancez un Celeste.exe équipé d’Everest et de CelesteNet.'))
+    configure_wide_view(directory, allowed, player.name,
+                        int(os.environ.get('PARTYDECK_PLAYER_WIDTH','0')),
+                        int(os.environ.get('PARTYDECK_PLAYER_HEIGHT','0')))
     saves = safe_path(child(directory,'Saves'),allowed)
     settings = safe_path(child(saves,SETTINGS_FILE), allowed)
     original = settings.read_bytes() if settings.is_file() else b''

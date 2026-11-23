@@ -62,6 +62,9 @@ def get_language():
 
 
 EN = {
+    'CelesteNet {p0} : variante 32:9 absente ou incomplète ; rendu standard.': 'CelesteNet {p0}: 32:9 variant missing or incomplete. Using standard rendering.',
+    'CelesteNet {p0} : la variante 32:9 correspond à une autre installation Everest ; rendu standard.': 'CelesteNet {p0}: 32:9 variant belongs to a different Everest installation. Using standard rendering.',
+    'CelesteNet {p0} : variante 32:9 activée ({p1}×{p2}).': 'CelesteNet {p0}: 32:9 variant enabled ({p1}×{p2}).',
     'CelesteNet : empreinte de téléchargement invalide.': 'CelesteNet: download checksum mismatch.',
     'CelesteNet : préparation du serveur local au premier lancement.': 'CelesteNet: preparing the local server on first launch.',
     'CelesteNet : serveur local prêt sur {p0}:{p1}.': 'CelesteNet: local server ready at {p0}:{p1}.',
