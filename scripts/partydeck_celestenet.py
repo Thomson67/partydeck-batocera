@@ -14,6 +14,7 @@ import time
 import urllib.request
 from urllib.parse import urlencode
 import zipfile
+import xml.etree.ElementTree as ET
 
 from partydeck_borderlands2 import PRIVATE_BINDS, child, safe_path, write_bytes
 from partydeck_i18n import tr
@@ -22,6 +23,11 @@ ADAPTER = 'celestenet'
 PORT = 17230
 DEBUG_PORT = 32270
 SETTINGS_FILE = 'modsettings-CelesteNet.Client.celeste'
+LANGUAGES = {
+    'keep': 'Conserver', 'french': 'Français', 'english': 'Anglais',
+    'german': 'Allemand', 'spanish': 'Espagnol', 'italian': 'Italien',
+    'japanese': 'Japonais', 'korean': 'Coréen', 'russian': 'Russe',
+}
 WIDE_ASSEMBLIES = ('Celeste.dll', 'MMHOOK_Celeste.dll')
 SERVER_URL = ('https://github.com/0x0ade/CelesteNet/releases/download/v2.4.1-server/'
               'CelesteNet.Server-2024-09-23_fixed.zip')
@@ -33,6 +39,27 @@ RUNTIME_SHA512 = ('a90177d75bc891f71aa814dde3bcf76a356f5a506824669f1891754457954
 
 def matches(rom):
     return bool(re.search(r'(?<![a-z0-9])celeste(?![a-z0-9])', rom.stem.casefold()))
+
+
+def defaults():
+    return dict(language='keep', skip_setup=True, automatic=False)
+
+
+def validate(options):
+    result = defaults()
+    if options is not None:
+        if not isinstance(options, dict):
+            raise ValueError(tr('Options Celeste invalides.'))
+        result.update({key: options[key] for key in result if key in options})
+    if (result['language'] not in tuple(LANGUAGES)
+            or any(type(result[key]) is not bool for key in ('skip_setup', 'automatic'))):
+        raise ValueError(tr('Options Celeste invalides.'))
+    return result
+
+
+def is_wide_view(width, height):
+    # Gamescope divides odd output dimensions with integer rounding.
+    return min(width, height) > 0 and abs(9 * width - 32 * height) <= 31
 
 
 def download(path, url, algorithm, digest):
@@ -130,8 +157,7 @@ def patch_settings(data, values):
 
 
 def configure_wide_view(directory, allowed, player, width, height):
-    # Gamescope divides odd output dimensions with integer rounding.
-    if min(width,height) < 1 or abs(9*width - 32*height) > 31:
+    if not is_wide_view(width, height):
         return
     variant = safe_path(child(directory,'PartyDeck-32x9'),allowed)
     fingerprint = safe_path(child(variant,'normal.sha256'),allowed)
@@ -153,49 +179,100 @@ def configure_wide_view(directory, allowed, player, width, height):
              p0=player.upper(),p1=width,p2=height),flush=True)
 
 
-def configure_client(directory, prefix, player):
+def patch_game_settings(data, language, debug):
+    if not data.strip() and language == 'keep':
+        return data
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    root = ET.fromstring(data, parser=parser) if data.strip() else ET.Element('Settings')
+    if root.tag != 'Settings':
+        raise ValueError(tr('Format de configuration Celeste non reconnu.'))
+    changed = False
+    if language != 'keep':
+        field = root.find('Language')
+        if field is None:
+            field = ET.SubElement(root, 'Language')
+        if field.text != language:
+            field.text = language
+            changed = True
+    field = root.find('LaunchInDebugMode')
+    if not debug and field is not None and field.text != 'false':
+        field.text = 'false'
+        changed = True
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True) if changed else data
+
+
+def configure_client(directory, prefix, player, options, lan=False):
     allowed = tuple(path.resolve() for path in (prefix, player, *PRIVATE_BINDS))
     directory = safe_path(directory, allowed)
     if not child(directory,'Celeste.exe').is_file() or not child(directory,'Mods').is_dir():
         raise ValueError(tr('CelesteNet : lancez un Celeste.exe équipé d’Everest et de CelesteNet.'))
-    configure_wide_view(directory, allowed, player.name,
-                        int(os.environ.get('PARTYDECK_PLAYER_WIDTH','0')),
-                        int(os.environ.get('PARTYDECK_PLAYER_HEIGHT','0')))
+    if lan:
+        configure_wide_view(directory, allowed, player.name,
+                            int(os.environ.get('PARTYDECK_PLAYER_WIDTH','0')),
+                            int(os.environ.get('PARTYDECK_PLAYER_HEIGHT','0')))
     saves = safe_path(child(directory,'Saves'),allowed)
-    settings = safe_path(child(saves,SETTINGS_FILE), allowed)
-    original = settings.read_bytes() if settings.is_file() else b''
-    changed = patch_client_settings(original, player.name)
-    if changed != original:
-        backup = player/'celestenet-client-before.celeste'
-        if original and not backup.exists():
-            write_bytes(safe_path(backup, (player.resolve(),)), original)
-        write_bytes(settings, changed)
+    if lan:
+        settings = safe_path(child(saves, SETTINGS_FILE), allowed)
+        original = settings.read_bytes() if settings.is_file() else b''
+        changed = patch_client_settings(original, player.name)
+        if changed != original:
+            backup = safe_path(player/'celestenet-client-before.celeste', (player.resolve(),))
+            if original and not backup.exists():
+                write_bytes(backup, original)
+            write_bytes(settings, changed)
 
-    index = int(player.name[1:])-1
-    core = safe_path(child(saves,'modsettings-Everest.celeste'),allowed)
+    debug = lan and options['automatic']
+    game = safe_path(child(saves, 'settings.celeste'), allowed)
+    original_game = game.read_bytes() if game.is_file() else b''
+    try:
+        changed_game = patch_game_settings(original_game, options['language'], debug)
+    except (ET.ParseError, ValueError):
+        print(tr('Celeste : configuration du jeu illisible, fichier conservé.'), flush=True)
+    else:
+        if changed_game != original_game:
+            write_bytes(game, changed_game)
+
+    core = safe_path(child(saves, 'modsettings-Everest.celeste'), allowed)
     original_core = core.read_bytes() if core.is_file() else b''
-    changed_core = patch_settings(original_core,{'DebugModeInEverest':'true',
-                                                 'DebugRCPort':DEBUG_PORT+index})
+    values = {'DebugModeInEverest': str(debug).lower()}
+    if debug:
+        values['DebugRCPort'] = DEBUG_PORT + int(player.name[1:]) - 1
+    if options['skip_setup']:
+        values['AutoUpdateModsOnStartup'] = 'false'
+        # Everest uses a null CurrentVersion to show welcome. Zero still
+        # takes the original first-run save migration path in GameLoader.
+        current = re.search(rb'(?m)^CurrentVersion:[ \t]*([^\r\n#]*)', original_core)
+        if not current or current[1].strip() in (b'', b"''", b'""', b'null', b'~'):
+            values['CurrentVersion'] = "'0.0.0'"
+    changed_core = patch_settings(original_core, values)
     if changed_core != original_core:
-        backup = safe_path(player/'celestenet-everest-before.celeste',(player.resolve(),))
+        backup = safe_path(player/'celestenet-everest-before.celeste', (player.resolve(),))
         if original_core and not backup.exists():
-            write_bytes(backup,original_core)
-        write_bytes(core,changed_core)
+            write_bytes(backup, original_core)
+        write_bytes(core, changed_core)
 
-    # The launch flag lives in the player's mount namespace for this run only.
-    flags = safe_path(child(directory,'everest-launch.txt'), allowed)
-    if not flags.exists():
-        write_bytes(flags,b'')
-    view = safe_path(player/'celestenet-everest-launch.txt', (player.resolve(),))
-    write_bytes(view,flags.read_bytes().rstrip(b'\r\n') + b'\n--debug\n')
-    subprocess.run(['mount','--bind',str(view),str(flags)],check=True)
+    # Override the launch flags in this player's mount namespace only.
+    flags = safe_path(child(directory, 'everest-launch.txt'), allowed)
+    original_flags = flags.read_bytes() if flags.is_file() else b''
+    changed_flags = b''.join(
+        line if line.lstrip().startswith(b'#') else re.sub(rb'(?<!\S)--debug(?!\S)', b'', line)
+        for line in original_flags.splitlines(keepends=True)
+    )
+    if debug:
+        changed_flags = changed_flags.rstrip(b'\r\n') + b'\n--debug\n'
+    if changed_flags != original_flags:
+        if not flags.exists():
+            write_bytes(flags, b'')
+        view = safe_path(player/'celestenet-everest-launch.txt', (player.resolve(),))
+        write_bytes(view, changed_flags)
+        subprocess.run(['mount', '--bind', str(view), str(flags)], check=True)
 
 
 def install_hook(base, player):
     from partydeck_anchor import instrument_native
     from partydeck_profiles import atomic_write
 
-    if os.environ.get('PARTYDECK_CELESTENET') != '1':
+    if 'PARTYDECK_CELESTE_OPTIONS' not in os.environ:
         return
     binary = shutil.which('batocera-wine')
     if not binary:
@@ -257,7 +334,8 @@ if __name__ == '__main__':
             player, directory, prefix = map(Path,args)
             if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
                 raise ValueError(tr('Contexte de connexion automatique invalide.'))
-            configure_client(directory,prefix,player)
+            options = validate(json.loads(os.environ['PARTYDECK_CELESTE_OPTIONS']))
+            configure_client(directory, prefix, player, options, os.environ.get('PARTYDECK_CELESTENET') == '1')
         elif action == '_join':
             join(*args)
         else:

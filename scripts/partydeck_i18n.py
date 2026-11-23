@@ -62,6 +62,14 @@ def get_language():
 
 
 EN = {
+    'Celeste · CelesteNet en LAN': 'Celeste · CelesteNet LAN',
+    'Options Celeste invalides.': 'Invalid Celeste options.',
+    'Format de configuration Celeste non reconnu.': 'Unrecognized Celeste settings format.',
+    'Celeste : configuration du jeu illisible, fichier conservé.': 'Celeste: game settings could not be read. The file was preserved.',
+    'Passer l’accueil Everest et les mises à jour au démarrage': 'Skip Everest welcome and startup updates',
+    'Connexion automatique (mode debug Everest)': 'Automatic connection (Everest debug mode)',
+    'Sans debug, choisissez Se connecter localement dans les options CelesteNet.': 'With debug off, select Connect Locally in the CelesteNet options.',
+    'Coréen': 'Korean',
     'CelesteNet {p0} : variante 32:9 absente ou incomplète ; rendu standard.': 'CelesteNet {p0}: 32:9 variant missing or incomplete. Using standard rendering.',
     'CelesteNet {p0} : la variante 32:9 correspond à une autre installation Everest ; rendu standard.': 'CelesteNet {p0}: 32:9 variant belongs to a different Everest installation. Using standard rendering.',
     'CelesteNet {p0} : variante 32:9 activée ({p1}×{p2}).': 'CelesteNet {p0}: 32:9 variant enabled ({p1}×{p2}).',

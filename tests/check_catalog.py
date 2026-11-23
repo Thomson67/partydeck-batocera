@@ -7,7 +7,7 @@ import sys
 import tempfile
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-from partydeck_catalog import CommonGame, COMMON, discover, matches_soh
+from partydeck_catalog import CommonGame, COMMON, discover, matches_soh, recipe_for
 from partydeck_couch import App, Model, fields
 from partydeck_profiles import profile_path
 
@@ -32,6 +32,14 @@ with tempfile.TemporaryDirectory() as folder:
     model=Model(base, windows=windows)
     assert model.rows==[] and len(model.catalog_rows()[0].matches)==2
     a.unlink();b.rmdir()
+    celeste = windows/'Celeste [Everest].wsquashfs'
+    celeste.touch()
+    recipe = next(row for row in model.catalog_rows() if row.id == 'celestenet')
+    assert recipe.matches == (celeste,) and recipe_for(celeste).id == recipe.id
+    model.select(celeste, recipe)
+    assert model.data['adapter'] == 'celestenet'
+    assert model.data['celestenet']['language'] == 'keep'
+    celeste.unlink()
     def create_app():
         with patch('partydeck_couch.Model',side_effect=lambda base,rom=None:Model(base,rom,windows=windows)):
             return App(base,windowed=True)

@@ -83,22 +83,24 @@ manual fallback. Live Batocera validation is required; see the linked guide.
 Préparez la version Windows de Celeste avec **Everest** et le **client
 CelesteNet**. Lancez d’abord le jeu en solo pour vérifier que le mod apparaît.
 Dans Windows Party, ouvrez **Session → Profil du jeu → Celeste / CelesteNet**
-et choisissez de deux à quatre joueurs. Le premier lancement télécharge le
+ou sélectionnez Celeste dans **Ajouter → Depuis le catalogue**, puis choisissez
+de deux à quatre joueurs. Le premier lancement télécharge le
 serveur officiel et, si nécessaire, le runtime .NET Linux. Les lancements
 suivants réutilisent ces fichiers.
 
-PartyDeck lance un serveur dans un réseau privé partagé et connecte les
-clients à `localhost` au titre. Choisissez ensuite le même chapitre sur chaque
-instance. Le jeu démarre en mode debug Everest pendant cette session pour
-utiliser sa console locale. Le journal du serveur se trouve sous
-`runtime/<jeu>/celestenet/server.log`.
+PartyDeck lance le serveur dans un réseau privé partagé. Par défaut, le
+mode debug est désactivé. Dans les options de CelesteNet, sélectionnez
+**Se connecter localement** sur chaque joueur, puis choisissez le même
+chapitre. L’onglet **Options** du profil permet de régler la langue, de passer
+l’accueil et la recherche de mises à jour au démarrage, et d’activer la
+connexion automatique. Cette dernière utilise la console debug d’Everest.
+Le journal du serveur se trouve dans `runtime/<jeu>/celestenet/server.log`.
 
-**English:** Install Everest and the CelesteNet client in the Windows game,
-then select **Celeste / CelesteNet** under **Session → Game profile** for two
-to four players. The first launch downloads the private server dependencies.
-PartyDeck starts the server and requests each client's connection at the
-title screen. Pick the same chapter in each instance. Everest debug mode
-provides the local console during the session.
+**English:** PartyDeck starts a server in a shared private network. Debug mode
+is off by default. Select **Connect Locally** in CelesteNet on each player and
+choose the same chapter. The profile's **Options** tab sets the language and
+can skip Everest welcome and startup updates. Automatic connection can be
+enabled there and uses Everest's debug console.
 
 Pour le partage horizontal en 32:9, placez les versions 32:9 de
 `Celeste.dll` et `MMHOOK_Celeste.dll` dans `PartyDeck-32x9`, à côté de

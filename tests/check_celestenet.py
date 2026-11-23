@@ -19,8 +19,18 @@ with tempfile.TemporaryDirectory() as name:
     rom.touch()
     profile = defaults(rom)
     assert profile['adapter'] == celeste.ADAPTER
+    profile.pop('celestenet')  # Older profiles have no options section.
     save_profile(root,rom,profile)
-    assert read_profile(root,rom)['adapter'] == celeste.ADAPTER
+    saved = read_profile(root,rom)
+    assert saved['adapter'] == celeste.ADAPTER
+    assert saved['celestenet'] == celeste.defaults()
+    assert [key for key, _, _ in fields(1, celeste.ADAPTER)] == [
+        'celestenet.language', 'celestenet.skip_setup', 'celestenet.automatic']
+    from partydeck_i18n import set_language
+    set_language('en')
+    assert label_value('celestenet.language', 'french') == 'French'
+    set_language('fr')
+    assert label_value('celestenet.language', 'french') == 'Français'
     assert celeste.ADAPTER in next(values for key,_,values in fields(0) if key=='adapter')
     assert label_value('adapter',celeste.ADAPTER)=='Celeste / CelesteNet'
 
@@ -30,15 +40,31 @@ with tempfile.TemporaryDirectory() as name:
     (game/'Mods').mkdir(parents=True)
     (game/'Celeste.exe').touch()
     flags = game/'everest-launch.txt'
-    flags.write_bytes(b'# custom\r\n--loglevel verbose\r\n')
+    original_flags = b'# --debug\r\n--loglevel verbose --debug --disable-splash\r\n'
+    flags.write_bytes(original_flags)
     settings = game/'Saves'/celeste.SETTINGS_FILE
     settings.parent.mkdir()
     original = b'SettingsVersionDoNotEdit: 2\r\nName: Old\r\nClientIDSending: NotOnLocalhost\r\nExtraServers:\r\n- localhost\r\n'
     settings.write_bytes(original)
+    game_settings = settings.parent/'settings.celeste'
+    game_settings.write_bytes(b'<Settings><LaunchInDebugMode>true</LaunchInDebugMode><Fullscreen>true</Fullscreen></Settings>')
+    core_path = settings.parent/'modsettings-Everest.celeste'
+    core_path.write_bytes(b'DebugModeInEverest: true\nAutoUpdateModsOnStartup: true\nCurrentVersion: null\n')
     with patch.object(celeste.subprocess,'run') as run:
-        celeste.configure_client(game,prefix,player)
+        celeste.configure_client(game, prefix, player, dict(celeste.defaults(), language='french'), lan=True)
         run.assert_called_once_with(['mount','--bind',str(player/'celestenet-everest-launch.txt'),str(flags)],check=True)
-    assert flags.read_bytes()==b'# custom\r\n--loglevel verbose\r\n'
+    assert b'--loglevel verbose  --disable-splash' in (player/'celestenet-everest-launch.txt').read_bytes()
+    assert b'<Language>french</Language>' in game_settings.read_bytes()
+    assert b'<LaunchInDebugMode>false</LaunchInDebugMode>' in game_settings.read_bytes()
+    assert b'<Fullscreen>true</Fullscreen>' in game_settings.read_bytes()
+    assert b'DebugModeInEverest: false' in core_path.read_bytes()
+    assert b"CurrentVersion: '0.0.0'" in core_path.read_bytes()
+    assert b'AutoUpdateModsOnStartup: false' in core_path.read_bytes()
+    core_path.write_bytes(core_path.read_bytes().replace(b"'0.0.0'", b"'1.6000.0'"))
+    with patch.object(celeste.subprocess,'run') as run:
+        celeste.configure_client(game,prefix,player,dict(celeste.defaults(), automatic=True),lan=True)
+        run.assert_called_once_with(['mount','--bind',str(player/'celestenet-everest-launch.txt'),str(flags)],check=True)
+    assert flags.read_bytes() == original_flags
     assert (player/'celestenet-everest-launch.txt').read_bytes().endswith(b'--debug\n')
     assert (player/'celestenet-client-before.celeste').read_bytes()==original
     assert b'Name: J2\r\nClientIDSending: Off\r\nExtraServers:\r\n- localhost\r\n' in settings.read_bytes()
@@ -46,6 +72,9 @@ with tempfile.TemporaryDirectory() as name:
     assert b'SettingsVersionDoNotEdit: 2' in celeste.patch_client_settings(b'', 'j1')
     core=(settings.parent/'modsettings-Everest.celeste').read_bytes()
     assert b'DebugRCPort: 32271' in core and b'DebugModeInEverest: true' in core
+    assert b"CurrentVersion: '1.6000.0'" in core
+    assert celeste.patch_game_settings(b'', 'keep', False) == b''
+    assert b'<Language>english</Language>' in celeste.patch_game_settings(b'', 'english', False)
     variant=game/'PartyDeck-32x9'
     variant.mkdir()
     for name in celeste.WIDE_ASSEMBLIES:

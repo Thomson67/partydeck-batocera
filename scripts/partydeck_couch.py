@@ -18,6 +18,8 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
+from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste,
+                                  LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
 from partydeck_hkmp import defaults as hkmp_defaults, matches as matches_hkmp
 from partydeck_hkmultiplayer import defaults as multi_defaults, matches as matches_multi, HOST_CHOICES
@@ -90,6 +92,10 @@ def fields(tab, adapter='standard'):
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet'])]
+    if adapter == 'celestenet':
+        return [('celestenet.language', tr('Langue du jeu'), list(CELESTE_LANGUAGES)),
+                ('celestenet.skip_setup', tr('Passer l’accueil Everest et les mises à jour au démarrage'), [True, False]),
+                ('celestenet.automatic', tr('Connexion automatique (mode debug Everest)'), [False, True])]
     if adapter == 'hollowknight-hkmultiplayer':
         if tab == 1:
             return [('hkmultiplayer.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
@@ -230,6 +236,8 @@ def label_value(key, value):
         return tr('Activé' if value else 'Désactivé')
     if key in ('hkmp.enemy_health','hkmp.enemy_ghosts'):
         return tr({'keep':'Conserver','on':'Activé','off':'Désactivé'}[value])
+    if key == 'celestenet.language':
+        return tr(CELESTE_LANGUAGES[value])
     if key == 'l4d2.language':
         return tr(L4D2_LANGUAGES[value])
     if key == 'sm64coopdx.language':
@@ -293,7 +301,8 @@ class Model:
     def catalog_rows(self):
         windows = self.windows
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
-                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi)}
+                         'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi),
+                         'celestenet':discover(windows,matches_celeste)}
         return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
                 for recipe in COMMON]
 
@@ -323,6 +332,7 @@ class Model:
         self.data.setdefault('nfsmw',mw_defaults())
         self.data.setdefault('hkmp',hkmp_defaults())
         self.data.setdefault('hkmultiplayer',multi_defaults())
+        self.data.setdefault('celestenet',celeste_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
@@ -349,6 +359,7 @@ class Model:
         if stored.get('adapter') != 'nfsmw-lan':stored.pop('nfsmw',None)
         if stored.get('adapter') != 'hollowknight-hkmp':stored.pop('hkmp',None)
         if stored.get('adapter') != 'hollowknight-hkmultiplayer':stored.pop('hkmultiplayer',None)
+        if stored.get('adapter') != 'celestenet':stored.pop('celestenet', None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'windows-party'), 'ajouter', str(self.rom),
@@ -737,6 +748,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'nfsmw-lan':return (0,1)
@@ -1710,6 +1722,8 @@ class App:
                     title=tr(('Session','Réseau','Coop')[i])
                 elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
+                elif self.model.data.get('adapter') == 'celestenet':
+                    title = tr(('Session','Options')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
                     title = tr(('Session','Joueurs','Options')[i])
                 else:
@@ -1729,6 +1743,8 @@ class App:
                 if self.model.data['adapter'] == 'l4d2-goldberg':
                     subtitle = (tr('Sans bordure et résolution automatiques · langue : fichiers du jeu requis') if self.tab==2
                                 else tr('Left 4 Dead 2 · Steam ID distincts et persistants · noms personnalisables'))
+                if self.model.data['adapter'] == 'celestenet':
+                    subtitle = tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.')
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':
                     subtitle=tr('HKMultiplayer · J1 ouvre le monde · connexion et code automatiques')
                 if self.model.data['adapter']=='hollowknight-hkmp':

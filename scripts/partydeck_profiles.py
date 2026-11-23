@@ -62,9 +62,9 @@ def defaults(rom):
     from partydeck_hkmultiplayer import matches as matches_multi, defaults as multi_defaults
     if matches_multi(rom):
         data.update(adapter="hollowknight-hkmultiplayer",hkmultiplayer=multi_defaults())
-    from partydeck_celestenet import ADAPTER as celestenet, matches as matches_celeste
+    from partydeck_celestenet import ADAPTER as celestenet, matches as matches_celeste, defaults as celeste_defaults
     if matches_celeste(rom):
-        data.update(adapter=celestenet)
+        data.update(adapter=celestenet, celestenet=celeste_defaults())
     return data
 
 
@@ -103,6 +103,9 @@ def validate(data, rom):
     if data.get('adapter') == 'hollowknight-hkmultiplayer':
         from partydeck_hkmultiplayer import validate as validate_multi
         data['hkmultiplayer']=validate_multi(data.get('hkmultiplayer'))
+    if data.get('adapter') == 'celestenet':
+        from partydeck_celestenet import validate as validate_celeste
+        data['celestenet'] = validate_celeste(data.get('celestenet'))
     return data
 
 

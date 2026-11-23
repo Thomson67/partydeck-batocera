@@ -585,7 +585,7 @@ def run_compositor(command):
 
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
-                 session_token=None,player_count=1,l4d2_launch=None,celestenet=False):
+                 session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None):
     _, _, width, height = rectangle
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -596,6 +596,10 @@ def start_player(app, player, original, target, devices, rectangle, window_class
             profile = read_profile(base,original)
             if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
+    if celestenet:
+        from partydeck_celestenet import is_wide_view
+        if is_wide_view(width, height):
+            args.extend(['-w', str(width), '-h', str(height)])
     if not shared_keyboard_mouse:
         args.extend(["--backend-disable-keyboard", "--backend-disable-mouse"])
     kb_mouse = [str(d.node) for d in devices if d.category in {KEYBOARDS, MICE}]
@@ -625,6 +629,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token
     environment.pop('PARTYDECK_L4D2_LAUNCH',None)
     if l4d2_launch is not None:environment['PARTYDECK_L4D2_LAUNCH']=json.dumps(l4d2_launch)
+    environment.pop('PARTYDECK_CELESTE_OPTIONS', None)
+    if celeste_options is not None:
+        environment['PARTYDECK_CELESTE_OPTIONS'] = json.dumps(celeste_options)
     environment.pop('PARTYDECK_CELESTENET',None)
     if celestenet:
         environment['PARTYDECK_CELESTENET']='1'
@@ -769,7 +776,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     from partydeck_celestenet import ADAPTER as CELESTENET
-    celestenet=bool(party and len(players)>1 and (profile or {}).get('adapter')==CELESTENET)
+    celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
+    celestenet = celeste_options is not None and len(players) > 1
     bl2_lan=None
     l4d2_launch=None
     if party and len(players)>1:
@@ -861,8 +869,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                           shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
                                           network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
-                                          l4d2_launch=l4d2_launch,celestenet=celestenet))
-            if celestenet:
+                                          l4d2_launch=l4d2_launch,celestenet=celestenet,
+                                          celeste_options=celeste_options))
+            if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
         if virtual_input:
