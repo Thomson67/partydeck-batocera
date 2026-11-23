@@ -78,8 +78,8 @@ def validate(data, rom):
         raise ValueError(tr('Profil Windows Party invalide pour {p0}', p0=rom))
     if type(data.get("keyboard_player", True)) is not bool:
         raise ValueError(tr("Option clavier comme joueur invalide."))
-    if type(data.get('keep_latest_runner', False)) is not bool:
-        raise ValueError(tr('Option de nettoyage des anciens runners invalide.'))
+    # A previous test stored this option per game. It now belongs to storage.json.
+    data.pop('keep_latest_runner', None)
     if data.get('gpu','auto') not in ('auto','system','nvidia'):
         raise ValueError(tr('Choix du GPU invalide.'))
     if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet"):

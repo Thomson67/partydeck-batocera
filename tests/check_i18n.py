@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch,Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import partydeck_i18n as lang
-from partydeck_couch import App,control_label,context_hints,fields,label_value
+from partydeck_couch import App,STORAGE_GAME_ROW,STORAGE_OPTIONS,control_label,context_hints,fields,label_value
 from partydeck_profiles import defaults,save_profile,read_profile,profile_path,edit_profile_legacy,edit_anchor,edit_soh_graphics
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
@@ -67,15 +67,6 @@ for language,title,choice in (('fr','GPU de rendu','Configuration système'),('e
     lang.set_language(language)
     assert next(label for key,label,_ in fields(0) if key=='gpu')==title
     assert label_value('gpu','system')==choice
-
-for language, label in (('fr', 'Supprimer les bottles des anciens runners'),
-                        ('en', 'Delete bottles from previous runners')):
-    lang.set_language(language)
-    model = SimpleNamespace(data={'adapter':'standard'}, rom=Path('/roms/Game.wsquashfs'), celeste_skins=[])
-    view = SimpleNamespace(tab=0, model=model)
-    assert App.current_fields(view)[-1] == ('keep_latest_runner', label, [False, True])
-    model.rom = Path('/roms/Game.wine')
-    assert not any(row[0] == 'keep_latest_runner' for row in App.current_fields(view))
 
 for language,prefix in (('fr','Contrôles virtuels toolbox'),('en','Toolbox virtual controls')):
     lang.set_language(language)
@@ -181,13 +172,23 @@ with tempfile.TemporaryDirectory() as folder:
         app.action('back')
         app.storage_open=True;app.storage_config=dict(DEFAULTS);app.draw()
         assert 'WINDOWS PARTY STORAGE' in rendered and 'Total caches (MiB)' in rendered
+        app.storage_row = next(i for i, (key, _) in enumerate(STORAGE_OPTIONS) if key == 'keep_latest_runner')
+        for language, title, hint in (
+                ('fr', 'Supprimer les bottles des anciens runners',
+                 'Jeux .wsquashfs · les sauvegardes internes aux anciennes bottles sont supprimées.'),
+                ('en', 'Delete bottles from previous runners',
+                 '.wsquashfs games · saves stored inside old bottles are deleted.')):
+            lang.set_language(language)
+            rendered.clear()
+            app.draw_storage()
+            assert {title, hint} <= set(rendered)
         for language, expected in (
                 ('fr', ('Wine-bottles uniquement', 'Wine-bottles + sauvegardes', 'Supprimer définitivement')),
                 ('en', ('Wine bottles only', 'Wine bottles + saves', 'Delete permanently'))):
             lang.set_language(language)
             rendered.clear()
             app.storage_result = dict(games=[dict(name=rom.stem, rom=str(rom))])
-            app.storage_row = 8
+            app.storage_row = STORAGE_GAME_ROW
             app.storage_action('ok')
             app.draw_game_cleanup()
             app.game_cleanup_action('ok')

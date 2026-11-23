@@ -1053,7 +1053,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     session_token=uuid.uuid4().hex
     started = time.time_ns()
     track_runner = party and original.suffix.lower() == '.wsquashfs'
-    keep_latest_runner = track_runner and (profile or {}).get('keep_latest_runner', False)
+    keep_latest_runner = track_runner and storage_settings(base)['keep_latest_runner']
     from partydeck_celestenet import ADAPTER as CELESTENET
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1

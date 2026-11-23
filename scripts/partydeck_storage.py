@@ -16,7 +16,8 @@ import time
 MIB = 1024**2
 SAVES = Path('/userdata/saves/windows-party')
 DEFAULTS = dict(auto_clean=True, cache_mib=2048, logs_mib=128,
-                log_file_mib=8, log_keep=20, reserve_mib=2048, diagnostic=False)
+                log_file_mib=8, log_keep=20, reserve_mib=2048, diagnostic=False,
+                keep_latest_runner=False)
 
 
 def settings(base):

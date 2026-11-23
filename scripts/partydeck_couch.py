@@ -39,6 +39,16 @@ from partydeck_display import (settings as desktop_settings, save_settings as sa
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
+STORAGE_OPTIONS = (
+    ('auto_clean', 'Entretien automatique'),
+    ('cache_mib', 'Caches cumulés (Mio)'),
+    ('logs_mib', 'Journaux cumulés (Mio)'),
+    ('reserve_mib', 'Espace libre avant lancement (Mio)'),
+    ('diagnostic', 'Diagnostic Proton détaillé'),
+    ('keep_latest_runner', 'Supprimer les bottles des anciens runners'),
+)
+STORAGE_ACTIONS = (('clean', 'NETTOYER'), ('purge', 'VIDER LES CACHES'), ('scan', 'ACTUALISER'))
+STORAGE_GAME_ROW = len(STORAGE_OPTIONS) + len(STORAGE_ACTIONS)
 
 
 def control_label(action, mode):
@@ -337,7 +347,6 @@ class Model:
         self.data.setdefault('adapter', 'standard')
         self.data.setdefault('keyboard_player', True)
         self.data.setdefault('gpu','auto')
-        self.data.setdefault('keep_latest_runner',False)
         self.data.setdefault('anchor', anchor_defaults())
         self.data.setdefault('borderlands2', bl2_defaults())
         self.data.setdefault('sm64coopdx', sm64_defaults())
@@ -778,8 +787,6 @@ class App:
     def current_fields(self):
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
                     self.model.celeste_skins)
-        if self.tab == 0 and self.model.rom and self.model.rom.suffix.lower() == '.wsquashfs':
-            rows.append(('keep_latest_runner', tr('Supprimer les bottles des anciens runners'), [False, True]))
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows
@@ -1163,7 +1170,7 @@ class App:
             elif task == 'scan':
                 self.storage_result = result
                 games = len(result['games'])
-                self.storage_row = min(self.storage_row, 7 + games)
+                self.storage_row = min(self.storage_row, STORAGE_GAME_ROW + games - 1)
                 self.storage_page = min(self.storage_page, max(0, (games - 1) // 3))
             elif task == 'game':
                 self.toast(tr('Nettoyage du jeu terminé.') if result else tr('Aucune donnée à nettoyer pour ce jeu.'))
@@ -1181,7 +1188,7 @@ class App:
                 self.toast(str(error))
         finally:
             if task == 'game':
-                self.storage_row = 7
+                self.storage_row = STORAGE_GAME_ROW - 1
                 self.storage_job()
 
     def open_storage(self):
@@ -1201,26 +1208,26 @@ class App:
         if action in ('prev', 'next'):
             pages = max(1, (len(games) + 2) // 3)
             self.storage_page = (self.storage_page + (1 if action == 'next' else -1)) % pages
-            if self.storage_row >= 8:
-                self.storage_row = 8 + self.storage_page * 3
+            if self.storage_row >= STORAGE_GAME_ROW:
+                self.storage_row = STORAGE_GAME_ROW + self.storage_page * 3
         elif action in ('up', 'down'):
-            self.storage_row = (self.storage_row + (1 if action == 'down' else -1)) % (8 + len(games))
-            if self.storage_row >= 8:
-                self.storage_page = (self.storage_row - 8) // 3
+            self.storage_row = (self.storage_row + (1 if action == 'down' else -1)) % (STORAGE_GAME_ROW + len(games))
+            if self.storage_row >= STORAGE_GAME_ROW:
+                self.storage_page = (self.storage_row - STORAGE_GAME_ROW) // 3
         elif action in ('left', 'right', 'ok'):
-            if self.storage_row >= 8:
+            if self.storage_row >= STORAGE_GAME_ROW:
                 if action == 'ok':
                     if self.storage_future is not None:
                         self.toast(tr('Analyse / nettoyage en cours…'))
                     else:
-                        game = games[self.storage_row - 8]
+                        game = games[self.storage_row - STORAGE_GAME_ROW]
                         self.game_cleanup = dict(game=game, choice=0, confirming=False)
                 return
-            if self.storage_row >= 5:
+            if self.storage_row >= len(STORAGE_OPTIONS):
                 if action == 'ok':
-                    self.storage_job(('clean', 'purge', 'scan')[self.storage_row-5])
+                    self.storage_job(STORAGE_ACTIONS[self.storage_row - len(STORAGE_OPTIONS)][0])
                 return
-            key = ('auto_clean', 'cache_mib', 'logs_mib', 'reserve_mib', 'diagnostic')[self.storage_row]
+            key = STORAGE_OPTIONS[self.storage_row][0]
             value = self.storage_config[key]
             def apply(value):
                 candidate = dict(self.storage_config, **{key: value})
@@ -1252,22 +1259,22 @@ class App:
             self.text(tr('Caches {p0} · Journaux {p1} · Installation {p2}', p0=human(c['cache']), p1=human(c['logs']), p2=human(c['installation'])), 418, 290, 16, width=955)
         else:
             self.text(tr('Analyse du disque en cours…'), 418, 221, 20, width=955)
-        rows = [('auto_clean',tr('Entretien automatique')), ('cache_mib',tr('Caches cumulés (Mio)')),
-                ('logs_mib',tr('Journaux cumulés (Mio)')), ('reserve_mib',tr('Espace libre avant lancement (Mio)')),
-                ('diagnostic',tr('Diagnostic Proton détaillé'))]
-        for index, (key, title) in enumerate(rows):
-            y = 331+index*38
+        for index, (key, title) in enumerate(STORAGE_OPTIONS):
+            y = 322+index*34
             focused = self.storage_row == index
-            self.box((410,y-5,986,35), (38,64,86) if focused else (25,33,50), (90,210,229) if focused else None)
-            self.text(title,430,y,20,width=640)
+            self.box((410,y-5,986,31), (38,64,86) if focused else (25,33,50), (90,210,229) if focused else None)
+            self.text(tr(title),430,y,20,width=690)
             value = self.storage_config[key]
             self.text('‹ ' + ((tr('Activé') if value else tr('Désactivé')) if type(value) is bool else str(value)) + ' ›',
                       1130,y,20,(144,223,234),240)
-        for index, title in enumerate((tr('NETTOYER'), tr('VIDER LES CACHES'), tr('ACTUALISER'))):
-            focused = self.storage_row == index+5
+        for index, (_, title) in enumerate(STORAGE_ACTIONS):
+            focused = self.storage_row == index+len(STORAGE_OPTIONS)
             self.box((416+index*327,533,314,40),(35,75,92), (134,236,238) if focused else None)
-            self.text(title,430+index*327,543,16,width=290)
-        self.text(tr('L’entretien global conserve les sauvegardes, préfixes et réglages.'),418,588,16,width=960)
+            self.text(tr(title),430+index*327,543,16,width=290)
+        if self.storage_row < len(STORAGE_OPTIONS) and STORAGE_OPTIONS[self.storage_row][0] == 'keep_latest_runner':
+            self.text(tr('Jeux .wsquashfs · les sauvegardes internes aux anciennes bottles sont supprimées.'),418,588,16,width=960)
+        else:
+            self.text(tr('Le nettoyage des caches conserve les sauvegardes, préfixes et réglages.'),418,588,16,width=960)
         if self.storage_future is not None:
             self.text(tr('Analyse en cours…') if self.storage_task == 'scan' else tr('Nettoyage en cours…'),418,614,16,(141,220,234),950)
         else:
@@ -1275,7 +1282,7 @@ class App:
         if result:
             for index, game in enumerate(result['games'][self.storage_page*3:self.storage_page*3+3]):
                 y = 648+index*45
-                if self.storage_row == 8 + self.storage_page*3 + index:
+                if self.storage_row == STORAGE_GAME_ROW + self.storage_page*3 + index:
                     self.box((410,y-3,986,44),(38,64,86),(90,210,229))
                 self.text(game['name'],430,y,20,width=730)
                 self.text(human(game['total']),1200,y,20,width=180)
@@ -1822,10 +1829,6 @@ class App:
                     else navigation + ' · ' + quit_hint)
         if volume_selected and context == 'main' and self.model.data.get('adapter') == 'sm64coopdx':
             subtitle = tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok',self.input_mode) + tr(' : valeur de la configuration commune')
-        if context == 'main' and self.model.data and self.pane == 'settings':
-            rows = self.current_fields()
-            if self.row < len(rows) and rows[self.row][0] == 'keep_latest_runner':
-                subtitle = tr('Les sauvegardes internes aux anciennes bottles sont supprimées avec celles-ci.')
         if context in ('confirm','missing','remove','game-cleanup'):
             subtitle = ''
         elif context == 'browser':
