@@ -43,6 +43,8 @@ with tempfile.TemporaryDirectory() as name:
     assert b'Name: J2\r\nClientIDSending: Off\r\nExtraServers:\r\n- localhost\r\n' in settings.read_bytes()
     assert b'LoginMode: Guest' in settings.read_bytes()
     assert b'SettingsVersionDoNotEdit: 2' in celeste.patch_client_settings(b'', 'j1')
+    core=(settings.parent/'modsettings-Everest.celeste').read_bytes()
+    assert b'DebugRCPort: 32271' in core and b'DebugModeInEverest: true' in core
 
 
 calls = []
@@ -63,10 +65,15 @@ with HTTPServer(('127.0.0.1',0),Console) as http:
     worker = Thread(target=http.serve_forever,daemon=True)
     worker.start()
     try:
-        with patch.object(celeste,'DEBUG_PORT',http.server_port):
-            celeste.join('192.168.247.11','j2',timeout=3)
+        with patch.object(celeste,'DEBUG_PORT',http.server_port-1):
+            celeste.join('127.0.0.1','j2',timeout=3)
     finally:
         http.shutdown()
         worker.join(timeout=3)
-assert calls == [{},{},{'command':['con 192.168.247.11:17230']}]
+assert calls == [{},{},{'command':['con localhost']}]
+
+from partydeck_private_lan import PrivateLAN
+lan=PrivateLAN(2,shared=True)
+assert lan.count==1 and lan.address(0)=='127.0.0.1'
+assert PrivateLAN(2).address(1)=='192.168.247.12'
 print('CelesteNet: profile, private client settings and automatic Everest console join verified.')

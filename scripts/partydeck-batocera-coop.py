@@ -840,7 +840,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             use_private=True
         if use_private:
             from partydeck_private_lan import PrivateLAN
-            network=PrivateLAN(len(players))
+            network=PrivateLAN(len(players),shared=True) if celestenet else PrivateLAN(len(players))
             network.start()
         if celestenet:
             from partydeck_celestenet import start_server, start_join
@@ -859,7 +859,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
                                           shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
-                                          network=network,network_index=index-1,
+                                          network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
                                           l4d2_launch=l4d2_launch,celestenet=celestenet))
             if celestenet:

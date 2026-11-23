@@ -83,8 +83,8 @@ et choisissez de deux à quatre joueurs. Le premier lancement télécharge le
 serveur officiel et, si nécessaire, le runtime .NET Linux. Les lancements
 suivants réutilisent ces fichiers.
 
-PartyDeck lance un serveur dans le LAN privé de J1 et demande la connexion
-de chaque client au titre. Choisissez ensuite le même chapitre sur chaque
+PartyDeck lance un serveur dans un réseau privé partagé et connecte les
+clients à `localhost` au titre. Choisissez ensuite le même chapitre sur chaque
 instance. Le jeu démarre en mode debug Everest pendant cette session pour
 utiliser sa console locale. Le journal du serveur se trouve sous
 `runtime/<jeu>/celestenet/server.log`.

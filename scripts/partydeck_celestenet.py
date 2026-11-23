@@ -114,7 +114,10 @@ def start_server(base, work, lan):
 def patch_client_settings(data, player):
     if not data.strip():
         data = b'SettingsVersionDoNotEdit: 2\n'
-    values = {'Name':player.upper(), 'LoginMode':'Guest', 'ClientIDSending':'Off'}
+    return patch_settings(data,{'Name':player.upper(), 'LoginMode':'Guest', 'ClientIDSending':'Off'})
+
+
+def patch_settings(data, values):
     newline = b'\r\n' if b'\r\n' in data else b'\n'
     for key, value in values.items():
         line = f'{key}: {value}'.encode()
@@ -130,7 +133,8 @@ def configure_client(directory, prefix, player):
     directory = safe_path(directory, allowed)
     if not child(directory,'Celeste.exe').is_file() or not child(directory,'Mods').is_dir():
         raise ValueError(tr('CelesteNet : lancez un Celeste.exe équipé d’Everest et de CelesteNet.'))
-    settings = safe_path(child(child(directory,'Saves'),SETTINGS_FILE), allowed)
+    saves = safe_path(child(directory,'Saves'),allowed)
+    settings = safe_path(child(saves,SETTINGS_FILE), allowed)
     original = settings.read_bytes() if settings.is_file() else b''
     changed = patch_client_settings(original, player.name)
     if changed != original:
@@ -138,6 +142,17 @@ def configure_client(directory, prefix, player):
         if original and not backup.exists():
             write_bytes(safe_path(backup, (player.resolve(),)), original)
         write_bytes(settings, changed)
+
+    index = int(player.name[1:])-1
+    core = safe_path(child(saves,'modsettings-Everest.celeste'),allowed)
+    original_core = core.read_bytes() if core.is_file() else b''
+    changed_core = patch_settings(original_core,{'DebugModeInEverest':'true',
+                                                 'DebugRCPort':DEBUG_PORT+index})
+    if changed_core != original_core:
+        backup = safe_path(player/'celestenet-everest-before.celeste',(player.resolve(),))
+        if original_core and not backup.exists():
+            write_bytes(backup,original_core)
+        write_bytes(core,changed_core)
 
     # The launch flag lives in the player's mount namespace for this run only.
     flags = safe_path(child(directory,'everest-launch.txt'), allowed)
@@ -165,8 +180,8 @@ def install_hook(base, player):
     subprocess.run(['mount','--bind',str(replacement),str(binary)],check=True)
 
 
-def request_console(query=''):
-    connection = http.client.HTTPConnection('localhost',DEBUG_PORT,timeout=2)
+def request_console(port, query=''):
+    connection = http.client.HTTPConnection('localhost',port,timeout=2)
     try:
         connection.request('GET','/console'+query)
         response = connection.getresponse()
@@ -176,26 +191,35 @@ def request_console(query=''):
 
 
 def join(address, player, timeout=150):
-    endpoint = f'{ipaddress.IPv4Address(address)}:{PORT}'
+    ip = ipaddress.IPv4Address(address)
+    endpoint = 'localhost' if ip.is_loopback else f'{ip}:{PORT}'
+    port = DEBUG_PORT+int(player[1:])-1
     deadline = time.monotonic() + timeout
+    console_seen = False
     while time.monotonic() < deadline:
         try:
             # The documented console listing advertises the CelesteNet command
             # only after the mod and Everest title screen have initialized.
-            if b'<h3>con</h3>' in (request_console() or b'') and request_console(
-                    '?' + urlencode({'command':'con '+endpoint})) is not None:
+            commands = request_console(port)
+            console_seen |= commands is not None
+            if b'<h3>con</h3>' in (commands or b'') and request_console(
+                    port,'?' + urlencode({'command':'con '+endpoint})) is not None:
                 print(tr('CelesteNet {p0} : connexion demandée vers {p1}.',p0=player.upper(),p1=endpoint),flush=True)
                 return
         except (OSError,http.client.HTTPException):
             pass
         time.sleep(.5)
-    print(tr('CelesteNet {p0} : commande de connexion indisponible. Vérifiez Everest et CelesteNet.',
-             p0=player.upper()),flush=True)
+    if console_seen:
+        print(tr('CelesteNet {p0} : la console Everest répond, mais la commande con manque.',
+                 p0=player.upper()),flush=True)
+    else:
+        print(tr('CelesteNet {p0} : console Everest inaccessible sur le port {p1}.',
+                 p0=player.upper(),p1=port),flush=True)
 
 
 def start_join(lan, index):
-    return subprocess.Popen(lan.prefix(index) + [sys.executable,__file__,'_join',lan.address(0),f'j{index+1}'],
-                            pass_fds=(lan.fds[index],),stdin=subprocess.DEVNULL)
+    return subprocess.Popen(lan.prefix(0) + [sys.executable,__file__,'_join',lan.address(0),f'j{index+1}'],
+                            pass_fds=(lan.fds[0],),stdin=subprocess.DEVNULL)
 
 
 if __name__ == '__main__':
