@@ -89,7 +89,7 @@ def fields(tab, adapter='standard'):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer'])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet'])]
     if adapter == 'hollowknight-hkmultiplayer':
         if tab == 1:
             return [('hkmultiplayer.automatic',tr('Héberger et rejoindre automatiquement'),[True,False]),
@@ -218,6 +218,8 @@ def label_value(key, value):
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
     if key == 'adapter':
+        if value == 'celestenet':
+            return 'Celeste / CelesteNet'
         return {'standard': 'Standard', 'soh-anchor': 'SoH / Anchor', 'borderlands2':'Borderlands 2', 'sm64coopdx':'SM64CoopDX', 'l4d2-goldberg':'Left 4 Dead 2 / Goldberg','nfsmw-lan':tr('Most Wanted 2005 · LAN expérimental'),'hollowknight-hkmp':'Hollow Knight / HKMP','hollowknight-hkmultiplayer':'Hollow Knight / HKMultiplayer'}.get(value, value)
     if key == 'l4d2.campaign':
         title=tr(CAMPAIGNS[value])

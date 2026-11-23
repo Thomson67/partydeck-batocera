@@ -74,6 +74,28 @@ manual fallback. Live Batocera validation is required; see the linked guide.
   "/userdata/roms/windows/Mon jeu.wsquashfs" 2 horizontal auto
 ```
 
+### CelesteNet en LAN
+
+Préparez la version Windows de Celeste avec **Everest** et le **client
+CelesteNet**. Lancez d’abord le jeu en solo pour vérifier que le mod apparaît.
+Dans Windows Party, ouvrez **Session → Profil du jeu → Celeste / CelesteNet**
+et choisissez de deux à quatre joueurs. Le premier lancement télécharge le
+serveur officiel et, si nécessaire, le runtime .NET Linux. Les lancements
+suivants réutilisent ces fichiers.
+
+PartyDeck lance un serveur dans le LAN privé de J1 et demande la connexion
+de chaque client au titre. Choisissez ensuite le même chapitre sur chaque
+instance. Le jeu démarre en mode debug Everest pendant cette session pour
+utiliser sa console locale. Le journal du serveur se trouve sous
+`runtime/<jeu>/celestenet/server.log`.
+
+**English:** Install Everest and the CelesteNet client in the Windows game,
+then select **Celeste / CelesteNet** under **Session → Game profile** for two
+to four players. The first launch downloads the private server dependencies.
+PartyDeck starts the server and requests each client's connection at the
+title screen. Pick the same chapter in each instance. Everest debug mode
+provides the local console during the session.
+
 La bibliothèque affiche uniquement les jeux ajoutés ; une nouvelle installation
 commence avec une liste vide. **Inser / Select → Ajouter** propose deux choix :
 **Depuis le catalogue** pour appliquer un profil prédéfini, ou **Manuellement**

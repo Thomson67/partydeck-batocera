@@ -61,6 +61,9 @@ def defaults(rom):
     from partydeck_hkmultiplayer import matches as matches_multi, defaults as multi_defaults
     if matches_multi(rom):
         data.update(adapter="hollowknight-hkmultiplayer",hkmultiplayer=multi_defaults())
+    from partydeck_celestenet import ADAPTER as celestenet, matches as matches_celeste
+    if matches_celeste(rom):
+        data.update(adapter=celestenet)
     return data
 
 
@@ -76,7 +79,7 @@ def validate(data, rom):
         raise ValueError(tr("Option clavier comme joueur invalide."))
     if data.get('gpu','auto') not in ('auto','system','nvidia'):
         raise ValueError(tr('Choix du GPU invalide.'))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer"):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet"):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor

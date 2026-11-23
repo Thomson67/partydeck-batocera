@@ -62,6 +62,13 @@ def get_language():
 
 
 EN = {
+    'CelesteNet : empreinte de téléchargement invalide.': 'CelesteNet: download checksum mismatch.',
+    'CelesteNet : préparation du serveur local au premier lancement.': 'CelesteNet: preparing the local server on first launch.',
+    'CelesteNet : serveur local prêt sur {p0}:{p1}.': 'CelesteNet: local server ready at {p0}:{p1}.',
+    'CelesteNet : le serveur ne démarre pas. Consultez {p0}.': 'CelesteNet: the server failed to start. See {p0}.',
+    'CelesteNet : lancez un Celeste.exe équipé d’Everest et de CelesteNet.': 'CelesteNet: launch Celeste.exe with Everest and CelesteNet installed.',
+    'CelesteNet {p0} : connexion demandée vers {p1}.': 'CelesteNet {p0}: requested a connection to {p1}.',
+    'CelesteNet {p0} : commande de connexion indisponible. Vérifiez Everest et CelesteNet.': 'CelesteNet {p0}: connect command unavailable. Check Everest and CelesteNet.',
     'Sauvegarde de l’hôte': 'Host save slot',
     'Sauvegarde hôte SM64CoopDX invalide.': 'Invalid SM64CoopDX host save slot.',
     'Réglages de connexion automatique invalides.': 'Invalid automatic connection settings.',
