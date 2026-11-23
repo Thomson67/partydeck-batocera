@@ -1127,11 +1127,14 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             if bottle_players:
                 try:
                     from partydeck_storage import ensure_idle
-                    from partydeck_bottles import prepare,collect_objects
+                    from partydeck_bottles import prepare,collect_objects,prune_inherited_dependencies
                     from partydeck_umu import compact_steam_runtime
                     ensure_idle(base)
                     for player,saves in bottle_players:
-                        prepare(player,saves,original,target)
+                        area = prepare(player,saves,original,target)
+                        freed = prune_inherited_dependencies(area,target)
+                        if freed:
+                            print(f"UMU {player.name.upper()}: inherited dependency bytes removed={freed}", flush=True)
                         if not shared_runtimes:
                             compact_steam_runtime(player)
                     collect_objects()

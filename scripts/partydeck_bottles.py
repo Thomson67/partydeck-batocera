@@ -5,6 +5,8 @@ users, game directories, whiteouts and unknown entries stay player-private.
 Run migration/compaction on the host under the session/storage locks, never
 against live mounts. OverlayFS supplies copy-on-write, even on ext4/mergerfs.
 """
+import filecmp
+from functools import lru_cache
 import hashlib
 import json
 import os
@@ -373,6 +375,59 @@ def collect_objects():
                 removed += info.st_blocks*512
                 path.unlink()
     return removed
+
+
+def prune_inherited_dependencies(area, target):
+    """Drop legacy copy-up files when the original .wine already supplies them."""
+    from partydeck_storage import files, mounted_paths
+
+    if target.suffix.lower() != '.wine' or not target.is_dir():
+        return 0
+    upper = area/'content/upper'
+    mounts = mounted_paths()
+    if upper.resolve() != upper or any(m == upper or upper in m.parents for m in mounts):
+        return 0
+
+    @lru_cache(maxsize=None)
+    def inherits(directory):
+        attrs = os.listxattr(directory, follow_symlinks=False)
+        for prefix in ('trusted.overlay.', 'user.overlay.'):
+            if prefix + 'redirect' in attrs:
+                return False
+            # 'x' speeds up whiteout lookup without masking the lower directory.
+            if prefix + 'opaque' in attrs and os.getxattr(directory, prefix + 'opaque',
+                                                         follow_symlinks=False) != b'x':
+                return False
+        return directory == upper or inherits(directory.parent)
+
+    def metadata(info):
+        return info.st_mode, info.st_uid, info.st_gid, info.st_size, info.st_mtime_ns
+
+    def identity(info):
+        return info.st_dev, info.st_ino, info.st_ctime_ns
+
+    freed = 0
+    for relative in ('Program Files/dotnet', 'Program Files (x86)/dotnet', 'ProgramData/Package Cache'):
+        directory = upper/'drive_c'/relative
+        if not (target/'drive_c'/relative).is_dir():
+            continue
+        for path, info in files(directory, mounts):
+            original = target/path.relative_to(upper)
+            if info.st_nlink != 1 or original.resolve() != original or not inherits(path.parent):
+                continue
+            try:
+                original_info = original.lstat()
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(original_info.st_mode) or metadata(info) != metadata(original_info):
+                continue
+            attrs = _attributes(path)
+            if attrs is None or attrs != _attributes(original) or not filecmp.cmp(path, original, shallow=False):
+                continue
+            if identity(path.lstat()) == identity(info) and identity(original.lstat()) == identity(original_info):
+                path.unlink()
+                freed += info.st_blocks*512
+    return freed
 
 
 def prepare(player, saves, original, target):

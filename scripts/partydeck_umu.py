@@ -49,7 +49,10 @@ def prepare_shared_steam_runtimes(home, game, runners=Path('/userdata/system/win
     requested = {name for name in STEAM_RUNTIMES if name not in available
                  and any(game.glob(f'j*/umu/upper/{STEAM_RUNTIME_HOME}/{name}'))}
     runtime_root = home / STEAM_RUNTIME_HOME
-    if not requested or runtime_root.resolve() != runtime_root or not (home / 'umu-run').is_file():
+    if not requested:
+        return available
+    if runtime_root.resolve() != runtime_root or not (home / 'umu-run').is_file():
+        print(f"UMU Steam Runtime: shared bootstrap unavailable at {runtime_root}", flush=True)
         return available
     for runner in sorted(runners.glob('*-UMU')):
         bridge = runner / 'umu-batocera/umu-root-runner.py'
@@ -67,7 +70,9 @@ def prepare_shared_steam_runtimes(home, game, runners=Path('/userdata/system/win
             print(f"UMU Steam Runtime: {error}", flush=True)
         if not requested:
             break
-    return installed_steam_runtimes(home)
+    available = installed_steam_runtimes(home)
+    print(f"UMU Steam Runtime: host variants = {', '.join(available) or 'none'}", flush=True)
+    return available
 
 
 def clean_shared_steam_runtimes(player, available):

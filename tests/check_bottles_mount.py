@@ -179,3 +179,36 @@ with tempfile.TemporaryDirectory(dir=test_disk) as folder:
         assert not (area / 'runtime-cache/upper/steamrt4').exists()
         assert unrelated.read_text() == 'keep'
 print('Host Steam Runtime mounted and reused by both players; private caches reclaimed.')
+
+with tempfile.TemporaryDirectory(dir=test_disk) as folder:
+    root = Path(folder)
+    original = root/'Celeste.wine'
+    area = root/'bottle'
+    upper = area/'content/upper'
+    relatives = [Path('drive_c')/name for name in
+                 ('Program Files/dotnet', 'Program Files (x86)/dotnet', 'ProgramData/Package Cache')]
+    for relative in relatives:
+        (original/relative).mkdir(parents=True)
+        (original/relative/'same').write_text('stock')
+        (original/relative/'different').write_text('stock')
+        (upper/relative).mkdir(parents=True)
+        for name in ('same', 'different'):
+            subprocess.run(['cp', '-a', str(original/relative/name), str(upper/relative/name)],
+                           check=True)
+        modified = upper/relative/'different'
+        modified.write_text('local')
+        info = (original/relative/'different').stat()
+        os.utime(modified, ns=(info.st_atime_ns, info.st_mtime_ns))
+    hidden = upper/relatives[2]
+    os.setxattr(hidden, 'user.overlay.opaque', b'y')
+    assert b.prune_inherited_dependencies(area, original) > 0
+    assert (hidden/'same').exists()
+    assert all(not (upper/path/'same').exists() for path in relatives[:2])
+    assert all((upper/path/'different').read_text() == 'local' for path in relatives)
+    coop.mount_overlay(original, area/'content')
+    for path in relatives:
+        assert (original/path/'same').read_text() == 'stock'
+        assert (original/path/'different').read_text() == 'local'
+    for target in (original, area/'content/view'):
+        subprocess.run(['umount', str(target)], check=True)
+print('Inherited .NET and installer cache copies reclaimed; changed and opaque files survive.')
