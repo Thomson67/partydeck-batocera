@@ -88,14 +88,13 @@ de deux à quatre joueurs. Le premier lancement télécharge le
 serveur officiel et, si nécessaire, le runtime .NET Linux. Les lancements
 suivants réutilisent ces fichiers.
 
-PartyDeck lance le serveur dans un réseau privé partagé. Par défaut, le
-mode debug est désactivé. Dans les options de CelesteNet, sélectionnez
-**Se connecter localement** sur chaque joueur, puis choisissez le même
-chapitre. L’onglet **Options** du profil permet de régler la langue, d’ignorer
-les mises à jour de mods au démarrage et d’activer la
-connexion automatique. Cette dernière utilise la console debug d’Everest.
-L’option **Musique uniquement pour J1** coupe la musique des autres
-joueurs pendant le multijoueur en LAN et laisse leurs bruitages actifs.
+PartyDeck lance le serveur dans un réseau privé partagé. En multijoueur, la
+connexion automatique via la console debug d’Everest et la musique sur J1
+uniquement sont activées par défaut. Les autres joueurs gardent leurs
+bruitages. L’onglet **Options** permet de modifier ces choix, de régler la
+langue et d’ignorer les mises à jour de mods au démarrage. En connexion
+manuelle, sélectionnez **Se connecter localement** dans les options CelesteNet
+sur chaque joueur, puis choisissez le même chapitre.
 L’onglet **Joueurs** permet de choisir un nom CelesteNet et un skin par joueur.
 Les skins détectés proviennent des mods installés dans `Mods` et déclarés
 compatibles avec Skin Mod Helper Plus. Pour un jeu `.wsquashfs`, lancez
@@ -103,12 +102,12 @@ d’abord une session multijoueur, puis rouvrez le configurateur pour afficher
 les choix.
 Le journal du serveur se trouve dans `runtime/<jeu>/celestenet/server.log`.
 
-**English:** PartyDeck starts a server in a shared private network. Debug mode
-is off by default. Select **Connect Locally** in CelesteNet on each player and
-choose the same chapter. The profile's **Options** tab sets the language and
-can skip mod updates at startup. Automatic connection can be
-enabled there and uses Everest's debug console. **Music on player 1 only**
-mutes music for the other LAN players while keeping their sound effects.
+**English:** PartyDeck starts a server in a shared private network.
+Automatic connection via Everest’s debug console and **Music on player 1
+only** are enabled by default in multiplayer. Other players keep their sound
+effects. Use **Options** to change these settings, set the game language, or
+skip mod updates at startup. For a manual connection, select **Connect
+Locally** in CelesteNet on each player and choose the same chapter.
 Use the **Players** tab to set each player’s CelesteNet name and choose an
 installed Skin Mod Helper Plus player skin. For a `.wsquashfs` game, start one
 multiplayer session and then reopen the configurator to display the choices.

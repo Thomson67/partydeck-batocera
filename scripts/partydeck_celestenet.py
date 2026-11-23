@@ -43,7 +43,7 @@ def matches(rom):
 
 
 def defaults():
-    return dict(language='keep', skip_setup=True, automatic=False, music_j1_only=False,
+    return dict(language='keep', skip_setup=True, automatic=True, music_j1_only=True,
                 names=[f'J{index}' for index in range(1, 5)], skins=[''] * 4)
 
 

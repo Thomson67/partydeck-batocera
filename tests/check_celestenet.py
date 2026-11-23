@@ -28,6 +28,13 @@ with tempfile.TemporaryDirectory() as name:
     saved = read_profile(root,rom)
     assert saved['adapter'] == celeste.ADAPTER
     assert saved['celestenet'] == celeste.defaults()
+    assert saved['celestenet']['automatic'] is True
+    assert saved['celestenet']['music_j1_only'] is True
+    saved['celestenet'].update(automatic=False, music_j1_only=False)
+    save_profile(root, rom, saved)
+    explicit = read_profile(root, rom)['celestenet']
+    assert explicit['automatic'] is False
+    assert explicit['music_j1_only'] is False
     assert [key for key, _, _ in fields(1, celeste.ADAPTER)] == [
         'celestenet.language', 'celestenet.skip_setup', 'celestenet.automatic', 'celestenet.music_j1_only']
     from partydeck_i18n import set_language
@@ -86,7 +93,7 @@ with tempfile.TemporaryDirectory() as name:
     core_path = settings.parent/'modsettings-Everest.celeste'
     core_path.write_bytes(b"DebugModeInEverest: true\nAutoUpdateModsOnStartup: true\nCurrentVersion: '0.0.0'\n")
     with patch.object(celeste.subprocess,'run') as run:
-        celeste.configure_client(game, prefix, player, dict(celeste.defaults(), language='french'), lan=True)
+        celeste.configure_client(game, prefix, player, dict(celeste.defaults(), language='french', automatic=False, music_j1_only=False), lan=True)
         run.assert_called_once_with(['mount','--bind',str(player/'celestenet-everest-launch.txt'),str(flags)],check=True)
     assert b'--loglevel verbose  --disable-splash' in (player/'celestenet-everest-launch.txt').read_bytes()
     assert b'<Language>french</Language>' in game_settings.read_bytes()
@@ -97,7 +104,7 @@ with tempfile.TemporaryDirectory() as name:
     assert b'AutoUpdateModsOnStartup: false' in core_path.read_bytes()
     core_path.write_bytes(core_path.read_bytes() + b"CurrentVersion: '1.6000.0'\n")
     with patch.object(celeste.subprocess,'run') as run:
-        celeste.configure_client(game,prefix,player,dict(celeste.defaults(), automatic=True),lan=True)
+        celeste.configure_client(game,prefix,player,dict(celeste.defaults(), music_j1_only=False),lan=True)
         run.assert_called_once_with(['mount','--bind',str(player/'celestenet-everest-launch.txt'),str(flags)],check=True)
     assert flags.read_bytes() == original_flags
     assert (player/'celestenet-everest-launch.txt').read_bytes().endswith(b'--debug\n')
@@ -158,7 +165,7 @@ with tempfile.TemporaryDirectory() as name:
     skin_settings = settings.parent/'modsettings-SkinModHelperPlus.celeste'
     skin_settings.write_text('Backpack: Default\nSelectedPlayerSkin: Original\n')
     env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
-               PARTYDECK_CELESTE_OPTIONS=json.dumps(dict(celeste.defaults(), language='english',
+               PARTYDECK_CELESTE_OPTIONS=json.dumps(dict(celeste.defaults(), language='english', automatic=False,
                                                          names=names, music_j1_only=True,
                                                          skins=['', 'Tea: Green', '', ''])),
                PARTYDECK_CELESTENET='1', PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='1080')
