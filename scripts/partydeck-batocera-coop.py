@@ -503,6 +503,32 @@ def mount_overlay(target, area, shared=None):
     subprocess.run(["mount", "--bind", str(view), str(target)], check=True)
 
 
+def mount_umu_home(home, area):
+    from partydeck_umu import installed_steam_runtimes, STEAM_RUNTIME_HOME
+    from partydeck_bottles import regular_directory, _safe_path
+    shared = installed_steam_runtimes(home)
+    if shared:
+        cache = area / 'runtime-cache'
+        source, upper, work = (regular_directory(cache / name)
+                               for name in ('source', 'upper', 'work'))
+        for path in (source, upper, work):
+            _safe_path(path)
+        # Pin the host runtime before the per-player overlay covers UMU home.
+        subprocess.run(['mount', '--bind', str(home / STEAM_RUNTIME_HOME), str(source)], check=True)
+        subprocess.run(['mount', '-o', 'remount,bind,ro', str(source)], check=True)
+    mount_overlay(home, area, shared=area / 'shared')
+    if shared:
+        destination = regular_directory(home / STEAM_RUNTIME_HOME)
+        lower = str(source)
+        fallback = area / 'shared' / STEAM_RUNTIME_HOME
+        if fallback.is_dir():
+            _safe_path(regular_directory(fallback))
+            lower = f'{fallback}:{lower}'
+        options = f'lowerdir={lower},upperdir={upper},workdir={work},redirect_dir=on'
+        subprocess.run(['mount', '-t', 'overlay', '-o', options, 'overlay', str(destination)], check=True)
+    return shared
+
+
 def run_wine(original, target, player, saves=None):
     # Gamescope's SDL backend can stay alive after its primary Wine child exits.
     # Report native completion independently of the compositor's lifetime/code.
@@ -532,9 +558,10 @@ def _run_wine(original, target, player, saves=None):
     hkmultiplayer_result=None
     if original.suffix.lower() != ".wsquashfs":
         mount_overlay(target, (location(player) if saves is not None else player) / "content")
+    shared_runtimes = ()
     if UMU_HOME.is_dir():
         area = player / "umu"
-        mount_overlay(UMU_HOME, area, shared=area / "shared")
+        shared_runtimes = mount_umu_home(UMU_HOME, area)
         for name in UMU_PRIVATE:
             private = player / "umu-private" / name
             private.mkdir(parents=True, exist_ok=True)
@@ -578,7 +605,7 @@ def _run_wine(original, target, player, saves=None):
             profile=read_profile(base,original)
             confirm=profile.get('adapter')=='nfsmw-lan' and profile['nfsmw']['controller_enter']
     try:
-        with runner_views(player) as views,Confirmation(confirm,player=player.name):
+        with runner_views(player, shared_runtimes=shared_runtimes) as views,Confirmation(confirm,player=player.name):
             if windows_views:
                 from partydeck_bottles import adapt_prefix_isolation
                 adapt_prefix_isolation(views,windows_views)
@@ -953,6 +980,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
     processes, states = [], []
     bottle_players=[]
+    from partydeck_umu import clean_shared_steam_runtimes, prepare_shared_steam_runtimes
+    shared_runtimes = ()
     virtual_watcher=None
     network=None
     celeste_processes=[]
@@ -961,6 +990,16 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     try:
+        shared_runtimes = prepare_shared_steam_runtimes(
+            UMU_HOME, base / ('runtime' if party else 'coop') / game_id)
+        if shared_runtimes:
+            from partydeck_storage import ensure_idle
+            ensure_idle(base)
+            for folder in (base / 'runtime', base / 'coop'):
+                for game in folder.glob('*'):
+                    if re.fullmatch('[0-9a-f]{16}', game.name):
+                        for index in range(1, 5):
+                            clean_shared_steam_runtimes(game / f'j{index}', shared_runtimes)
         if bl2_lan is not None:
             host,port,address=bl2_lan
             bl2_host=BL2Host(base/'runtime'/game_id/f'j{host}',port,session_token,address)
@@ -1093,11 +1132,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     ensure_idle(base)
                     for player,saves in bottle_players:
                         prepare(player,saves,original,target)
-                        compact_steam_runtime(player)
+                        if not shared_runtimes:
+                            compact_steam_runtime(player)
                     collect_objects()
                 except (OSError,RuntimeError,ValueError,subprocess.SubprocessError) as error:
                     print(tr('Optimisation des bottles différée : {p0}',p0=error),flush=True)
             for path in states:
+                if shared_runtimes:
+                    try:
+                        from partydeck_storage import ensure_idle
+                        ensure_idle(base)
+                        clean_shared_steam_runtimes(path.parent, shared_runtimes)
+                    except (OSError, RuntimeError) as error:
+                        print(f"UMU runtime cache: {error}", flush=True)
                 path.unlink(missing_ok=True)
                 path.with_suffix('.umu-ready').unlink(missing_ok=True)
                 path.with_suffix('.stop').unlink(missing_ok=True)

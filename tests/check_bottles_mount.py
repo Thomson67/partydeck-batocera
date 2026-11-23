@@ -149,3 +149,33 @@ with tempfile.TemporaryDirectory(dir=test_disk) as folder:
                 subprocess.run(['umount', str(target)], check=True)
         assert a.read_bytes() == c.read_bytes() == content
 print('Steam Runtime files have one shared inode and isolated OverlayFS writes.')
+
+with tempfile.TemporaryDirectory(dir=test_disk) as folder:
+    root = Path(folder)
+    host = root / 'umu-system'
+    runtime = host / umu.STEAM_RUNTIME_HOME / 'steamrt4'
+    for name in ('pressure-vessel', 'steamrt4_platform_test'):
+        (runtime / name).mkdir(parents=True)
+    for name in ('_v2-entry-point', 'VERSIONS.txt', 'mtree.txt.gz', 'library.so'):
+        (runtime / name).write_text('host')
+    assert umu.installed_steam_runtimes(host) == ('steamrt4',)
+    for index in (1, 2):
+        player = root / f'j{index}'
+        area = player / 'umu'
+        old = area / 'upper' / umu.STEAM_RUNTIME_HOME / 'steamrt4'
+        old.mkdir(parents=True)
+        (old / 'library.so').write_text('private legacy copy')
+        unrelated = area / 'upper' / 'home' / 'unrelated'
+        unrelated.write_text('keep')
+        umu.clean_shared_steam_runtimes(player, ('steamrt4',))
+        assert not old.exists()
+        assert coop.mount_umu_home(host, area) == ('steamrt4',)
+        assert (runtime / 'library.so').read_text() == 'host'
+        (runtime / 'library.so').write_text(f'player {index}')
+        for target in (host / umu.STEAM_RUNTIME_HOME, host, area / 'view', area / 'runtime-cache/source'):
+            subprocess.run(['umount', str(target)], check=True)
+        assert (runtime / 'library.so').read_text() == 'host'
+        umu.clean_shared_steam_runtimes(player, ('steamrt4',))
+        assert not (area / 'runtime-cache/upper/steamrt4').exists()
+        assert unrelated.read_text() == 'keep'
+print('Host Steam Runtime mounted and reused by both players; private caches reclaimed.')
