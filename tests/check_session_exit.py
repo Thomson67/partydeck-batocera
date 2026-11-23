@@ -130,12 +130,23 @@ state.write_text(json.dumps(dict(version=1, wine_exit=0)))
 time.sleep(60)
 """
     player = subprocess.Popen([sys.executable, '-c', code, str(state)], start_new_session=True)
+    compositor = subprocess.Popen(['/bin/true'], start_new_session=True)
+    compositor.wine_sandbox = player
     try:
-        coop.stop_players([player], timeout=.3, states=[state], sync_timeout=2)
+        assert compositor.wait(timeout=2) == 0
+        coop.stop_players([compositor], timeout=.3, states=[state], sync_timeout=2)
         assert coop.read_wine_exit(state) == 0
         assert player.returncode == -signal.SIGTERM
     finally:
         if player.poll() is None:
             coop.stop_players([player], timeout=0)
+
+    state = root / 'session-display.json'
+    command = [sys.executable, '-c',
+               'import os; assert os.environ["DISPLAY"] == ":21"; assert "XAUTHORITY" not in os.environ']
+    environment = dict(os.environ, DISPLAY=':0', XAUTHORITY='/outer-authority')
+    state.with_suffix('.display').write_text(json.dumps({'DISPLAY': ':21'}))
+    subprocess.run([sys.executable, coop.__file__, '_await-display', str(state), *command],
+                   env=environment, check=True, timeout=3)
 
 print('Fermeture : suivi Wine indépendant, fin globale Wayland, Xorg conservé, codes réels, groupes isolés et nettoyage vérifiés.')

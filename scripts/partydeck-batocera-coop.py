@@ -454,6 +454,38 @@ def enter_sandbox(outer_display, command):
     os.execv(command[0], command)
 
 
+NESTED_DISPLAY_ENV = ('DISPLAY', 'WAYLAND_DISPLAY', 'GAMESCOPE_WAYLAND_DISPLAY',
+                      'XAUTHORITY', 'XDG_RUNTIME_DIR')
+
+
+def publish_nested_display(state):
+    from partydeck_profiles import atomic_write
+    environment = {key: os.environ[key] for key in NESTED_DISPLAY_ENV if key in os.environ}
+    atomic_write(state.with_suffix('.display'), json.dumps(environment))
+    while (code := read_wine_exit(state)) is None:
+        time.sleep(.1)
+    return code
+
+
+def await_nested_display(state, command):
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        try:
+            environment = json.loads(state.with_suffix('.display').read_text())
+        except FileNotFoundError:
+            time.sleep(.1)
+            continue
+        for key in NESTED_DISPLAY_ENV:
+            if key in environment:
+                os.environ[key] = environment[key]
+            else:
+                os.environ.pop(key, None)
+        # This exec is supervised directly by PartyDeck. Bubblewrap still dies
+        # with its parent, but a lost Gamescope/Xwayland cannot kill Wine mid-sync.
+        os.execv(command[0], command)
+    return 1
+
+
 def mount_overlay(target, area):
     upper, work, view = (area / name for name in ("upper", "work", "view"))
     for path in (upper, work, view):
@@ -658,14 +690,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     sandbox=list(sandbox_arguments(player,devices,saves=saves))
     if network is not None:
         sandbox.extend(['--setenv','PARTYDECK_PRIVATE_LAN_IP',network.address(network_index)])
-    args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"', "sh",
-                 *(network.child_prefix(network_index) if network is not None else []),
-                 sys.executable, helper, "_sandbox", os.environ.get("DISPLAY", ""),
-                 *bubblewrap_command(app), *sandbox,
-                 "--", sys.executable, helper, "_wine",
-                 str(original), str(target), str(player)])
+    outer_display = os.environ.get("DISPLAY", "")
+    wine_command = [*(network.child_prefix(network_index) if network is not None else []),
+                    sys.executable, helper, "_sandbox", outer_display,
+                    *bubblewrap_command(app), *sandbox,
+                    "--", sys.executable, helper, "_wine", str(original), str(target), str(player)]
     if saves is not None:
-        args.append(str(saves))
+        wine_command.append(str(saves))
     # SDL writes this identifier to the outer X11 window's WM_CLASS. The
     # AppImage's launcher PID and the game's title can both differ.
     environment = {**os.environ, "SDL_VIDEODRIVER": "x11",
@@ -687,21 +718,38 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_EXIT_STATE',None)
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
-    # Gamescope, outer X11/Wayland, GPU and desktop services stay on the host.
-    # Only its Wine child enters the private network before Bubblewrap.
-    return subprocess.Popen([sys.executable,helper,"_gamescope",*args],env=environment,
-                            start_new_session=True,stdin=subprocess.DEVNULL)
+    supervise_wine = exit_state is not None and UMU_HOME.is_dir()
+    nested_command = ([sys.executable, helper, "_publish-display", str(exit_state)]
+                      if supervise_wine else wine_command)
+    args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"',
+                 "sh", *nested_command])
+    process = subprocess.Popen([sys.executable, helper, "_gamescope", *args], env=environment,
+                               start_new_session=True, stdin=subprocess.DEVNULL)
+    if supervise_wine:
+        sandbox_environment = environment.copy()
+        sandbox_environment.pop('LD_LIBRARY_PATH', None)
+        sandbox_environment.pop('LD_PRELOAD', None)
+        try:
+            process.wine_sandbox = subprocess.Popen(
+                [sys.executable, helper, "_await-display", str(exit_state), *wine_command],
+                env=sandbox_environment, start_new_session=True, stdin=subprocess.DEVNULL)
+        except BaseException:
+            stop_players([process])
+            exit_state.with_suffix('.display').unlink(missing_ok=True)
+            raise
+    return process
 
 
 def stop_players(processes, timeout=5, states=(), sync_timeout=30):
     # Every compositor has its own process group. Never use a global process
     # name or wineserver kill: solo games and unrelated sessions must survive.
-    active = [process for process in processes if process.poll() is None]
+    sandboxes = [vars(process).get('wine_sandbox') for process in processes]
     syncing = []
-    for process, state in zip(processes, states):
-        if process in active and state.with_suffix('.umu-ready').exists():
+    for process, sandbox, state in zip(processes, sandboxes, states):
+        owner = sandbox if sandbox is not None else process
+        if owner.poll() is None and state.with_suffix('.umu-ready').exists():
             state.with_suffix('.stop').touch()
-            syncing.append((process, state))
+            syncing.append((owner, state))
     deadline = time.monotonic() + sync_timeout
     while syncing and time.monotonic() < deadline:
         syncing = [(process, state) for process, state in syncing
@@ -709,14 +757,17 @@ def stop_players(processes, timeout=5, states=(), sync_timeout=30):
                    and state.with_suffix('.umu-ready').exists()]
         if syncing:
             time.sleep(.1)
-    active = [process for process in active if process.poll() is None]
+    if syncing:
+        print("UMU: prefix synchronization timed out.", flush=True)
+    owned = [*processes, *(sandbox for sandbox in sandboxes if sandbox is not None)]
+    active = [process for process in owned if process.poll() is None]
     for process in active:
         try:
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
     deadline = time.monotonic()+timeout
-    for process in processes:
+    for process in owned:
         try:
             process.wait(timeout=max(0,deadline-time.monotonic()))
         except subprocess.TimeoutExpired:
@@ -738,7 +789,7 @@ def stop_players(processes, timeout=5, states=(), sync_timeout=30):
             os.killpg(group, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    for process in processes:
+    for process in owned:
         process.wait()
 
 
@@ -768,6 +819,12 @@ def exit_code(status):
 def session_result(processes, states, wayland):
     statuses = [process.poll() for process in processes]
     wine = [read_wine_exit(path) for path in states]
+    for index, process in enumerate(processes):
+        sandbox = vars(process).get('wine_sandbox')
+        if wine[index] is None and sandbox is not None:
+            code = sandbox.poll()
+            if code is not None:
+                wine[index] = exit_code(code)
     finished = [i for i,status in enumerate(statuses) if status is not None or (wayland and wine[i] is not None)]
     failed = any((status is not None and status != 0) or
                  (native is not None and native != 0) for status,native in zip(statuses,wine))
@@ -1033,6 +1090,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 path.unlink(missing_ok=True)
                 path.with_suffix('.umu-ready').unlink(missing_ok=True)
                 path.with_suffix('.stop').unlink(missing_ok=True)
+                path.with_suffix('.display').unlink(missing_ok=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
 
@@ -1046,6 +1104,10 @@ def main():
         return 0
     if len(sys.argv) > 3 and sys.argv[1] == "_sandbox":
         enter_sandbox(sys.argv[2], sys.argv[3:])
+    if len(sys.argv) == 3 and sys.argv[1] == "_publish-display":
+        return publish_nested_display(Path(sys.argv[2]))
+    if len(sys.argv) > 3 and sys.argv[1] == "_await-display":
+        return await_nested_display(Path(sys.argv[2]), sys.argv[3:])
     if len(sys.argv) in {5, 6} and sys.argv[1] == "_wine":
         return run_wine(*(Path(path) for path in sys.argv[2:]))
 
