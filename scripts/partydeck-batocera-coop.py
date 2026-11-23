@@ -22,10 +22,10 @@ from urllib.parse import unquote_to_bytes
 
 from partydeck_storage import session as storage_session, settings as storage_settings
 from partydeck_i18n import tr
+from partydeck_migrate import PARTY_ROMS
 
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
-PARTY_ROMS = Path("/userdata/roms/windows-party")
 PARTY_SAVES = Path("/userdata/saves/windows-party")
 GAMEPADS = "ID_INPUT_JOYSTICK"
 KEYBOARDS = "ID_INPUT_KEYBOARD"

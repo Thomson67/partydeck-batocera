@@ -39,9 +39,11 @@ def fixture(directory):
     (layout.saves/'Game/j1/prefixes').symlink_to(layout.bottles/'players/game/j1/prefixes',target_is_directory=True)
     layout.legacy.symlink_to(layout.base,target_is_directory=True)
     script=put(layout.roms/'Game.sh','#!/bin/bash\n# Entrée gérée par PartyDeck Wine\n'+shlex.join(['exec',str(layout.base/'windows-party'),'profil','/original/Game.wine'])+'\n')
+    put(layout.legacy_roms/script.name,script.read_bytes())
     old=put(layout.ports/'Old test.sh','#!/bin/bash\n# Entrée gérée par partydeck-test\n'+shlex.join(['exec',str(layout.legacy/'partydeck-test'),'jouer','game.exe'])+'\n')
     put(layout.ports/'Personal.sh',b'#!/bin/bash\necho personal\n')
-    for folder, name, extras in ((layout.roms,script.name,False),(layout.ports,old.name,True)):
+    for folder, name, extras in ((layout.roms,script.name,False),(layout.legacy_roms,script.name,False),
+                                (layout.ports,old.name,True)):
         root=ET.Element('gameList');node=ET.SubElement(root,'game');ET.SubElement(node,'path').text='./'+name
         if extras:
             node=ET.SubElement(root,'game');ET.SubElement(node,'path').text='./Personal.sh'
@@ -64,7 +66,7 @@ with tempfile.TemporaryDirectory() as directory:
     result=u.execute(layout)
     snapshot=Path(result['snapshot'])
     assert not layout.base.exists() and not layout.legacy.is_symlink() and not layout.bottles.exists()
-    assert not layout.roms.exists() and result['leftovers'] is None
+    assert not layout.roms.exists() and not layout.legacy_roms.exists() and result['leftovers'] is None
     assert (layout.saves/'Game/j1/windows/slot.sav').read_bytes()==b'external save'
     assert (snapshot/'bottles/players/game/j1/prefixes/save.dat').read_bytes()==b'prefix save'
     assert (snapshot/'bottles/players/game/j1/prefixes-lower/lower.dll').read_bytes()==b'Windows lower'

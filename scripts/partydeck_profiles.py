@@ -18,9 +18,10 @@ import xml.etree.ElementTree as ET
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
+from partydeck_migrate import MEDIA_FIELDS, PARTY_ROMS
+
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
 MARKER = "# Entrée gérée par PartyDeck Wine"
-PARTY_ROMS = Path("/userdata/roms/windows-party")
 
 
 # Capability opt-in belongs to game profiles, never to the generic namespace
@@ -171,8 +172,6 @@ def remove_profile(base, rom, roms=None):
 
 
 # Metadata is shared by reference; local play history and user flags stay local.
-MEDIA_FIELDS = {'image','video','thumbnail','marquee','fanart','titleshot','manual',
-                'magazine','map','bezel','cartridge','boxart','boxback','wheel','mix'}
 SCRAPE_FIELDS = MEDIA_FIELDS | {'name','desc','rating','releasedate','developer',
     'publisher','genre','genres','family','players','lang','region','arcadesystemname'}
 

@@ -224,6 +224,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_couch.py ]] || die 'Module du configurateur manette absent du paquet.'
     [[ -f $source_dir/partydeck_display.py ]] || die 'Module écran/GPU absent / Display/GPU module missing.'
     [[ -f $source_dir/partydeck_bottles.py ]] || die 'Module bottles absent / Bottles module missing.'
+    [[ -f $source_dir/partydeck_migrate.py ]] || die 'Module de migration absent / Migration module missing.'
     [[ -f $source_dir/partydeck_uninstall.py ]] || die 'Module de désinstallation absent / Uninstall module missing.'
     [[ -f $source_dir/partydeck_autoconnect.py && -f $source_dir/partydeck_bl2_session.py ]] || die 'Module de connexion absent / Connection module missing.'
     [[ -f $source_dir/partydeck_storage.py ]] || die 'Module stockage absent du paquet.'

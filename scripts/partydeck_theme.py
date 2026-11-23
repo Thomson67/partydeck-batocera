@@ -4,6 +4,8 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+from partydeck_migrate import PARTY_ROMS
+
 MARKER = "Logo géré par Windows Party"
 VIEWS = ("system", "basic", "detailed", "grid", "video", "gamecarousel")
 
@@ -54,7 +56,7 @@ def logo_elements(source):
     return found
 
 
-def install_logo(base, roms=Path("/userdata/roms/windows-party"),
+def install_logo(base, roms=PARTY_ROMS,
                  settings=Path("/userdata/system/configs/emulationstation/es_settings.cfg"),
                  theme_roots=(Path("/userdata/themes"), Path("/usr/share/emulationstation/themes"))):
     from partydeck_profiles import atomic_write

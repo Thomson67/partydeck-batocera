@@ -13,6 +13,7 @@ import tempfile
 import uuid
 import xml.etree.ElementTree as ET
 from partydeck_i18n import tr
+from partydeck_migrate import LEGACY_PARTY_ROMS, PARTY_ROMS
 from partydeck_storage import ensure_idle, mounted_paths
 
 
@@ -29,7 +30,9 @@ class Layout:
     @property
     def bottles(self): return self.userdata / 'system/wine-bottles/windows-party'
     @property
-    def roms(self): return self.userdata / 'roms/windows-party'
+    def roms(self): return self.userdata / PARTY_ROMS.relative_to('/userdata')
+    @property
+    def legacy_roms(self): return self.userdata / LEGACY_PARTY_ROMS.relative_to('/userdata')
     @property
     def ports(self): return self.userdata / 'roms/ports'
     @property
@@ -69,7 +72,8 @@ def _xml_edit(path, removed_scripts, layout, systems=False):
     for node in list(root):
         if systems:
             owned = (node.tag == 'system' and node.findtext('name') in ('windows-party', 'partydeck-test')
-                     and node.findtext('path') in (str(layout.roms), str(layout.userdata / 'roms/partydeck-test')))
+                     and node.findtext('path') in (
+                         str(layout.roms), str(layout.legacy_roms), str(layout.userdata / 'roms/partydeck-test')))
         else:
             value = node.findtext('path') if node.tag == 'game' else None
             owned = value and Path(os.path.abspath(path.parent / value)) in removed_scripts
@@ -78,7 +82,8 @@ def _xml_edit(path, removed_scripts, layout, systems=False):
     if not changed: return None
     elements = [n for n in root if isinstance(n.tag, str)]
     # Never remove the user's shared system/Ports configuration file itself.
-    dedicated = path.parent == layout.roms or path.name in ('es_systems_windows-party.cfg', 'es_systems_partydeck-test.cfg')
+    dedicated = path.parent in (layout.roms, layout.legacy_roms) or path.name in (
+        'es_systems_windows-party.cfg', 'es_systems_partydeck-test.cfg')
     after = None if not elements and dedicated else ET.tostring(root, encoding='utf-8', xml_declaration=True)
     return dict(path=path, before=before, after=after)
 
@@ -86,22 +91,23 @@ def _xml_edit(path, removed_scripts, layout, systems=False):
 def plan(layout=Layout(), mounts=None):
     mounts = mounted_paths() if mounts is None else mounts
     roots = [p for p in (layout.base, layout.legacy) if p.exists() or p.is_symlink()]
-    for path in (layout.saves, layout.bottles, layout.roms, layout.ports, layout.config): _plain(path)
+    libraries = (layout.roms, layout.legacy_roms)
+    for path in (layout.saves, layout.bottles, *libraries, layout.ports, layout.config): _plain(path)
     for root in roots:
         if root.is_symlink():
             if root != layout.legacy or root.resolve() != layout.base.resolve():
                 raise RuntimeError(tr('Désinstallation refusée : chemin redirigé ({p0}).', p0=root))
         else: _plain(root)
-    for root in (*roots, layout.bottles, layout.roms):
+    for root in (*roots, layout.bottles, *libraries):
         if any(m == root or root in m.parents for m in mounts):
             raise RuntimeError(tr('Dossier encore monté ; désinstallation refusée : {p0}', p0=root))
 
     removed = []
-    for folder in (layout.roms, layout.ports):
+    for folder in (*libraries, layout.ports):
         if folder.is_dir():
             removed.extend(p for p in folder.glob('*.sh') if _owned_launcher(p, layout))
     edits = []
-    for folder in (layout.roms, layout.ports):
+    for folder in (*libraries, layout.ports):
         edit = _xml_edit(folder / 'gamelist.xml', set(removed), layout)
         if edit: edits.append(edit)
     for name in ('es_systems_windows-party.cfg', 'es_systems_partydeck-test.cfg', 'es_systems.cfg'):
@@ -117,15 +123,17 @@ def plan(layout=Layout(), mounts=None):
                 root.remove(node)
         after = ET.tostring(root, encoding='utf-8', xml_declaration=True)
         if len(ET.fromstring(before)) != len(root): edits.append(dict(path=settings, before=before, after=after))
-    theme = layout.roms / 'theme.xml'
-    if theme.is_file() and not theme.is_symlink() and 'Logo géré par Windows Party' in theme.read_text(): removed.append(theme)
-    # Metadata backups and locks are generated, not the Windows source media.
-    for name in ('gamelist.xml.partydeck-before', '.partydeck-metadata.lock'):
-        path = layout.roms / name
-        if path.is_file() and not path.is_symlink(): removed.append(path)
-    for name in ('media', 'images', 'videos', 'manuals'):
-        path = layout.roms / name
-        if path.exists() or path.is_symlink(): removed.append(path)
+    for folder in libraries:
+        theme = folder / 'theme.xml'
+        if theme.is_file() and not theme.is_symlink() and 'Logo géré par Windows Party' in theme.read_text():
+            removed.append(theme)
+        # Metadata backups and locks are generated, not the Windows source media.
+        for name in ('gamelist.xml.partydeck-before', '.partydeck-metadata.lock'):
+            path = folder / name
+            if path.is_file() and not path.is_symlink(): removed.append(path)
+        for name in ('media', 'images', 'videos', 'manuals'):
+            path = folder / name
+            if path.exists() or path.is_symlink(): removed.append(path)
 
     preserve = []
     for root in roots:
@@ -205,9 +213,11 @@ def execute(layout=Layout()):
         # Shared Windows seeds/objects are technical data. Private upper/lower
         # files were moved first; hardlinks in the preserved lowers remain valid.
         if layout.bottles.exists(): shutil.rmtree(layout.bottles)
-        if layout.roms.is_dir() and not any(layout.roms.iterdir()): layout.roms.rmdir()
+        for folder in (layout.roms, layout.legacy_roms):
+            if folder.is_dir() and not any(folder.iterdir()): folder.rmdir()
         receipt['complete'] = True; checkpoint()
-        return dict(snapshot=str(snapshot), leftovers=str(layout.roms) if layout.roms.exists() else None)
+        leftovers = next((str(folder) for folder in (layout.roms, layout.legacy_roms) if folder.exists()), None)
+        return dict(snapshot=str(snapshot), leftovers=leftovers)
 
 
 def restore_preserved(layout=Layout()):

@@ -1,11 +1,74 @@
-"""Conservative migration from the legacy test installation to Windows Party.
-
-Rename, never copy ROMs or delete saves. Compatibility links keep absolute paths
-inside existing Wine prefixes valid. Only generated launchers are rewritten.
-"""
+"""Migrate legacy Windows Party state and its EmulationStation catalogue."""
 from pathlib import Path
 import fcntl,json,os,re,shlex,sys,time
+import shutil
+import tempfile
+import xml.etree.ElementTree as ET
 from partydeck_i18n import tr
+
+
+LIBRARY_NAME = 'windows-party-library'
+PARTY_ROMS = Path('/userdata/system') / LIBRARY_NAME
+LEGACY_PARTY_ROMS = Path('/userdata/roms/windows-party')
+MEDIA_FIELDS = {'image', 'video', 'thumbnail', 'marquee', 'fanart', 'titleshot', 'manual',
+                'magazine', 'map', 'bezel', 'cartridge', 'boxart', 'boxback', 'wheel', 'mix'}
+
+
+def relocate_reference(value, parent, source, target):
+    if '://' in value:
+        return value
+    path = Path(value)
+    if path.is_absolute():
+        normalized = Path(os.path.normpath(path))
+        if normalized.is_relative_to(source):
+            return str(target / normalized.relative_to(source))
+    elif '..' in path.parts:
+        normalized = Path(os.path.normpath(parent / path))
+        if not normalized.is_relative_to(source):
+            return str(normalized)
+    return value
+
+
+def migrate_library(source, target):
+    """Publish a complete library at the new ES path, retaining the original."""
+    for folder in (source, target):
+        if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+            raise ValueError(tr('Migration refusée : destination inattendue ({p0}).', p0=folder))
+    if target.exists() or not source.exists():
+        return
+
+    with tempfile.TemporaryDirectory(prefix='.windows-party-library-', dir=target.parent) as temporary:
+        staged = Path(temporary) / target.name
+        shutil.copytree(source, staged, symlinks=True)
+        for link in staged.rglob('*'):
+            if link.is_symlink():
+                value = os.readlink(link)
+                replacement = relocate_reference(value, source / link.parent.relative_to(staged), source, target)
+                if replacement != value:
+                    link.unlink()
+                    link.symlink_to(replacement)
+        for name in ('gamelist.xml', 'gamelist.xml.partydeck-before'):
+            path = staged / name
+            if path.is_symlink():
+                raise ValueError(tr('Migration refusée : destination inattendue ({p0}).', p0=source / name))
+            if not path.is_file():
+                continue
+            parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+            tree = ET.parse(path, parser=parser)
+            changed = False
+            for entry in tree.getroot():
+                if entry.tag not in ('game', 'folder'):
+                    continue
+                for field in entry:
+                    if field.text and (field.tag == 'path' or field.tag in MEDIA_FIELDS):
+                        value = field.text.strip()
+                        replacement = relocate_reference(value, source, source, target)
+                        if replacement != value:
+                            field.text = replacement
+                            changed = True
+            if changed:
+                tree.write(path, encoding='utf-8', xml_declaration=True)
+        staged.rename(target)
 
 
 def lock_installation(base,inherited_fd=None):
@@ -62,6 +125,8 @@ def finalize(base,legacy,roms,ports):
         archive=base/'archive'/'legacy'
         if not archive.resolve().is_relative_to(base.resolve()):
             raise ValueError(tr('Migration refusée : destination inattendue ({p0}).',p0=archive))
+        library = base.parent / LIBRARY_NAME
+        migrate_library(roms, library)
         def aside(source):
             if not source.exists() or source.is_symlink():return
             archive.mkdir(parents=True,exist_ok=True)
@@ -87,7 +152,7 @@ def finalize(base,legacy,roms,ports):
             path.symlink_to('windows-party')
         # Rewrite only a fully recognised generated shell command. User-authored
         # scripts and custom additions remain byte-for-byte intact.
-        for folder in (roms,ports):
+        for folder in (library,ports):
             if not folder.is_dir():continue
             for entry in folder.glob('*.sh'):
                 if entry.is_symlink():continue
@@ -133,5 +198,5 @@ if __name__=='__main__':
         if sys.argv[1]=='prepare':migrate_root(Path(sys.argv[2]),Path(sys.argv[3]))
         elif sys.argv[1]=='finalize':finalize(*sys.argv[2:6])
         else:raise ValueError('prepare|finalize')
-    except (OSError,ValueError,RuntimeError) as error:
+    except (OSError,ValueError,RuntimeError,ET.ParseError) as error:
         print(str(error),file=sys.stderr);raise SystemExit(1)

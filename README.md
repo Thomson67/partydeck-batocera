@@ -194,9 +194,13 @@ python3 /userdata/system/windows-party/partydeck_private_lan.py verifier 2
 | `logs/` | Journaux |
 | `releases/`, `assets/` | Binaires et ressources graphiques |
 | `archive/legacy/` | Anciens essais conservés lors de la migration |
-| `/userdata/roms/windows-party/` | Lanceurs et métadonnées ES |
+| `/userdata/system/windows-party-library/` | Lanceurs et métadonnées ES |
 | `/userdata/saves/windows-party/` | Sauvegardes externalisées par joueur et liens des anciennes installations |
 | `/userdata/system/wine-bottles/windows-party/` | Bottles techniques privées, bases Windows et objets communs |
+
+Lors de la mise à jour, le catalogue précédemment stocké dans
+`/userdata/roms/windows-party/` est repris dans le nouvel emplacement.
+L’ancien dossier est conservé pour permettre un retour à la version précédente.
 
 **Test de mutualisation Windows :** [fonctionnement, migration et validation](docs/SHARED_BOTTLES.fr.md). Les données utilisateur encore internes aux préfixes sont conservées individuellement. Le bilan Stockage distingue maintenant les bottles des sauvegardes.
 
