@@ -97,14 +97,38 @@ def migrate(player, saves):
     return area
 
 
-def _attributes(path):
+OVERLAY_PREFIXES = ('trusted.overlay.', 'user.overlay.')
+OVERLAY_ORIGINS = tuple(prefix + 'origin' for prefix in OVERLAY_PREFIXES)
+
+
+def _attributes(path, *, ignore_origin=False, rejected=None):
     attrs = {key: os.getxattr(path, key, follow_symlinks=False)
              for key in os.listxattr(path, follow_symlinks=False)}
-    # Overlay implementation metadata must never become lower-file metadata.
-    # Leave such entries alone instead of guessing how to strip them.
-    if any(key.startswith(('trusted.overlay.', 'user.overlay.')) for key in attrs):
+    if ignore_origin:
+        for key in OVERLAY_ORIGINS:
+            attrs.pop(key, None)
+    overlay = {key for key in attrs if key.startswith(OVERLAY_PREFIXES)}
+    if overlay:
+        if rejected is not None:
+            rejected.update(overlay)
         return None
     return attrs
+
+
+def inherits_lower(root):
+    """Check that moving a file to the lower layer leaves it visible."""
+    @lru_cache(maxsize=None)
+    def inherits(directory):
+        attrs = os.listxattr(directory, follow_symlinks=False)
+        for prefix in OVERLAY_PREFIXES:
+            if prefix + 'redirect' in attrs:
+                return False
+            # 'x' speeds up whiteout lookup without hiding the lower directory.
+            if prefix + 'opaque' in attrs and os.getxattr(directory, prefix + 'opaque',
+                                                         follow_symlinks=False) != b'x':
+                return False
+        return directory == root or inherits(directory.parent)
+    return inherits
 
 
 def _key(path, info, attrs):
@@ -118,7 +142,8 @@ def _key(path, info, attrs):
     return key.hexdigest()
 
 
-def compact_tree(upper, lower, objects, *, eligible=None, retained=None):
+def compact_tree(upper, lower, objects, *, eligible=None, retained=None,
+                 copy_up_origin=False, rejected_attributes=None):
     """Publish a lower hardlink BEFORE unlinking its identical private upper.
 
     Objects are never writable through a bottle: only OverlayFS can expose
@@ -137,6 +162,7 @@ def compact_tree(upper, lower, objects, *, eligible=None, retained=None):
         raise RuntimeError(tr('Bottle encore montée : {p0}', p0=upper))
     result = dict(shared=0, files=0)
     measured = set()
+    inherits = inherits_lower(upper) if copy_up_origin else None
 
     def account(reason, info):
         inode = (info.st_dev, info.st_ino)
@@ -157,7 +183,12 @@ def compact_tree(upper, lower, objects, *, eligible=None, retained=None):
         if info.st_size > 512*1024**2:
             account('large', info)
             continue
-        attrs = _attributes(path)
+        if inherits is not None and not inherits(path.parent):
+            account('filtered', info)
+            continue
+        # A regular copy-up with origin alone has complete local data. Other
+        # OverlayFS metadata may encode hidden data or link/redirect semantics.
+        attrs = _attributes(path, ignore_origin=copy_up_origin, rejected=rejected_attributes)
         if attrs is None:
             account('overlay', info)
             continue
@@ -170,9 +201,13 @@ def compact_tree(upper, lower, objects, *, eligible=None, retained=None):
             tmp = Path(name)
             try:
                 subprocess.run(['cp', '--preserve=all', '--reflink=auto', '--sparse=always', '--', str(path), str(tmp)], check=True)
+                if copy_up_origin:
+                    for key in set(os.listxattr(tmp, follow_symlinks=False)).intersection(OVERLAY_ORIGINS):
+                        os.removexattr(tmp, key, follow_symlinks=False)
                 os.chown(tmp, info.st_uid, info.st_gid)
                 # Publish only complete, verified bytes and metadata.
-                if _key(tmp, tmp.stat(), _attributes(tmp)) != digest:
+                copied_attrs = _attributes(tmp)
+                if copied_attrs is None or _key(tmp, tmp.stat(), copied_attrs) != digest:
                     raise RuntimeError(tr('Vérification de bottle échouée : {p0}', p0=path))
                 with tmp.open('rb') as stream:
                     os.fsync(stream.fileno())
@@ -334,10 +369,13 @@ def prepare_windows(player, original, target):
             atomic_json(state,data)
         for name in ('lower', 'work', 'view'):
             regular_directory(slot/name)
-        retained = {}
-        result = compact_tree(slot/'upper', slot/'lower', ROOT/'objects', retained=retained)
+        retained, rejected = {}, set()
+        result = compact_tree(slot/'upper', slot/'lower', ROOT/'objects', retained=retained,
+                              copy_up_origin=True, rejected_attributes=rejected)
         if retained or result['shared']:
             sizes = ' '.join(f'{key}={size}' for key, size in sorted(retained.items()) if size)
+            if rejected:
+                sizes += ' overlay_attributes=' + ','.join(sorted(rejected))
             print(f"Windows Party {player.name.upper()}: Windows layer {relative} "
                   f"shared={result['shared']} {sizes}".rstrip(), flush=True)
 
@@ -446,17 +484,7 @@ def prune_inherited_dependencies(area, target):
     if upper.resolve() != upper or any(m == upper or upper in m.parents for m in mounts):
         return 0
 
-    @lru_cache(maxsize=None)
-    def inherits(directory):
-        attrs = os.listxattr(directory, follow_symlinks=False)
-        for prefix in ('trusted.overlay.', 'user.overlay.'):
-            if prefix + 'redirect' in attrs:
-                return False
-            # 'x' speeds up whiteout lookup without masking the lower directory.
-            if prefix + 'opaque' in attrs and os.getxattr(directory, prefix + 'opaque',
-                                                         follow_symlinks=False) != b'x':
-                return False
-        return directory == upper or inherits(directory.parent)
+    inherits = inherits_lower(upper)
 
     def metadata(info):
         return info.st_mode, info.st_uid, info.st_gid, info.st_size, info.st_mtime_ns

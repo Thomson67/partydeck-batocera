@@ -212,3 +212,40 @@ with tempfile.TemporaryDirectory(dir=test_disk) as folder:
     for target in (original, area/'content/view'):
         subprocess.run(['umount', str(target)], check=True)
 print('Inherited .NET and installer cache copies reclaimed; changed and opaque files survive.')
+
+with tempfile.TemporaryDirectory(dir=test_disk) as folder:
+    root = Path(folder)
+    with patch.object(b, 'ROOT', root/'bottles'):
+        rom, players = fixture(root)
+        manifests = []
+        for index, (player, saves) in enumerate(players, 1):
+            windows = saves/'prefixes/Runner/Game.wine/drive_c/windows'
+            dll = windows/'system32/shared.dll'
+            os.setxattr(dll, 'user.overlay.origin', f'origin-{index}'.encode())
+            os.setxattr(dll, 'user.partydeck-test', b'preserved')
+            os.utime(dll, ns=(1_000_000_000, 1_000_000_000))
+            special = windows/'copy-up-only'
+            special.write_text('keep in upper')
+            os.setxattr(special, 'user.overlay.metacopy', b'y')
+            opaque = windows/'opaque'
+            opaque.mkdir()
+            (opaque/'visible').write_text('private file')
+            os.setxattr(opaque, 'user.overlay.opaque', b'y')
+            b.prepare(player, saves, rom, rom)
+            slot, = (b.location(player)/'windows').iterdir()
+            assert not (slot/'upper/system32/shared.dll').exists()
+            assert (slot/'upper/copy-up-only').is_file()
+            assert (slot/'upper/opaque/visible').is_file()
+            lower = slot/'lower/system32/shared.dll'
+            assert os.listxattr(lower) == ['user.partydeck-test']
+            assert os.getxattr(lower, 'user.partydeck-test') == b'preserved'
+            manifests.append(lower)
+            view, = b.mount_windows(player)
+            assert (view/'system32/shared.dll').read_bytes() == (rom/'drive_c/windows/system32/shared.dll').read_bytes()
+            assert (view/'opaque/visible').read_text() == 'private file'
+            if index == 1:
+                (view/'system32/shared.dll').write_text('player one')
+            for target in (view, slot/'lower', rom/'drive_c/windows'):
+                subprocess.run(['umount', str(target)], check=True)
+        assert manifests[0].samefile(manifests[1])
+print('Regular Windows copy-ups share identical data even with different overlay origins.')
