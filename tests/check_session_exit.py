@@ -117,5 +117,25 @@ with tempfile.TemporaryDirectory() as folder,contextlib.redirect_stdout(io.Strin
     with patch.object(coop.os,'killpg') as kill:
         coop.stop_players([Mock(pid=999999,**{'poll.return_value':0,'wait.return_value':0})])
         kill.assert_not_called()  # Do not signal a PID that was reaped long ago.
+    state = root / 'session-umu.json'
+    state.with_suffix('.umu-ready').touch()
+    code = """
+import json, sys, time
+from pathlib import Path
+state = Path(sys.argv[1])
+while not state.with_suffix('.stop').exists():
+    time.sleep(.02)
+time.sleep(.15)
+state.write_text(json.dumps(dict(version=1, wine_exit=0)))
+time.sleep(60)
+"""
+    player = subprocess.Popen([sys.executable, '-c', code, str(state)], start_new_session=True)
+    try:
+        coop.stop_players([player], timeout=.3, states=[state], sync_timeout=2)
+        assert coop.read_wine_exit(state) == 0
+        assert player.returncode == -signal.SIGTERM
+    finally:
+        if player.poll() is None:
+            coop.stop_players([player], timeout=0)
 
 print('Fermeture : suivi Wine indépendant, fin globale Wayland, Xorg conservé, codes réels, groupes isolés et nettoyage vérifiés.')

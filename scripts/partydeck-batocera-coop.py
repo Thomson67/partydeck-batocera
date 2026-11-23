@@ -543,8 +543,7 @@ def _run_wine(original, target, player, saves=None):
                 adapt_prefix_isolation(views,windows_views)
             exports=[*views,*windows_views]
             environment={'env':pressure_vessel_environment(exports)} if exports else {}
-            status = subprocess.run(["batocera-wine", "windows", "play", str(original)],
-                                    **environment).returncode
+            status = run_native_wine(original, environment, watch_umu=bool(views))
             if goldberg_result is not None:
                 status=finish_l4d2(goldberg_result,status)
             if nfsmw_result is not None:
@@ -564,6 +563,55 @@ def _run_wine(original, target, player, saves=None):
             hkmultiplayer_result.unlink(missing_ok=True)
     print(f"{player.name.upper()} batocera-wine : code {status}", flush=True)
     return 128 - status if status < 0 else status
+
+
+def run_native_wine(original, options, watch_umu=False):
+    command = ["batocera-wine", "windows", "play", str(original)]
+    state_path = os.environ.get('PARTYDECK_EXIT_STATE')
+    if not watch_umu or not state_path:
+        return subprocess.run(command, **options).returncode
+
+    state = Path(state_path)
+    ready, request = state.with_suffix('.umu-ready'), state.with_suffix('.stop')
+    with subprocess.Popen(command, **options) as wine:
+        try:
+            stop_command = None
+            while True:
+                try:
+                    return wine.wait(timeout=.25)
+                except subprocess.TimeoutExpired:
+                    pass
+                if stop_command is None:
+                    stop_command = umu_stop_command()
+                    if stop_command is not None:
+                        ready.touch()
+                if stop_command is not None and request.exists():
+                    try:
+                        subprocess.run(stop_command, check=True, timeout=12)
+                    except (OSError, subprocess.SubprocessError) as error:
+                        ready.unlink(missing_ok=True)
+                        print(f"UMU stop: {error}", flush=True)
+                    return wine.wait()
+        finally:
+            ready.unlink(missing_ok=True)
+
+
+def umu_stop_command():
+    # These state files and PIDs are visible only within the player's sandbox.
+    # The runner validates the owner token before asking its wineserver to stop.
+    for state in UMU_SESSION_STATE.glob('session-*.state'):
+        try:
+            fields = state.read_text().splitlines()
+        except (OSError, UnicodeError):
+            continue
+        if len(fields) < 7 or not fields[5].isdecimal() or not fields[6]:
+            continue
+        runner = Path(fields[4])
+        helper = runner / 'umu-batocera/runtime-prefix.py'
+        if runner.is_absolute() and helper.is_file():
+            return [sys.executable, str(helper), 'stop-hotkey', '--state-file', str(state),
+                    '--pid', fields[5], '--owner-token', fields[6]]
+    return None
 
 
 def run_compositor(command):
@@ -645,10 +693,23 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                             start_new_session=True,stdin=subprocess.DEVNULL)
 
 
-def stop_players(processes, timeout=5):
+def stop_players(processes, timeout=5, states=(), sync_timeout=30):
     # Every compositor has its own process group. Never use a global process
     # name or wineserver kill: solo games and unrelated sessions must survive.
     active = [process for process in processes if process.poll() is None]
+    syncing = []
+    for process, state in zip(processes, states):
+        if process in active and state.with_suffix('.umu-ready').exists():
+            state.with_suffix('.stop').touch()
+            syncing.append((process, state))
+    deadline = time.monotonic() + sync_timeout
+    while syncing and time.monotonic() < deadline:
+        syncing = [(process, state) for process, state in syncing
+                   if process.poll() is None and read_wine_exit(state) is None
+                   and state.with_suffix('.umu-ready').exists()]
+        if syncing:
+            time.sleep(.1)
+    active = [process for process in active if process.poll() is None]
     for process in active:
         try:
             os.killpg(process.pid, signal.SIGTERM)
@@ -945,7 +1006,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             try:
                 if virtual_watcher is not None:virtual_watcher.close()
             finally:
-                try:stop_players(processes)
+                try:stop_players(processes,states=states)
                 finally:
                     try:
                         if celeste_processes:
@@ -970,6 +1031,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     print(tr('Optimisation des bottles différée : {p0}',p0=error),flush=True)
             for path in states:
                 path.unlink(missing_ok=True)
+                path.with_suffix('.umu-ready').unlink(missing_ok=True)
+                path.with_suffix('.stop').unlink(missing_ok=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
 
