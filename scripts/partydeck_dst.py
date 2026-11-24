@@ -47,39 +47,28 @@ def insert(data, anchor, addition):
     return data.replace(anchor, anchor + addition, 1)
 
 
-def patch_title(data, size=None, mute_music=False):
-    display = b''
-    if size:
-        width, height = size
-        display += f'''
-    if not self.partydeck_display then
-        self.partydeck_display = true
-        pcall(function()
-            local graphics = TheFrontEnd:GetGraphicsOptions()
-            for mode = 0, graphics:GetNumDisplayModes(0) - 1 do
-                local w, h = graphics:GetDisplayMode(0, mode)
-                if w == {width} and h == {height} then
-                    graphics:SetDisplayMode(0, mode, true)
-                    return
-                end
-            end
-        end)
-    end
-'''.encode('ascii')
+def patch_title(data, mute_music=False):
+    audio = b''
     if mute_music:
-        display += b'''
+        audio = b'''
     if not self.partydeck_music_muted then
         self.partydeck_music_muted = true
         TheMixer:SetLevel("set_music", 0)
     end
 '''
-    data = insert(data, b'function MainScreen:OnUpdate(dt)', display + b'''
+    data = insert(data, b'function MainScreen:OnUpdate(dt)', audio + b'''
     if not self.partydeck_started and TheFrontEnd:GetActiveScreen() == self then
         self.partydeck_delay = (self.partydeck_delay or 0) + dt
         if self.partydeck_delay >= 2 then
             self.partydeck_started = true
-            self:OnLoginButton(true)
-            return
+            self.inst:DoTaskInTime(0, function()
+                if TheFrontEnd:GetActiveScreen() == self then
+                    print("[PartyDeck] Starting offline menu")
+                    self:OnLoginButton(true)
+                else
+                    self.partydeck_started = nil
+                end
+            end)
         end
     end
 ''')
@@ -162,8 +151,8 @@ end
     return insert(data, b'LOC = require("languages/loc")', code)
 
 
-def patch_bundle(source, destination, host=None, *, size=None, language='keep', mute_music=False):
-    changes = {TITLE: lambda data: patch_title(data, size, mute_music)}
+def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False):
+    changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
     if host:
@@ -206,9 +195,7 @@ def prepare(player, directory, prefix, settings):
     os.close(fd)
     temp = Path(tmp)
     try:
-        size = tuple(int(os.environ.get(f'PARTYDECK_PLAYER_{axis}', '0')) for axis in ('WIDTH', 'HEIGHT'))
         patch_bundle(bundle, temp, None if player.name == 'j1' else '192.168.247.11',
-                     size=size if all(0 < value <= 16384 for value in size) else None,
                      language=settings['language'],
                      mute_music=settings['music_j1_only'] and player.name != 'j1')
         temp.replace(source)
