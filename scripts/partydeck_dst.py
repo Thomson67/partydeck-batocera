@@ -1,5 +1,6 @@
 """Private LAN startup for Don't Starve Together."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -184,6 +185,61 @@ def overlay(bundle, source):
     subprocess.run(['mount', '--bind', str(source), str(bundle)], check=True)
 
 
+def configure_goldberg(player, root):
+    from partydeck_borderlands2 import decode, patch_ini, write_bytes
+    from partydeck_l4d2 import ACCOUNT_MAX, STEAM64_BASE, player_id, valid_id, value
+    from partydeck_profiles import atomic_write
+
+    folders = [root, *(path.parent for path in root.glob('bin*/dontstarve_steam*.exe'))]
+    targets = []
+    seed = None
+    for folder in dict.fromkeys(folders):
+        settings = folder/'steam_settings'
+        if not settings.is_dir() or settings.resolve() != settings:
+            continue
+        ini, legacy = settings/'configs.user.ini', settings/'force_steamid.txt'
+        appid = settings/'steam_appid.txt'
+        if any(path.is_symlink() for path in (ini, legacy, appid)):
+            continue
+        if appid.is_file() and appid.read_text(encoding='utf-8-sig').strip() != '322330':
+            continue
+        if not (ini.is_file() or legacy.is_file() or appid.is_file()
+                or (settings/'configs.main.ini').is_file() or (settings/'force_account_name.txt').is_file()):
+            continue
+        data, encoding = decode(ini.read_bytes() if ini.is_file() else b'')
+        configured = value(data, 'user::general', 'account_steamid')
+        if not valid_id(configured) and legacy.is_file():
+            configured = legacy.read_text(encoding='utf-8-sig').strip()
+        if seed is None and valid_id(configured):
+            seed = configured
+        targets.append((ini, legacy, data, encoding))
+    if not targets:
+        print('PartyDeck DST: no local Goldberg settings detected.', flush=True)
+        return
+    index = int(player.name.removeprefix('j')) - 1
+    identity = player/'dst-goldberg-steamid'
+    if identity.is_symlink():
+        raise ValueError('redirected Goldberg identity')
+    if identity.is_file():
+        steamid = identity.read_text().strip()
+        if not valid_id(steamid):
+            raise ValueError('invalid saved Goldberg Steam ID')
+    else:
+        if seed is None:
+            digest = hashlib.sha256(os.fsencode(player.parent)).digest()
+            seed = str(STEAM64_BASE + int.from_bytes(digest[:8], 'big') % ACCOUNT_MAX + 1)
+        steamid = player_id(seed, index)
+        atomic_write(identity, steamid + '\n')
+    for ini, legacy, before, encoding in targets:
+        after = patch_ini(before, {'user::general': {'account_steamid': steamid}}).encode(encoding)
+        if not ini.is_file() or ini.read_bytes() != after:
+            # Atomic replacement within the player's writable game overlay.
+            write_bytes(ini, after)
+        if not legacy.is_file() or legacy.read_text(encoding='utf-8-sig').strip() != steamid:
+            atomic_write(legacy, steamid + '\n')
+    print(f'PartyDeck DST {player.name.upper()}: Goldberg Steam ID {steamid}.', flush=True)
+
+
 def prepare(player, directory, prefix, settings):
     source = player/'dst-scripts.zip'
     source.unlink(missing_ok=True)
@@ -191,6 +247,10 @@ def prepare(player, directory, prefix, settings):
     if bundle is None:
         print('PartyDeck DST: private script bundle not found; manual LAN available.', flush=True)
         return
+    try:
+        configure_goldberg(player, bundle.parents[2])
+    except (OSError, ValueError) as error:
+        print(f'PartyDeck DST {player.name.upper()}: Goldberg identity unavailable: {error}', flush=True)
     fd, tmp = tempfile.mkstemp(dir=player, prefix='.dst-')
     os.close(fd)
     temp = Path(tmp)

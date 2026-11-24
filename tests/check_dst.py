@@ -64,4 +64,22 @@ with tempfile.TemporaryDirectory() as folder:
         pass
     else:
         raise AssertionError('unknown title layout accepted')
+    original_id = '76561197960265768'
+    assigned = []
+    for index in (1, 2):
+        player = root/f'j{index}'
+        cfg = player/'game/bin64/steam_settings'
+        cfg.mkdir(parents=True)
+        (cfg.parent/'dontstarve_steam_x64.exe').touch()
+        (cfg/'steam_appid.txt').write_text('322330\n')
+        (cfg/'force_steamid.txt').write_text(original_id + '\n')
+        (cfg/'configs.user.ini').write_text('[user::general]\naccount_name=Test\n')
+        dst.configure_goldberg(player, player/'game')
+        steamid = (cfg/'force_steamid.txt').read_text().strip()
+        assert f'account_steamid={steamid}' in (cfg/'configs.user.ini').read_text().replace(' ', '')
+        assert 'account_name=Test' in (cfg/'configs.user.ini').read_text()
+        dst.configure_goldberg(player, player/'game')
+        assert (cfg/'force_steamid.txt').read_text().strip() == steamid
+        assigned.append(steamid)
+    assert assigned == [original_id, str(int(original_id) + 1)]
 print('DST: catalog detection, isolated host/client bundles and unknown-layout fallback verified.')
