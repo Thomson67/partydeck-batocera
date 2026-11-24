@@ -92,6 +92,8 @@ with tempfile.TemporaryDirectory() as folder:
         resume = output.read(dst.MENU)
         assert b'ShardSaveGameIndex:GetSlotLastTimePlayed(candidate)' in resume
         assert b'previous == token' in resume
+        assert b'local slots_screen = ServerSlotScreen(previous_screen)' in resume
+        assert b'ServerCreationScreen(slots_screen, slot)' in resume
         assert b'screen:CanResume()' in resume
         assert b'screen:Create(true)' in resume
     with zipfile.ZipFile(guest) as output:

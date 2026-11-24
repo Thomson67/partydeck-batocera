@@ -184,17 +184,23 @@ def resume_code(token):
 
             local ServerCreationScreen = require("screens/redux/servercreationscreen")
             self:_GoToOnlineScreen(function(previous_screen)
-                local screen = ServerCreationScreen(previous_screen, slot)
-                screen.inst:DoTaskInTime(SCREEN_FADE_TIME + 0.25, function()
-                    if TheFrontEnd:GetActiveScreen() ~= screen or not screen:CanResume() then return end
-                    if screen.server_settings_tab:GetOnlineMode() then
-                        print("[PartyDeck] Last world is online; waiting for host settings")
-                        return
-                    end
-                    print("[PartyDeck] Resuming last offline world", slot)
-                    screen:Create(true)
+                local slots_screen = ServerSlotScreen(previous_screen)
+                slots_screen.inst:DoTaskInTime(SCREEN_FADE_TIME + 0.25, function()
+                    if TheFrontEnd:GetActiveScreen() ~= slots_screen or ShardSaveGameIndex:IsSlotEmpty(slot) then return end
+                    -- The settings screen reads the selected world's details from its parent list.
+                    local screen = ServerCreationScreen(slots_screen, slot)
+                    TheFrontEnd:PushScreen(screen)
+                    screen.inst:DoTaskInTime(0, function()
+                        if TheFrontEnd:GetActiveScreen() ~= screen or not screen:CanResume() then return end
+                        if screen.server_settings_tab:GetOnlineMode() then
+                            print("[PartyDeck] Last world is online; waiting for host settings")
+                            return
+                        end
+                        print("[PartyDeck] Resuming last offline world", slot)
+                        screen:Create(true)
+                    end)
                 end)
-                return screen
+                return slots_screen
             end, {})
         end)
     end)
