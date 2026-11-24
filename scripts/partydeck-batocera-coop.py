@@ -588,6 +588,8 @@ def _run_wine(original, target, player, saves=None):
         hkmp_result=install_hkmp(Path(__file__).resolve().parent,original,player)
         from partydeck_hkmultiplayer import install_hook as install_multi, finish_launch as finish_multi
         hkmultiplayer_result=install_multi(Path(__file__).resolve().parent,original,player)
+        from partydeck_bo2 import install_hook as install_bo2
+        install_bo2(Path(__file__).resolve().parent, original, player)
         from partydeck_celestenet import install_hook as install_celestenet
         install_celestenet(Path(__file__).resolve().parent,player)
         if os.environ.get('PARTYDECK_DST') == '1':
@@ -740,7 +742,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
+            from partydeck_bo2 import ADAPTER as BO2
+            if profile.get('adapter') in (BO2,'borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if dst:
         args.extend(['-w', str(width), '-h', str(height)])

@@ -18,6 +18,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
+from partydeck_bo2 import ADAPTER as BO2, MODES as BO2_MODES, defaults as bo2_defaults, matches as matches_bo2
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -106,7 +107,7 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', 'dont-starve-together'])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO2])]
     if adapter == DST:
         if tab == 1:
             return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
@@ -115,6 +116,8 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('dst.hud_scale', tr('Taille de l’interface en jeu'), list(DST_HUD_SIZES)),
                 ('dst.text_scale', tr('Taille des textes des menus'), list(DST_TEXT_SIZES)),
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
+    if adapter == BO2:
+        return [('bo2.mode', tr('Mode de jeu'), list(BO2_MODES))] if tab == 1 else []
     if adapter == 'celestenet':
         if tab == 2:
             rows = [(f'celestenet.names.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Nom')), None)
@@ -254,7 +257,11 @@ def label_value(key, value):
         return tr('Clavier/souris · J1') if value == 'clavier-j1' else tr('Clavier/souris · J2')
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
+    if key == 'bo2.mode':
+        return tr(BO2_MODES[value])
     if key == 'adapter':
+        if value == BO2:
+            return 'Black Ops II'
         if value == 'dont-starve-together':
             return "Don't Starve Together · LAN"
         if value == 'celestenet':
@@ -342,7 +349,7 @@ class Model:
         windows = self.windows
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
                          'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi),
-                         'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst)}
+                         'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst), 'bo2':discover(windows,matches_bo2)}
         return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
                 for recipe in COMMON]
 
@@ -375,6 +382,7 @@ class Model:
         self.data.setdefault('hkmultiplayer',multi_defaults())
         self.data.setdefault('celestenet',celeste_defaults())
         self.data.setdefault('dst', dst_defaults())
+        self.data.setdefault('bo2', bo2_defaults(rom))
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
@@ -405,6 +413,7 @@ class Model:
         if stored.get('adapter') != 'hollowknight-hkmultiplayer':stored.pop('hkmultiplayer',None)
         if stored.get('adapter') != 'celestenet':stored.pop('celestenet', None)
         if stored.get('adapter') != DST:stored.pop('dst', None)
+        if stored.get('adapter') != BO2:stored.pop('bo2', None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'windows-party'), 'ajouter', str(self.rom),
@@ -797,7 +806,7 @@ class App:
         if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
-        if self.model.data and self.model.data.get('adapter') == 'nfsmw-lan':return (0,1)
+        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2):return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
@@ -1800,6 +1809,8 @@ class App:
                     title=tr(('Session','Réseau','Coop')[i])
                 elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
+                elif self.model.data.get('adapter') == BO2:
+                    title=tr(('Session', 'Options')[i])
                 elif self.model.data.get('adapter') == 'celestenet':
                     title = tr(('Session','Options','Joueurs')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
@@ -1824,6 +1835,8 @@ class App:
                 if self.model.data['adapter'] == 'celestenet':
                     subtitle = (tr('CelesteNet · noms et skins des joueurs') if self.tab == 2 else
                                 tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.'))
+                if self.model.data['adapter'] == BO2:
+                    subtitle = tr('Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.')
                 if self.model.data['adapter'] == DST:
                     subtitle = tr('Résolution adaptée au partage')
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':

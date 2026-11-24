@@ -1,4 +1,5 @@
 """Community configuration recipes, independent of the user's game files."""
+from partydeck_bo2 import ADAPTER as BO2, matches as matches_bo2
 from partydeck_i18n import tr
 from dataclasses import dataclass
 import json
@@ -27,7 +28,8 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('hkmp','Hollow Knight · HKMP (ancienne version)','hollowknight-hkmp'),
           CommonGame('hkmultiplayer','Hollow Knight · HKMultiplayer 0.36.2','hollowknight-hkmultiplayer'),
           CommonGame('celestenet', 'Celeste · CelesteNet en LAN', 'celestenet'),
-          CommonGame('dst', "Don't Starve Together · LAN", 'dont-starve-together'))
+          CommonGame('dst', "Don't Starve Together · LAN", 'dont-starve-together'),
+          CommonGame('bo2', 'Black Ops II · LAN expérimental', BO2))
 
 
 def is_rom(path):
@@ -50,6 +52,8 @@ def recipe_for(rom, adapter=None):
     from partydeck_hkmp import matches as matches_hkmp
     from partydeck_hkmultiplayer import matches as matches_multi
     from partydeck_dst import ADAPTER as DST, matches as matches_dst
+    if adapter is None and matches_bo2(rom):
+        adapter = BO2
     if adapter is None and matches_dst(rom):
         adapter = DST
     if adapter is None and matches_multi(rom):return COMMON[6]

@@ -47,6 +47,15 @@ for language,host,automatic,campaign in (
     assert label_value('l4d2.campaign','c14m1_junkyard')=='14 · The Last Stand'
     l4d2_options={key for key,_,_ in fields(2,'l4d2-goldberg')}
     assert {'l4d2.campaign','l4d2.campaign_mode'}.isdisjoint(l4d2_options)
+for language, mode, multiplayer, original, catalog in (
+        ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental'),
+        ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN')):
+    lang.set_language(language)
+    assert fields(1, 'black-ops-2') == [('bo2.mode', mode, ['mp', 'zm', 'original'])]
+    assert label_value('bo2.mode', 'mp') == multiplayer
+    assert label_value('bo2.mode', 'zm') == 'Zombies'
+    assert label_value('bo2.mode', 'original') == original
+    assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'
 lang.set_language('fr')
 
 # Surface the launcher's reason rather than its long argv, in either UI locale.
