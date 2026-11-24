@@ -617,6 +617,11 @@ def _run_wine(original, target, player, saves=None):
                 adapt_prefix_isolation(views,windows_views)
             exports=[*views,*windows_views]
             environment={'env':pressure_vessel_environment(exports)} if exports else {}
+            if os.environ.get('PARTYDECK_DST') == '1':
+                from partydeck_dst import readiness_dir
+                ready = readiness_dir(player, os.environ.get('PARTYDECK_SESSION_TOKEN'))
+                environment['env'] = pressure_vessel_environment(
+                    [ready], environment.get('env'), writable=player.name == 'j1')
             status = run_native_wine(original, environment, watch_umu=bool(views) or
                                      os.environ.get('PARTYDECK_TRACK_RUNNER') == '1')
             if goldberg_result is not None:
@@ -753,6 +758,10 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         args.extend(["--libinput-hold-dev=" + ",".join(kb_mouse) + ",", "--grab"])
     helper = str(Path(__file__).resolve())
     sandbox=list(sandbox_arguments(player,devices,saves=saves))
+    if dst:
+        from partydeck_dst import readiness_dir
+        ready = str(readiness_dir(player, session_token))
+        sandbox.extend(['--bind' if player.name == 'j1' else '--ro-bind', ready, ready])
     if network is not None:
         sandbox.extend(['--setenv','PARTYDECK_PRIVATE_LAN_IP',network.address(network_index)])
     outer_display = os.environ.get("DISPLAY", "")
@@ -1124,6 +1133,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     hotkey = SessionHotkey()
+    dst_ready = None
     try:
         shared_runtimes = prepare_shared_steam_runtimes(
             UMU_HOME, base / ('runtime' if party else 'coop') / game_id)
@@ -1155,6 +1165,10 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
+        if dst:
+            from partydeck_dst import readiness_dir
+            dst_ready = readiness_dir(base/'runtime'/game_id/'j1', session_token)
+            dst_ready.mkdir(parents=True, exist_ok=False)
         hotkey.start()
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
             player = base / ("runtime" if party else "coop") / game_id / f"j{index}"
@@ -1310,6 +1324,12 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 path.with_suffix('.native').unlink(missing_ok=True)
                 if dst:
                     (path.parent/'dst-scripts.zip').unlink(missing_ok=True)
+            if dst_ready is not None:
+                try:
+                    (dst_ready/'ready').unlink(missing_ok=True)
+                    dst_ready.rmdir()
+                except OSError as error:
+                    print(f'PartyDeck DST: readiness cleanup: {error}', flush=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
 

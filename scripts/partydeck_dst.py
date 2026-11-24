@@ -18,6 +18,7 @@ MENU = 'screens/redux/multiplayermainscreen.lua'
 MAIN = 'main.lua'
 FRONTEND = 'frontend.lua'
 TEXT = 'widgets/text.lua'
+PLAYER_HUD = 'screens/playerhud.lua'
 HUD_SIZES = (100, 115, 125, 140)
 TEXT_SIZES = (100, 110, 120, 130)
 LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
@@ -106,7 +107,45 @@ def patch_title(data, mute_music=False):
     return data
 
 
-def patch_menu(data, host, size=None):
+def readiness_dir(player, token):
+    if not re.fullmatch(r'[0-9a-f]{32}', token or ''):
+        raise ValueError('invalid DST session token')
+    return player.parent/f'dst-world-{token}'
+
+
+def ready_path(directory):
+    # Wine's Z: maps the sandbox filesystem. Decimal Lua escapes preserve
+    # arbitrary UTF-8 path bytes without relying on Lua Unicode escape syntax.
+    raw = os.fsencode('Z:' + str(directory/'ready'))
+    return b'"' + b''.join(f'\\{byte:03d}'.encode('ascii') for byte in raw) + b'"'
+
+
+def patch_host_ready(data, marker):
+    data = insert(data, b'function PlayerHud:SetMainCharacter(maincharacter)', b'''
+    if maincharacter then
+        self.inst:DoTaskInTime(1, function()
+            if self.owner == maincharacter and maincharacter:IsValid() then
+                local ok, written = pcall(function()
+                    local file = io.open(''' + marker + b''', "w")
+                    if not file then return false end
+                    file:write("ready")
+                    return file:close()
+                end)
+                self.partydeck_world_ready = ok and written
+                print(self.partydeck_world_ready and "[PartyDeck] J1 world ready"
+                    or "[PartyDeck] Could not signal J1 world readiness")
+            end
+        end)
+    end
+''')
+    return insert(data, b'function PlayerHud:OnDestroy()', b'''
+    if self.partydeck_world_ready then
+        pcall(os.remove, ''' + marker + b''')
+    end
+''')
+
+
+def patch_menu(data, host, size=None, marker=None):
     code = b''
     if size:
         width, height = size
@@ -142,6 +181,31 @@ def patch_menu(data, host, size=None):
 '''.encode('ascii')
     if not host:
         return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code)
+    gate = b''
+    if marker:
+        gate = b'''
+    self.partydeck_ready_poll = (self.partydeck_ready_poll or 0) + dt
+    if self.partydeck_ready_poll >= 1 then
+        self.partydeck_ready_poll = 0
+        local ok, ready = pcall(function()
+            local file = io.open(''' + marker + b''', "r")
+            if not file then return false end
+            local data = file:read("*a")
+            file:close()
+            return data == "ready"
+        end)
+        if ok and ready then
+            if not self.partydeck_world_ready then print("[PartyDeck] J1 ready; searching LAN") end
+            self.partydeck_world_ready = true
+        elseif self.partydeck_world_ready then
+            self.partydeck_world_ready = nil
+            self.partydeck_search = nil
+            self.partydeck_first_seen = nil
+            TheNet:StopSearchingServers()
+        end
+    end
+    if not self.partydeck_world_ready then return end
+'''
     return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code + b'''
     if not self.offline or TheFrontEnd:GetActiveScreen() ~= self
             or self.partydeck_joined or TheNet:HasPendingConnection() then
@@ -154,14 +218,18 @@ def patch_menu(data, host, size=None):
         print("[PartyDeck] LAN search timed out")
         return
     end
+''' + gate + b'''
     if self.partydeck_search and TheNet:GetServerListingReadDirty() then
         for index, server in ipairs(TheNet:GetServerListings() or {}) do
             if server.offline and server.ip == "''' + host.encode('ascii') + b'''" then
                 if self.partydeck_port ~= server.port or not self.partydeck_first_seen then
                     self.partydeck_port = server.port
                     self.partydeck_first_seen = self.partydeck_wait
-                    print("[PartyDeck] J1 advertised; waiting for world startup")
-                elseif self.partydeck_wait - self.partydeck_first_seen >= 15 then
+                    if not self.partydeck_world_ready then
+                        print("[PartyDeck] J1 advertised; waiting for world startup")
+                    end
+                end
+                if self.partydeck_world_ready or self.partydeck_wait - self.partydeck_first_seen >= 15 then
                     local selected = TheNet:GetServerListingFromActualIndex(index)
                     if selected and selected.ip == server.ip and selected.port == server.port then
                         self.partydeck_joined = true
@@ -226,12 +294,14 @@ def patch_text(data, scale):
 
 
 def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False,
-                 fullscreen_size=None, hud_scale=100, text_scale=100):
+                 fullscreen_size=None, hud_scale=100, text_scale=100, marker=None):
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
     if host or fullscreen_size:
-        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size)
+        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker)
+    if marker and not host:
+        changes[PLAYER_HUD] = lambda data: patch_host_ready(data, marker)
     if hud_scale != 100:
         changes[FRONTEND] = lambda data: patch_hud(data, hud_scale)
     if text_scale != 100:
@@ -338,12 +408,13 @@ def prepare(player, directory, prefix, settings):
     temp = Path(tmp)
     try:
         size = tuple(int(os.environ.get(f'PARTYDECK_PLAYER_{axis}', '0')) for axis in ('WIDTH', 'HEIGHT'))
+        marker = ready_path(readiness_dir(player, os.environ.get('PARTYDECK_SESSION_TOKEN')))
         patch_bundle(bundle, temp, None if player.name == 'j1' else '192.168.247.11',
                      language=settings['language'],
                      mute_music=settings['music_j1_only'] and player.name != 'j1',
                      fullscreen_size=size if settings['fullscreen'] and all(0 < n <= 16384 for n in size) else None,
                      hud_scale=settings['hud_scale'],
-                     text_scale=settings['text_scale'])
+                     text_scale=settings['text_scale'], marker=marker)
         temp.replace(source)
         overlay(bundle, source)
         print(f'PartyDeck DST {player.name.upper()}: LAN menus prepared.', flush=True)

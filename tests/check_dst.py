@@ -34,6 +34,7 @@ with tempfile.TemporaryDirectory() as folder:
     with zipfile.ZipFile(bundle, 'w') as archive:
         archive.writestr('scripts/'+dst.TITLE, title)
         archive.writestr(dst.MENU, menu)
+        archive.writestr(dst.PLAYER_HUD, 'function PlayerHud:SetMainCharacter(maincharacter) end\nfunction PlayerHud:OnDestroy() end\n')
         archive.writestr(dst.TEXT, 'function Text:SetSize(sz)\n    self.inst.TextWidget:SetSize(sz)\n    self.size = sz\nend\n')
         archive.writestr(dst.FRONTEND, '\n'.join(
             f'function FrontEnd:{name}() return 1 end'
@@ -45,13 +46,17 @@ with tempfile.TemporaryDirectory() as folder:
     assert dst.find_bundle(bin64, root/'elsewhere') is None
     guest = root/'guest.zip'
     host = root/'host.zip'
+    marker = dst.ready_path(dst.readiness_dir(root/'j1', 'a'*32))
     dst.patch_bundle(bundle, guest, '192.168.247.11', language='french', mute_music=True,
-                     fullscreen_size=(1920, 540), hud_scale=125, text_scale=120)
-    dst.patch_bundle(bundle, host, language='french')
+                     fullscreen_size=(1920, 540), hud_scale=125, text_scale=120, marker=marker)
+    dst.patch_bundle(bundle, host, language='french', marker=marker)
     with zipfile.ZipFile(guest) as output:
         assert b'server.ip == "192.168.247.11"' in output.read(dst.MENU)
         assert b'GetServerListingFromActualIndex(index)' in output.read(dst.MENU)
         assert b'JoinServer(selected)' in output.read(dst.MENU)
+        client = output.read(dst.MENU)
+        assert client.index(b'if not self.partydeck_world_ready then return end') < client.index(b'TheNet:SearchLANServers(true)')
+        assert b'io.open(' + marker in client
         assert b'w == 1920 and h == 540' in output.read(dst.MENU)
         assert b'original(self) * (125 / 100)' in output.read(dst.FRONTEND)
         assert b'SetSize(sz * (120 / 100))' in output.read(dst.TEXT)
@@ -68,6 +73,8 @@ with tempfile.TemporaryDirectory() as folder:
         assert output.read('unrelated.lua') == b'unmodified'
     with zipfile.ZipFile(host) as output:
         assert output.read(dst.MENU) == menu
+        assert b'J1 world ready' in output.read(dst.PLAYER_HUD)
+        assert b'pcall(os.remove, ' + marker in output.read(dst.PLAYER_HUD)
         assert b'SetSize(sz)' in output.read(dst.TEXT)
         assert b'set_music' not in output.read('scripts/'+dst.TITLE)
         assert b'Profile.GetVolume' not in output.read('scripts/main.lua')
