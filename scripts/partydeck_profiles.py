@@ -152,6 +152,56 @@ def prepare_profile(base, rom, count, split, input_mode):
     save_profile(base, rom, data)
 
 
+def managed_entry(base, rom, roms):
+    entry = roms/party_entry_name(rom)
+    if entry.is_symlink():
+        raise ValueError(tr('Le lanceur est un lien utilisateur ; retrait refusé.'))
+    if entry.exists():
+        lines = entry.read_text().splitlines()
+        command = shlex.split(lines[2]) if len(lines) == 3 else []
+        expected = ['exec',str(base/'windows-party'),'profil',str(rom)]
+        legacy = len(command)==7 and command[:4] == ['exec',str(base/'windows-party'),'party',str(rom)]
+        if len(lines)!=3 or lines[1]!=MARKER or (command!=expected and not legacy):
+            raise ValueError(tr('Le lanceur a été personnalisé ; retrait automatique refusé.'))
+    return entry
+
+
+def relink_profile(base, old, rom, roms=None):
+    from partydeck_catalog import is_rom
+    from partydeck_storage import maintenance_lock, ensure_idle
+
+    if old.exists() or not is_rom(rom) or any(char in str(rom.resolve()) for char in ',:\\\n\r'):
+        raise ValueError(tr('Choisissez un remplacement valide pour le jeu introuvable.'))
+    roms = PARTY_ROMS if roms is None else roms
+    with maintenance_lock(base):
+        ensure_idle(base)
+        old_entry = managed_entry(base, old, roms)
+        entry = managed_entry(base, rom, roms)
+        old_profile = profile_path(base, old)
+        profile = profile_path(base, rom)
+        data = read_profile(base, old) if old_profile.exists() or old_profile.is_symlink() else defaults(old)
+        if profile.exists() or profile.is_symlink():
+            read_profile(base, rom)
+        data['rom'] = str(rom)
+        validate(data, rom)
+        previous = {path: path.read_text() if path.exists() else None
+                    for path in (profile, entry, old_entry)}
+        try:
+            save_profile(base, rom, data)
+            atomic_write(entry, f'#!/bin/bash\n{MARKER}\nexec ' +
+                         shlex.join([str(base/'windows-party'), 'profil', str(rom)]) + '\n', 0o755)
+            old_entry.unlink(missing_ok=True)
+            old_profile.unlink(missing_ok=True)
+        except OSError:
+            for path, before in previous.items():
+                if before is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    atomic_write(path, before, 0o755 if path.suffix == '.sh' else 0o600)
+            raise
+    inherit_scrapes([(rom, entry)], roms)
+
+
 def remove_profile(base, rom, roms=None):
     """Remove only our generated launcher and its settings; never ROM/save data."""
     roms = PARTY_ROMS if roms is None else roms
@@ -163,17 +213,7 @@ def remove_profile(base, rom, roms=None):
         path = profile_path(base,rom)
         if path.exists() or path.is_symlink():
             read_profile(base,rom)
-        digest = hashlib.sha256(os.fsencode(rom)).hexdigest()[:10]
-        entry = roms/party_entry_name(rom)
-        if entry.is_symlink():
-            raise ValueError(tr('Le lanceur est un lien utilisateur ; retrait refusé.'))
-        if entry.exists():
-            lines = entry.read_text().splitlines()
-            command = shlex.split(lines[2]) if len(lines) == 3 else []
-            expected = ['exec',str(base/'windows-party'),'profil',str(rom)]
-            legacy = len(command)==7 and command[:4] == ['exec',str(base/'windows-party'),'party',str(rom)]
-            if len(lines)!=3 or lines[1]!=MARKER or (command!=expected and not legacy):
-                raise ValueError(tr('Le lanceur a été personnalisé ; retrait automatique refusé.'))
+        entry = managed_entry(base, rom, roms)
         previous = entry.read_text() if entry.exists() else None
         entry.unlink(missing_ok=True)
         try:
@@ -593,6 +633,14 @@ def edit_soh_graphics(settings):
 
 
 def launch_profile(base, rom):
+    from partydeck_catalog import is_rom
+
+    if not is_rom(rom):
+        from partydeck_couch import configure as couch_configure
+        replacement = couch_configure(base, rom, single=True)
+        if not isinstance(replacement, Path):
+            return 0
+        rom = replacement
     path = profile_path(base, rom)
     missing = not path.exists()
     data = defaults(rom) if missing else read_profile(base, rom)

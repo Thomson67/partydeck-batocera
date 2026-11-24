@@ -28,6 +28,12 @@ for language, resume in (('fr', 'Relancer automatiquement le dernier monde'),
     dst_app = SimpleNamespace(model=SimpleNamespace(data={'adapter': 'dont-starve-together'}))
     assert 1 in App.available_tabs(dst_app)
 
+for language, title, remove in (('fr', 'Jeu introuvable', 'Retirer le jeu'),
+                                ('en', 'Game not found', 'Remove the game')):
+    lang.set_language(language)
+    assert lang.tr('Jeu introuvable') == title
+    assert dict(context_hints('relink', 'keyboard'))['search'] == remove
+
 for language,host,automatic,campaign in (
         ('fr','Joueur hôte','Héberger et rejoindre automatiquement','Choisir dans le jeu'),
         ('en','Host player','Host and join automatically','Choose in game')):

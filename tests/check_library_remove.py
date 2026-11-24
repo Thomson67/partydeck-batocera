@@ -32,6 +32,40 @@ with tempfile.TemporaryDirectory() as folder:
     assert not entry.exists() and not profiles.profile_path(base,solo).exists()
     assert (solo/'game.exe').read_bytes()==b'ORIGINAL' and save.read_bytes()==b'SAVE'
     assert solo not in model.rows
+    missing = windows/'Don’t Starve Together.wine'
+    archive = missing.with_suffix('.wsquashfs')
+    archive.write_bytes(b'ARCHIVE')
+    old_settings = profiles.defaults(missing)
+    old_settings.update(players='2', split='vertical')
+    profiles.save_profile(base, missing, old_settings)
+    profiles.save_profile(base, archive, profiles.defaults(archive))
+    old_entry, new_entry = launcher(base, missing, roms), launcher(base, archive, roms)
+    with patch.object(profiles,'PARTY_ROMS',roms):
+        app = App(base, missing, windowed=True)
+        assert app.help_context() == 'relink'
+        app.single = True
+        app.model.windows = windows
+        app.action('ok')
+        app.row = app.browser_rows.index(archive)
+        app.action('ok')
+        assert app.accepted and not app.running and app.model.rom == archive
+        assert not old_entry.exists() and new_entry.exists()
+        assert not profiles.profile_path(base, missing).exists()
+        assert profiles.read_profile(base, archive) == {**old_settings,'rom':str(archive)}
+        with patch('partydeck_couch.configure',return_value=archive),patch.object(profiles.os,'execv') as execute:
+            profiles.launch_profile(base, missing)
+            execute.assert_called_once_with(str(base/'windows-party'),
+                [str(base/'windows-party'),'party',str(archive),'2','vertical','auto'])
+        missing = windows/'Missing game.wine'
+        profiles.save_profile(base, missing, profiles.defaults(missing))
+        old_entry = launcher(base, missing, roms)
+        app = App(base, missing, windowed=True)
+        assert app.help_context() == 'relink'
+        app.action('search')
+        assert app.help_context() == 'remove' and old_entry.exists()
+        app.action('ok')
+        assert not old_entry.exists() and not profiles.profile_path(base, missing).exists()
+        assert archive.read_bytes() == b'ARCHIVE' and save.read_bytes() == b'SAVE'
     # A removed recipe stays in the separate catalogue with its options,
     # without reappearing in the personal library.
     for recipe,title in ((COMMON[0],'Ship of Harkinian'),(COMMON[1],'Borderlands 2')):

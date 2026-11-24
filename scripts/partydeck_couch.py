@@ -13,7 +13,7 @@ import time
 import xml.etree.ElementTree as ET
 
 from partydeck_profiles import (defaults, read_profile, save_profile, profile_path,
-                               validate, ROM_TYPES, remove_profile, atomic_write, source_scrape, absolute_path)
+                               validate, ROM_TYPES, remove_profile, relink_profile, atomic_write, source_scrape, absolute_path)
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOLUME_FIELDS
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
@@ -83,6 +83,8 @@ def context_hints(context, mode, has_tabs=True):
         return [('ok',tr('Enregistrer')), ('search',tr('Abandonner')), ('back',tr('Annuler'))]
     if context == 'missing':
         return [('ok',tr('Choisir le jeu')), ('back',tr('Annuler'))]
+    if context == 'relink':
+        return [('ok',tr('Choisir le jeu')), ('search',tr('Retirer le jeu')), ('back',tr('Annuler'))]
     if context == 'keyboard':
         return [('ok',tr('Valider')), ('back',tr('Annuler'))] if mode == 'keyboard' else [('ok',tr('Saisir')), ('save',tr('Valider')), ('back',tr('Annuler'))]
     if context == 'browser':
@@ -750,7 +752,7 @@ class App:
         self.browser = None
         self.browser_rows = []
         self.pending = None
-        self.missing = None
+        self.missing = self.model.rom if rom is not None and not is_rom(self.model.rom) else None
         self.removal = None
         self.pending_common = None
         self.add_menu = None
@@ -1033,7 +1035,8 @@ class App:
         if self.uninstall_state:return ('uninstall-running' if self.uninstall_state=='running' else 'uninstall-done' if self.uninstall_state=='done' else 'uninstall')
         if self.game_cleanup is not None:
             return 'game-cleanup'
-        return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else 'missing' if self.missing is not None else
+        return ('remove' if self.removal else 'storage-error' if self.launch_error else 'confirm' if self.modal else
+                'relink' if isinstance(self.missing, Path) else 'missing' if self.missing is not None else
                 'keyboard' if self.keyboard else 'add' if self.add_menu is not None else 'catalog' if self.catalog_picker is not None else 'browser' if self.browser is not None else
                 'desktop' if self.desktop_open else 'storage' if self.storage_open else 'main')
 
@@ -1476,6 +1479,19 @@ class App:
         if not is_rom(rom):
             self.toast(tr('Choisissez un dossier .wine/.pc ou un fichier .wsquashfs existant.'))
             return
+        if self.add_mode == 'relink':
+            try:
+                relink_profile(self.model.base, self.model.rom, rom)
+            except (OSError, ValueError, RuntimeError) as error:
+                self.add_mode = None
+                self.missing = self.model.rom
+                self.toast(str(error))
+                return
+            self.model.reload()
+            self.library = self.model.rows.index(rom) if rom in self.model.rows else 0
+            self.toast(tr('Jeu rattaché. Actualisez les listes EmulationStation.'))
+            if self.single:
+                self.accepted, self.running = True, False
         manual_new = self.add_mode == 'manual' and not profile_path(self.model.base,rom).exists()
         self.model.select(rom, self.pending_common)
         if manual_new:
@@ -1566,6 +1582,19 @@ class App:
                 self.choose_catalog(self.catalog_picker[self.catalog_index])
             return
         if self.missing is not None:
+            if isinstance(self.missing, Path):
+                if action == 'ok':
+                    self.missing = None
+                    self.add_mode = 'relink'
+                    self.browse(self.model.windows)
+                elif action == 'search':
+                    self.missing = None
+                    self.request_remove()
+                elif action == 'back':
+                    self.missing = None
+                    if self.single:
+                        self.running = False
+                return
             if action == 'ok':
                 self.pending_common = self.missing
                 self.missing = None
@@ -1598,6 +1627,8 @@ class App:
             if action == 'back':
                 self.browser = None
                 self.row = 0
+                if self.add_mode == 'relink':
+                    self.missing = self.model.rom
                 self.add_mode = None
                 if self.pending_common is not None:
                     self.pending_common = None
@@ -1617,13 +1648,19 @@ class App:
         if action == 'launch':
             if self.pane == 'library' and self.library >= len(self.model.rows):
                 return
-            if self.model.rom is not None and self.model.data and is_rom(self.model.rom):
-                self.launch()
+            if self.model.rom is not None and self.model.data:
+                if is_rom(self.model.rom):
+                    self.launch()
+                else:
+                    self.missing = self.model.rom
             else:
                 self.toast(tr('Sélectionnez un jeu'))
         elif action == 'add':
             self.switch(self.open_add)
         elif action == 'save':
+            if self.model.rom is not None and not is_rom(self.model.rom):
+                self.missing = self.model.rom
+                return
             if self.save() and self.model.rom and self.single:
                 self.accepted, self.running = True, False
         elif action == 'search':
@@ -1655,11 +1692,7 @@ class App:
                     self.missing = self.model.selected
                 elif self.model.data:
                     if not is_rom(self.model.rom):
-                        recipe = recipe_for(self.model.rom,self.model.data.get('adapter')) or recipe_for(self.model.rom)
-                        if recipe:
-                            self.missing = recipe
-                        else:
-                            self.toast(tr('Jeu introuvable : utilisez Ajouter pour choisir un autre jeu.'))
+                        self.missing = self.model.rom
                     else:
                         self.pane, self.row = 'settings', 0
         elif self.model.data:
@@ -1851,7 +1884,7 @@ class App:
                     else navigation + ' · ' + quit_hint)
         if volume_selected and context == 'main' and self.model.data.get('adapter') == 'sm64coopdx':
             subtitle = tr('Gauche / droite : volume par pas de 5 % · ') + control_label('ok',self.input_mode) + tr(' : valeur de la configuration commune')
-        if context in ('confirm','missing','remove','game-cleanup'):
+        if context in ('confirm','missing','relink','remove','game-cleanup'):
             subtitle = ''
         elif context == 'browser':
             subtitle = navigation
@@ -1913,8 +1946,12 @@ class App:
             self.text(self.modal, 255, 368, 24, width=920)
         if self.missing is not None:
             self.box((210,310,1020,250), (36,45,65), (100,213,230))
-            self.text(tr('Plusieurs versions détectées') if len(self.missing.matches)>1 else tr('Choisir le fichier du jeu') if self.missing.matches else tr('Jeu non détecté dans Windows'), 240,340,28,width=950)
-            self.text(tr('Vous devez disposer du jeu pour utiliser ce profil commun.'),240,395,20,width=950)
+            if isinstance(self.missing, Path):
+                self.text(tr('Jeu introuvable'), 240,340,28,width=950)
+                self.text(self.missing.name, 240,395,20,width=950)
+            else:
+                self.text(tr('Plusieurs versions détectées') if len(self.missing.matches)>1 else tr('Choisir le fichier du jeu') if self.missing.matches else tr('Jeu non détecté dans Windows'), 240,340,28,width=950)
+                self.text(tr('Vous devez disposer du jeu pour utiliser ce profil commun.'),240,395,20,width=950)
         if self.removal:
             self.box((190,295,1060,305), (36,45,65), (244,164,128))
             self.text(tr('DISSOCIER CE JEU ?') if self.removal['common'] else tr('RETIRER CE JEU DE WINDOWS PARTY ?'),220,325,28,width=1000)
@@ -1987,7 +2024,7 @@ def configure(base, rom=None, single=False):
             data = app.model.data
             launcher = str(Path(base) / 'windows-party')
             os.execv(launcher, [launcher, 'party', str(app.model.rom), data['players'], data['split'], data['input']])
-        return accepted
+        return app.model.rom if accepted and single else accepted
     except ImportError as error:
         raise RuntimeError(tr('Pygame 2 est requis pour le configurateur à la manette. '
                            'Ancienne interface : PARTYDECK_UI=legacy windows-party configurer')) from error
