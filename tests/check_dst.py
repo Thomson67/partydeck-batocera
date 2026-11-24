@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory() as folder:
         archive.writestr('scripts/'+dst.TITLE, title)
         archive.writestr(dst.MENU, menu)
         archive.writestr(dst.PLAYER_HUD, 'function PlayerHud:SetMainCharacter(maincharacter) end\nfunction PlayerHud:OnDestroy() end\n')
+        archive.writestr('scripts/'+dst.PLAYER_STATUS, b'self.root:SetScaleMode(SCALEMODE_PROPORTIONAL)\n')
         archive.writestr(dst.TEXT, 'function Text:SetSize(sz)\n    self.inst.TextWidget:SetSize(sz)\n    self.size = sz\nend\n')
         archive.writestr(dst.FRONTEND, '\n'.join(
             f'function FrontEnd:{name}() return 1 end'
@@ -60,6 +61,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'io.open(' + marker in client
         assert b'w == 1920 and h == 540' in output.read(dst.MENU)
         assert b'original(self) * (125 / 100)' in output.read(dst.FRONTEND)
+        assert b'self.root:SetScale(1.25, 1.25, 1)' in output.read('scripts/'+dst.PLAYER_STATUS)
         assert b'SetSize(sz * (120 / 100))' in output.read(dst.TEXT)
         assert b'self.size = sz' in output.read(dst.TEXT)
         assert b'StopSearchingServers' not in output.read(dst.MENU).split(b'Joining J1 over LAN', 1)[1].split(b'JoinServer(selected)', 1)[0]
@@ -77,6 +79,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'J1 world ready' in output.read(dst.PLAYER_HUD)
         assert b'pcall(os.remove, ' + marker in output.read(dst.PLAYER_HUD)
         assert b'SetSize(sz)' in output.read(dst.TEXT)
+        assert b'self.root:SetScale(' not in output.read('scripts/'+dst.PLAYER_STATUS)
         assert b'set_music' not in output.read('scripts/'+dst.TITLE)
         assert b'Profile.GetVolume' not in output.read('scripts/main.lua')
     with zipfile.ZipFile(bundle) as stock:
