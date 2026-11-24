@@ -18,7 +18,8 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_bo2 import ADAPTER as BO2, MODES as BO2_MODES, defaults as bo2_defaults, matches as matches_bo2
+from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, JOIN_HOST,
+                           defaults as bo2_defaults, matches as matches_bo2)
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -1836,7 +1837,11 @@ class App:
                     subtitle = (tr('CelesteNet · noms et skins des joueurs') if self.tab == 2 else
                                 tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.'))
                 if self.model.data['adapter'] == BO2:
-                    subtitle = tr('Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.')
+                    if self.model.data['bo2']['mode'] in PLUTONIUM_MODES:
+                        subtitle = tr('Sur J1, démarrez la partie personnalisée. Dans la console de J2, entrez {p0}.',
+                                      p0=JOIN_HOST)
+                    else:
+                        subtitle = tr('Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.')
                 if self.model.data['adapter'] == DST:
                     subtitle = tr('Résolution adaptée au partage')
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':

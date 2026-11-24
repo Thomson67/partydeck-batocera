@@ -7,14 +7,39 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 from partydeck_borderlands2 import child, decode, patch_ini, write_bytes
 from partydeck_i18n import tr
 from partydeck_l4d2 import ACCOUNT_MAX, STEAM64_BASE
 
 ADAPTER = 'black-ops-2'
-MODES = {'mp': 'Multijoueur', 'zm': 'Zombies', 'original': 'Lancement d’origine'}
+MODES = {
+    'mp': 'Multijoueur',
+    'zm': 'Zombies',
+    'original': 'Lancement d’origine',
+    'plutonium-mp': 'Multijoueur · Plutonium LAN',
+    'plutonium-zm': 'Zombies · Plutonium LAN',
+}
 EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
+PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
+BOOTSTRAPPER = 'plutonium-bootstrapper-win32.exe'
+HOST_PORT = 1111
+JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
+DEFAULT_RENDER_SIZE = (1280, 720)
+
+
+def render_size(width, height):
+    if width >= 1280 and height >= 720 and width * 9 == height * 16:
+        return width, height
+    return DEFAULT_RENDER_SIZE
+
+
+def display_arguments(*, borderless=False):
+    width, height = DEFAULT_RENDER_SIZE
+    resolution = os.environ.get('PARTYDECK_BO2_RESOLUTION', f'{width}x{height}')
+    return ['+set', 'r_fullscreen', '2' if borderless else '0', '+set', 'r_mode', resolution]
+
 
 
 def matches(rom):
@@ -104,7 +129,7 @@ def configure_client(directory, player):
     return 'Goldberg'
 
 
-def prepare(player, mode, directory, root):
+def prepare(player, mode, directory, root, plutonium_source):
     if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
         raise ValueError(tr('Black Ops II : espace privé du joueur requis.'))
     from partydeck_bottles import private_windows_paths
@@ -113,15 +138,75 @@ def prepare(player, mode, directory, root):
     allowed = (root, *private_windows_paths(player))
     if not any(directory.is_relative_to(path) for path in allowed):
         raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=directory))
-    exe = find_game(directory, root, mode, allowed)
+    plutonium_mode = PLUTONIUM_MODES.get(mode)
+    game_mode = plutonium_mode[2:] if plutonium_mode else mode
+    exe = find_game(directory, root, game_mode, allowed)
+    if plutonium_mode:
+        return prepare_plutonium(player, exe.parent, plutonium_source, plutonium_mode)
+
     client = configure_client(exe.parent if exe else directory, player)
     status = (tr('Black Ops II {p0} : profil privé {p1} appliqué.', p0=player.name.upper(), p1=client)
               if client else tr('Black Ops II : aucun client LAN reconnu dans le dossier du jeu.'))
     print(status, file=sys.stderr, flush=True)
-    if mode != 'original':
-        print(tr('Black Ops II {p0} : lancement de {p1}.', p0=player.name.upper(), p1=exe.name),
-              file=sys.stderr, flush=True)
-    return exe
+    if mode == 'original':
+        return None, None
+    print(tr('Black Ops II {p0} : lancement de {p1}.', p0=player.name.upper(), p1=exe.name),
+          file=sys.stderr, flush=True)
+    return exe.parent, shlex.join([f'./{exe.name}', *display_arguments()])
+
+
+def copy_client_files(source, destination, *, sync):
+    destination.mkdir(exist_ok=True)
+    for entry in source.iterdir():
+        target = private_child(destination, entry.name)
+        if entry.is_symlink():
+            raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=entry))
+        if entry.is_dir():
+            copy_client_files(entry, target, sync=sync)
+        elif entry.is_file() and (not target.is_file() or
+                                 (sync and (target.stat().st_size, target.stat().st_mtime_ns)
+                                  != (entry.stat().st_size, entry.stat().st_mtime_ns))):
+            with tempfile.NamedTemporaryFile(dir=destination, prefix='.plutonium-', delete=False) as stream:
+                temporary = Path(stream.name)
+            try:
+                shutil.copy2(entry, temporary)
+                temporary.replace(target)
+            finally:
+                temporary.unlink(missing_ok=True)
+
+
+def prepare_plutonium(player, game, source, mode):
+    binaries = private_child(source, 'bin')
+    games = private_child(source, 'games')
+    if not (private_child(binaries, BOOTSTRAPPER).is_file()
+            and private_child(games, f'{mode}.exe').is_file()):
+        raise ValueError(tr('Black Ops II : copiez bin et games de Plutonium dans {p0}.', p0=source))
+
+    # Put the executable inside the private game view so UMU can relocate
+    # the executable and its working directory together into Proton.
+    runtime = private_child(game, '.partydeck-plutonium')
+    runtime.mkdir(exist_ok=True)
+    for folder in (binaries, games):
+        copy_client_files(folder, private_child(runtime, folder.name), sync=True)
+    storage = private_child(source, 'storage')
+    if storage.is_dir():
+        copy_client_files(storage, private_child(runtime, storage.name), sync=False)
+
+    _, _, name = identity(player)
+    port = HOST_PORT + int(player.name[1:]) - 1
+    args = [f'./{binaries.name}/{private_child(binaries, BOOTSTRAPPER).name}',
+            mode, '..', '+name', name, '-lan', *display_arguments(borderless=True),
+            '+set', 'net_port', str(port)]
+    if mode == 't6zm' and player.name == 'j1':
+        count = os.environ.get('PARTYDECK_SESSION_PLAYERS', '1')
+        if count in ('1', '2', '3', '4'):
+            args += ['+set', 'sp_minplayers', count]
+    if player.name != 'j1':
+        print(tr('Black Ops II {p0} : rejoindre J1 avec {p1}.', p0=player.name.upper(),
+                 p1=JOIN_HOST), file=sys.stderr, flush=True)
+    print(tr('Black Ops II {p0} : Plutonium LAN ({p1}, port {p2}).',
+             p0=player.name.upper(), p1=mode, p2=port), file=sys.stderr, flush=True)
+    return runtime, shlex.join(args)
 
 
 def instrument_native(source, hook, mode):
@@ -141,11 +226,12 @@ def instrument_native(source, hook, mode):
                 or body.index(marker) > calls[0].start()):
             raise RuntimeError(tr('Lanceur batocera-wine non reconnu ({p0}) : adaptateur de jeu refusé.', p0=name))
         root = calls[0][2]
-        setup = (f'    local partydeck_bo2_exe\n'
-                 f'    partydeck_bo2_exe=$({launch} "{root}/${{WINE_DIR}}" "{root}") || return 1\n')
+        setup = ('    local partydeck_bo2_launch partydeck_bo2_cwd\n'
+                 f'    partydeck_bo2_launch=$({launch} "{root}/${{WINE_DIR}}" "{root}") || return 1\n')
         if mode != 'original':
-            setup += '    printf -v WINE_CMD "%q +set r_fullscreen 0" "./${partydeck_bo2_exe##*/}"\n'
-            body = pattern.sub('(cd "${partydeck_bo2_exe%/*}" && ', body)
+            setup += ("    partydeck_bo2_cwd=${partydeck_bo2_launch%%$'\\n'*}\n"
+                      "    WINE_CMD=${partydeck_bo2_launch#*$'\\n'}\n")
+            body = pattern.sub('(cd "${partydeck_bo2_cwd}" && ', body)
         parts[index] = body.replace(marker, setup + marker)
     return ''.join(parts)
 
@@ -162,7 +248,7 @@ def install_hook(base, rom, player):
     if binary is None:
         raise RuntimeError(tr('batocera-wine introuvable.'))
     binary = Path(binary).resolve()
-    hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player)]
+    hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player), str(base / 'plutonium')]
     replacement = player / 'batocera-wine-bo2'
     atomic_write(replacement, instrument_native(binary.read_text(), hook, profile['bo2']['mode']), 0o755)
     subprocess.run(['bash', '-n', str(replacement)], check=True)
@@ -170,11 +256,13 @@ def install_hook(base, rom, player):
 
 
 if __name__ == '__main__':
-    player, mode, directory, root = sys.argv[1:]
+    player, source, mode, directory, root = sys.argv[1:]
     try:
-        exe = prepare(Path(player), mode, Path(directory), Path(root))
-        if exe is not None:
-            print(exe)
+        cwd, command = prepare(Path(player), mode, Path(directory), Path(root), Path(source))
+        if cwd is not None:
+            if '\n' in str(cwd):
+                raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=cwd))
+            print(cwd, command, sep='\n')
     except (OSError, ValueError) as error:
         print(f'Windows Party / Black Ops II : {error}', file=sys.stderr)
         raise SystemExit(1)

@@ -51,10 +51,13 @@ for language, mode, multiplayer, original, catalog in (
         ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental'),
         ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN')):
     lang.set_language(language)
-    assert fields(1, 'black-ops-2') == [('bo2.mode', mode, ['mp', 'zm', 'original'])]
+    assert fields(1, 'black-ops-2') == [
+        ('bo2.mode', mode, ['mp', 'zm', 'original', 'plutonium-mp', 'plutonium-zm'])]
     assert label_value('bo2.mode', 'mp') == multiplayer
     assert label_value('bo2.mode', 'zm') == 'Zombies'
     assert label_value('bo2.mode', 'original') == original
+    assert label_value('bo2.mode', 'plutonium-mp') == f'{multiplayer} · Plutonium LAN'
+    assert label_value('bo2.mode', 'plutonium-zm') == 'Zombies · Plutonium LAN'
     assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'
 lang.set_language('fr')
 

@@ -239,3 +239,15 @@ with patch.object(coop.subprocess, 'Popen') as popen:
     coop.start_player(base, base/'j1', game, game, [], (0, 0, 1920, 1080), 'celeste-j1',
                       celeste_options={'language': 'french'})
     assert '-w' not in popen.call_args.args[0]
+
+# Black Ops II's D3D11 renderer sees a standard mode, independent of the split.
+with (patch.object(coop.subprocess, 'Popen') as popen,
+      patch.object(coop, 'sandbox_arguments', return_value=[]),
+      patch('partydeck_profiles.profile_path', return_value=Path(__file__)),
+      patch('partydeck_profiles.read_profile', return_value={'adapter': 'black-ops-2'})):
+    coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),
+                      'bo2-j2', saves=base/'saves')
+    args = popen.call_args.args[0]
+    for option, size in (('-w', '1280'), ('-h', '720'), ('-W', '1920'), ('-H', '540')):
+        assert args[args.index(option) + 1] == size
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'

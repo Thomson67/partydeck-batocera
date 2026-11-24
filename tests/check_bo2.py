@@ -47,6 +47,21 @@ with TemporaryDirectory() as folder:
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'zm'
     assert not bo2.matches(base / 'Black Ops III.wsquashfs')
 
+    installed_client = base / 'Plutonium from Windows'
+    (installed_client / 'bin').mkdir(parents=True)
+    (installed_client / 'games').mkdir()
+    (installed_client / 'storage/t6').mkdir(parents=True)
+    (installed_client / 'bin' / bo2.BOOTSTRAPPER).write_text('bootstrapper')
+    (installed_client / 'games/t6mp.exe').write_text('multiplayer')
+    (installed_client / 'games/t6zm.exe').write_text('zombies')
+    (installed_client / 'storage/t6/players.cfg').write_text('seed')
+    (installed_client / 'config.json').write_text('launcher config')
+
+    assert bo2.render_size(1920, 540) == (1280, 720)
+    assert bo2.render_size(960, 1080) == (1280, 720)
+    assert bo2.render_size(960, 540) == (1280, 720)
+    assert bo2.render_size(1920, 1080) == (1920, 1080)
+
     hits = []
     for player_name, entry, mode in (('j1', 'play_wine', 'mp'), ('j2', 'play_squashfs', 'zm'),
                                      ('j3', 'play_pc', 'original')):
@@ -63,21 +78,47 @@ with TemporaryDirectory() as folder:
         ini = settings / 'configs.user.ini'
         ini.write_text('[user::general]\naccount_steamid=76561197960265729\nlanguage=french\n')
         (settings / 'force_steamid.txt').write_text('76561197960265729\n')
-        hook = [sys.executable, str(Path(bo2.__file__)), str(player)]
+        hook = [sys.executable, str(Path(bo2.__file__)), str(player), str(installed_client)]
         launcher = player / 'native.sh'
         launcher.write_text(bo2.instrument_native(source, hook, mode))
         subprocess.run(['bash', '-n', str(launcher)], check=True)
         env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
-                   WINE_LANG='C' if entry == 'play_squashfs' else '')
+                   WINE_LANG='C' if entry == 'play_squashfs' else '', PARTYDECK_BO2_RESOLUTION='1280x720')
         result = subprocess.run(['bash', str(launcher), str(prefix), entry], check=True,
                                 capture_output=True, text=True, env=env)
-        expected = {'mp': ['./T6MP.EXE', '+set', 'r_fullscreen', '0'],
-                    'zm': ['./t6zm.exe', '+set', 'r_fullscreen', '0'],
+        expected = {'mp': ['./T6MP.EXE', '+set', 'r_fullscreen', '0', '+set', 'r_mode', '1280x720'],
+                    'zm': ['./t6zm.exe', '+set', 'r_fullscreen', '0', '+set', 'r_mode', '1280x720'],
                     'original': ['t6sp.exe', '-solo']}
         assert result.stdout.splitlines() == [str(game), *expected[mode]]
         steamid = (settings / 'force_steamid.txt').read_text().strip()
         assert steamid in ini.read_text() and 'language=french' in ini.read_text()
         hits.append(steamid)
+        if mode != 'original':
+            pluto_mode = 'plutonium-zm' if player_name == 'j1' else 'plutonium-mp'
+            tag = 't6zm' if player_name == 'j1' else 't6mp'
+            launcher.write_text(bo2.instrument_native(source, hook, pluto_mode))
+            env['PARTYDECK_SESSION_PLAYERS'] = '2'
+            launched = subprocess.run(['bash', str(launcher), str(prefix), entry], check=True,
+                                      capture_output=True, text=True, env=env)
+            runtime = game / '.partydeck-plutonium'
+            expected_pluto = [str(runtime), './bin/' + bo2.BOOTSTRAPPER, tag, '..',
+                              '+name', f'Player {player_name[1]}', '-lan',
+                              '+set', 'r_fullscreen', '2', '+set', 'r_mode', '1280x720', '+set', 'net_port',
+                              str(bo2.HOST_PORT + int(player_name[1]) - 1)]
+            if player_name == 'j1':
+                expected_pluto += ['+set', 'sp_minplayers', '2']
+            else:
+                assert bo2.JOIN_HOST in launched.stderr
+            assert launched.stdout.splitlines() == expected_pluto
+            assert (runtime / 'games' / f'{tag}.exe').is_file()
+            assert not (runtime / 'config.json').exists()
+            settings_copy = runtime / 'storage/t6/players.cfg'
+            settings_copy.write_text('private')
+            with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player)}):
+                bo2.prepare(player, pluto_mode, game, prefix, installed_client)
+            assert settings_copy.read_text() == 'private'
+            assert (installed_client / 'storage/t6/players.cfg').read_text() == 'seed'
+            launcher.write_text(bo2.instrument_native(source, hook, mode))
         if mode == 'zm':
             (game / 't6zm.exe').unlink()
             failed = subprocess.run(['bash', str(launcher), str(prefix), entry], capture_output=True,
@@ -101,7 +142,7 @@ with TemporaryDirectory() as folder:
 
     with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(base / 'j1')}):
         try:
-            bo2.prepare(base / 'j1', 'mp', classic, game)
+            bo2.prepare(base / 'j1', 'mp', classic, game, installed_client)
         except ValueError:
             pass
         else:
@@ -119,4 +160,4 @@ with TemporaryDirectory() as folder:
     else:
         raise AssertionError('Expected rejection of a redirected identity file')
 
-print('BO2: MP, Zombies, original autorun, private LAN, classic/modern Goldberg and Nova verified.')
+print('BO2: MP, Zombies, original autorun, private LAN, classic/modern Goldberg, Nova and Plutonium launch plans verified.')

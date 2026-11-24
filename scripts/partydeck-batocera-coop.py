@@ -735,6 +735,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
                  track_runner=False, dst=False):
     _, _, width, height = rectangle
+    bo2_resolution = None
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if saves is not None:
@@ -742,8 +743,15 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            from partydeck_bo2 import ADAPTER as BO2
-            if profile.get('adapter') in (BO2,'borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
+            from partydeck_bo2 import ADAPTER as BO2, render_size
+            adapter = profile.get('adapter')
+            if adapter == BO2:
+                render_width, render_height = render_size(width, height)
+                args.extend(['-w', str(render_width), '-h', str(render_height)])
+                bo2_resolution = f'{render_width}x{render_height}'
+                print(tr('Black Ops II {p0} : rendu {p1}, fenêtre {p2}.',
+                         p0=player.name.upper(), p1=bo2_resolution, p2=f'{width}x{height}'), flush=True)
+            elif adapter in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if dst:
         args.extend(['-w', str(width), '-h', str(height)])
@@ -779,6 +787,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                                        "PARTYDECK_PLAYER_WIDTH": str(width),
                                        "PARTYDECK_PLAYER_HEIGHT": str(height)}
     environment.pop('PARTYDECK_PRIVATE_LAN_IP',None)
+    environment.pop('PARTYDECK_BO2_RESOLUTION', None)
+    if bo2_resolution is not None:
+        environment['PARTYDECK_BO2_RESOLUTION'] = bo2_resolution
     environment.pop('PARTYDECK_SESSION_TOKEN',None)
     environment['PARTYDECK_SESSION_PLAYERS']=str(player_count)
     if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token
