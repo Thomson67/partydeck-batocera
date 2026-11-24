@@ -31,7 +31,7 @@ LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
 
 
 def defaults():
-    return dict(language='keep', music_j1_only=False, fullscreen=True, hud_scale=125, text_scale=110,
+    return dict(language='keep', music_j1_only=True, fullscreen=True, hud_scale=125, text_scale=110,
                 resume_last_world=False)
 
 
@@ -39,7 +39,7 @@ def validate(options):
     if options is None:
         return defaults()
     if (not isinstance(options, dict) or not isinstance(options.get('language'), str)
-            or options['language'] not in LANGUAGES or type(options.get('music_j1_only')) is not bool
+            or options['language'] not in LANGUAGES or type(options.get('music_j1_only', True)) is not bool
             or type(options.get('fullscreen', True)) is not bool
             or type(options.get('resume_last_world', False)) is not bool
             or type(options.get('hud_scale', 125)) is not int or options.get('hud_scale', 125) not in HUD_SIZES

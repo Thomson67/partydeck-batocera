@@ -23,7 +23,9 @@ with tempfile.TemporaryDirectory() as folder:
     rom = root/"Don't Starve Together.wsquashfs"
     assert recipe_for(rom).id == 'dst'
     assert validate(defaults(rom), rom)['adapter'] == dst.ADAPTER
-    assert dst.validate({'language':'keep', 'music_j1_only':False}) == dst.defaults()
+    assert defaults(rom)['dst']['music_j1_only'] is True
+    assert dst.validate({'language': 'keep'}) == dst.defaults()
+    assert dst.validate({'language': 'keep', 'music_j1_only': False})['music_j1_only'] is False
     assert not dst.defaults()['resume_last_world']
     assert dst.validate({**dst.defaults(), 'resume_last_world': True})['resume_last_world']
     assert not dst.matches(root/'Dont Starve.wine')
