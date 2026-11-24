@@ -48,13 +48,15 @@ pour le multijoueur Plutonium.
 
 ## Client fourni avec le jeu
 
-Les choix **Multijoueur** et **Zombies** lancent les exécutables du jeu
-directement. **Lancement d’origine** reprend son `autorun.cmd`. Windows Party
-configurera une identité distincte par joueur si Goldberg ou le module LAN
-de Project Nova est reconnu. La connexion dépend du client installé.
+**Lancement d’origine** reprend l’`autorun.cmd` pour les installations qui
+ont déjà leur propre lanceur LAN. Les anciens réglages **Multijoueur** et
+**Zombies** sont convertis vers leurs équivalents Plutonium LAN.
 
-Dans `/userdata/system/windows-party/logs/`, le journal de session indique
-le client, l’exécutable ou le mode sélectionné, et le port de Plutonium.
+Si Plutonium signale une erreur sur `binkw32.dll`, consultez le journal de
+session dans `/userdata/system/windows-party/logs/`. Il indique le dossier
+Windows transmis au client, par exemple `C:\game`, et signale une DLL absente
+ou sans le symbole attendu. Dans ce cas, vérifiez les fichiers de
+l’installation Black Ops II dans Steam.
 
 ## Références
 

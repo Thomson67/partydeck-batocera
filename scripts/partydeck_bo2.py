@@ -1,7 +1,7 @@
 """Prepare the installed Black Ops II client in each player's private view."""
 import hashlib
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import shlex
 import shutil
@@ -15,11 +15,9 @@ from partydeck_l4d2 import ACCOUNT_MAX, STEAM64_BASE
 
 ADAPTER = 'black-ops-2'
 MODES = {
-    'mp': 'Multijoueur',
-    'zm': 'Zombies',
-    'original': 'Lancement d’origine',
     'plutonium-mp': 'Multijoueur · Plutonium LAN',
     'plutonium-zm': 'Zombies · Plutonium LAN',
+    'original': 'Lancement d’origine',
 }
 EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
@@ -35,10 +33,10 @@ def render_size(width, height):
     return DEFAULT_RENDER_SIZE
 
 
-def display_arguments(*, borderless=False):
+def display_arguments():
     width, height = DEFAULT_RENDER_SIZE
     resolution = os.environ.get('PARTYDECK_BO2_RESOLUTION', f'{width}x{height}')
-    return ['+set', 'r_fullscreen', '2' if borderless else '0', '+set', 'r_mode', resolution]
+    return ['+set', 'r_fullscreen', '2', '+set', 'r_mode', resolution]
 
 
 
@@ -47,13 +45,17 @@ def matches(rom):
 
 
 def defaults(rom=None):
-    return {'mode': 'zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'mp'}
+    mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
+    return {'mode': mode}
 
 
 def validate(data):
-    if not isinstance(data, dict) or data.get('mode') not in tuple(MODES):
+    mode = data.get('mode') if isinstance(data, dict) else None
+    if mode in ('mp', 'zm'):
+        mode = f'plutonium-{mode}'
+    if mode not in tuple(MODES):
         raise ValueError(tr('Mode Black Ops II invalide.'))
-    return {'mode': data['mode']}
+    return {'mode': mode}
 
 
 def private_child(directory, name):
@@ -142,17 +144,13 @@ def prepare(player, mode, directory, root, plutonium_source):
     game_mode = plutonium_mode[2:] if plutonium_mode else mode
     exe = find_game(directory, root, game_mode, allowed)
     if plutonium_mode:
-        return prepare_plutonium(player, exe.parent, plutonium_source, plutonium_mode)
+        return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode)
 
     client = configure_client(exe.parent if exe else directory, player)
     status = (tr('Black Ops II {p0} : profil privé {p1} appliqué.', p0=player.name.upper(), p1=client)
               if client else tr('Black Ops II : aucun client LAN reconnu dans le dossier du jeu.'))
     print(status, file=sys.stderr, flush=True)
-    if mode == 'original':
-        return None, None
-    print(tr('Black Ops II {p0} : lancement de {p1}.', p0=player.name.upper(), p1=exe.name),
-          file=sys.stderr, flush=True)
-    return exe.parent, shlex.join([f'./{exe.name}', *display_arguments()])
+    return None, None
 
 
 def copy_client_files(source, destination, *, sync):
@@ -175,12 +173,28 @@ def copy_client_files(source, destination, *, sync):
                 temporary.unlink(missing_ok=True)
 
 
-def prepare_plutonium(player, game, source, mode):
+def windows_game_path(game, root):
+    drive = child(root, 'drive_c').resolve()
+    if game.is_relative_to(drive):
+        # The UMU wrapper preserves the drive_c game path when it builds its
+        # materialized prefix. The original Linux mount path can disappear.
+        return str(PureWindowsPath('C:/', *game.relative_to(drive).parts))
+    return str(PureWindowsPath('Z:/', *game.parts[1:]))
+
+
+def prepare_plutonium(player, game, root, source, mode):
     binaries = private_child(source, 'bin')
     games = private_child(source, 'games')
-    if not (private_child(binaries, BOOTSTRAPPER).is_file()
-            and private_child(games, f'{mode}.exe').is_file()):
+    bootstrapper = private_child(binaries, BOOTSTRAPPER)
+    if not (bootstrapper.is_file() and private_child(games, f'{mode}.exe').is_file()):
         raise ValueError(tr('Black Ops II : copiez bin et games de Plutonium dans {p0}.', p0=source))
+    bink = private_child(game, 'binkw32.dll')
+    if not bink.is_file():
+        raise ValueError(tr('Black Ops II : binkw32.dll introuvable dans {p0}.', p0=game))
+    if b'_BinkWaitStopAsyncThread@4\0' not in bink.read_bytes():
+        print(tr('Black Ops II : symbole Bink attendu absent de {p0}. Vérifiez les fichiers du jeu.',
+                 p0=bink), file=sys.stderr, flush=True)
+    game_path = windows_game_path(game, root)
 
     # Put the executable inside the private game view so UMU can relocate
     # the executable and its working directory together into Proton.
@@ -194,8 +208,8 @@ def prepare_plutonium(player, game, source, mode):
 
     _, _, name = identity(player)
     port = HOST_PORT + int(player.name[1:]) - 1
-    args = [f'./{binaries.name}/{private_child(binaries, BOOTSTRAPPER).name}',
-            mode, '..', '+name', name, '-lan', *display_arguments(borderless=True),
+    args = [f'./{binaries.name}/{bootstrapper.name}',
+            mode, game_path, '+name', name, '-lan', *display_arguments(),
             '+set', 'net_port', str(port)]
     if mode == 't6zm' and player.name == 'j1':
         count = os.environ.get('PARTYDECK_SESSION_PLAYERS', '1')
@@ -206,6 +220,7 @@ def prepare_plutonium(player, game, source, mode):
                  p1=JOIN_HOST), file=sys.stderr, flush=True)
     print(tr('Black Ops II {p0} : Plutonium LAN ({p1}, port {p2}).',
              p0=player.name.upper(), p1=mode, p2=port), file=sys.stderr, flush=True)
+    print(tr('Black Ops II : dossier transmis à Plutonium {p0}.', p0=game_path), file=sys.stderr, flush=True)
     return runtime, shlex.join(args)
 
 
@@ -258,6 +273,7 @@ def install_hook(base, rom, player):
 if __name__ == '__main__':
     player, source, mode, directory, root = sys.argv[1:]
     try:
+        mode = validate({'mode': mode})['mode']
         cwd, command = prepare(Path(player), mode, Path(directory), Path(root), Path(source))
         if cwd is not None:
             if '\n' in str(cwd):
