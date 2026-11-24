@@ -106,6 +106,8 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', 'dont-starve-together'])]
     if adapter == DST:
+        if tab == 1:
+            return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
         return [('dst.language', tr('Langue du jeu'), list(DST_LANGUAGES)),
                 ('dst.fullscreen', tr('Plein écran'), [True, False]),
                 ('dst.hud_scale', tr('Taille de l’interface en jeu'), list(DST_HUD_SIZES)),
@@ -789,7 +791,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
-        if self.model.data and self.model.data.get('adapter') == DST:return (0,3)
+        if self.model.data and self.model.data.get('adapter') == DST:return (0,1,3)
         if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)

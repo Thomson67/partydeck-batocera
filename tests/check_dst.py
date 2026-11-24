@@ -24,6 +24,8 @@ with tempfile.TemporaryDirectory() as folder:
     assert recipe_for(rom).id == 'dst'
     assert validate(defaults(rom), rom)['adapter'] == dst.ADAPTER
     assert dst.validate({'language':'keep', 'music_j1_only':False}) == dst.defaults()
+    assert not dst.defaults()['resume_last_world']
+    assert dst.validate({**dst.defaults(), 'resume_last_world': True})['resume_last_world']
     assert not dst.matches(root/'Dont Starve.wine')
     game = root/'drive_c'/'dst'
     bin64 = game/'bin64'
@@ -82,6 +84,15 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'self.root:SetScale(' not in output.read('scripts/'+dst.PLAYER_STATUS)
         assert b'set_music' not in output.read('scripts/'+dst.TITLE)
         assert b'Profile.GetVolume' not in output.read('scripts/main.lua')
+    dst.patch_bundle(bundle, host, marker=marker, resume_token='a'*32)
+    with zipfile.ZipFile(host) as output:
+        resume = output.read(dst.MENU)
+        assert b'ShardSaveGameIndex:GetSlotLastTimePlayed(candidate)' in resume
+        assert b'previous == token' in resume
+        assert b'screen:CanResume()' in resume
+        assert b'screen:Create(true)' in resume
+    with zipfile.ZipFile(guest) as output:
+        assert b'partydeck_resume_session' not in output.read(dst.MENU)
     with zipfile.ZipFile(bundle) as stock:
         assert stock.read('scripts/'+dst.TITLE) == title
     try:

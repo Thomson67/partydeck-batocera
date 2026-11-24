@@ -30,7 +30,8 @@ LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
 
 
 def defaults():
-    return dict(language='keep', music_j1_only=False, fullscreen=True, hud_scale=125, text_scale=110)
+    return dict(language='keep', music_j1_only=False, fullscreen=True, hud_scale=125, text_scale=110,
+                resume_last_world=False)
 
 
 def validate(options):
@@ -39,6 +40,7 @@ def validate(options):
     if (not isinstance(options, dict) or not isinstance(options.get('language'), str)
             or options['language'] not in LANGUAGES or type(options.get('music_j1_only')) is not bool
             or type(options.get('fullscreen', True)) is not bool
+            or type(options.get('resume_last_world', False)) is not bool
             or type(options.get('hud_scale', 125)) is not int or options.get('hud_scale', 125) not in HUD_SIZES
             or type(options.get('text_scale', 110)) is not int or options.get('text_scale', 110) not in TEXT_SIZES):
         from partydeck_i18n import tr
@@ -150,7 +152,55 @@ def patch_host_ready(data, marker):
 ''')
 
 
-def patch_menu(data, host, size=None, marker=None):
+def resume_code(token):
+    if not re.fullmatch(r'[0-9a-f]{32}', token):
+        raise ValueError('invalid DST session token')
+    return b'''
+    if self.partydeck_resume_checked or not self.offline or self.leaving
+            or TheFrontEnd:GetActiveScreen() ~= self then return end
+    self.partydeck_resume_delay = (self.partydeck_resume_delay or 0) + dt
+    if self.partydeck_resume_delay < 2.5 then return end
+    self.partydeck_resume_checked = true
+
+    -- Keep this choice across SimReset when the host returns from the world.
+    local key, token = "partydeck_resume_session", "''' + token.encode('ascii') + b'''"
+    TheSim:GetPersistentString(key, function(found, previous)
+        if (found and previous == token) or self.leaving or TheFrontEnd:GetActiveScreen() ~= self then return end
+        TheSim:SetPersistentString(key, token, false, function()
+            if self.leaving or TheFrontEnd:GetActiveScreen() ~= self then return end
+            local slot, newest
+            for _, candidate in ipairs(ShardSaveGameIndex:GetValidSlots()) do
+                local played = ShardSaveGameIndex:GetSlotLastTimePlayed(candidate)
+                if type(played) == "number" and played > 0 and
+                        (not newest or played > newest or (played == newest and candidate < slot)) then
+                    slot, newest = candidate, played
+                end
+            end
+            if not slot then
+                print("[PartyDeck] No previously played world to resume")
+                return
+            end
+
+            local ServerCreationScreen = require("screens/redux/servercreationscreen")
+            self:_GoToOnlineScreen(function(previous_screen)
+                local screen = ServerCreationScreen(previous_screen, slot)
+                screen.inst:DoTaskInTime(SCREEN_FADE_TIME + 0.25, function()
+                    if TheFrontEnd:GetActiveScreen() ~= screen or not screen:CanResume() then return end
+                    if screen.server_settings_tab:GetOnlineMode() then
+                        print("[PartyDeck] Last world is online; waiting for host settings")
+                        return
+                    end
+                    print("[PartyDeck] Resuming last offline world", slot)
+                    screen:Create(true)
+                end)
+                return screen
+            end, {})
+        end)
+    end)
+'''
+
+
+def patch_menu(data, host, size=None, marker=None, resume_token=None):
     code = b''
     if size:
         width, height = size
@@ -185,6 +235,8 @@ def patch_menu(data, host, size=None, marker=None):
     end
 '''.encode('ascii')
     if not host:
+        if resume_token:
+            code += resume_code(resume_token)
         return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code)
     gate = b''
     if marker:
@@ -310,12 +362,12 @@ def patch_player_status(data, scale):
 
 
 def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False,
-                 fullscreen_size=None, hud_scale=100, text_scale=100, marker=None):
+                 fullscreen_size=None, hud_scale=100, text_scale=100, marker=None, resume_token=None):
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
-    if host or fullscreen_size:
-        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker)
+    if host or fullscreen_size or resume_token:
+        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker, resume_token)
     if marker and not host:
         changes[PLAYER_HUD] = lambda data: patch_host_ready(data, marker)
     if hud_scale != 100:
@@ -426,13 +478,16 @@ def prepare(player, directory, prefix, settings):
     temp = Path(tmp)
     try:
         size = tuple(int(os.environ.get(f'PARTYDECK_PLAYER_{axis}', '0')) for axis in ('WIDTH', 'HEIGHT'))
-        marker = ready_path(readiness_dir(player, os.environ.get('PARTYDECK_SESSION_TOKEN')))
-        patch_bundle(bundle, temp, None if player.name == 'j1' else '192.168.247.11',
+        token = os.environ.get('PARTYDECK_SESSION_TOKEN')
+        marker = ready_path(readiness_dir(player, token))
+        is_host = player.name == 'j1'
+        patch_bundle(bundle, temp, None if is_host else '192.168.247.11',
                      language=settings['language'],
                      mute_music=settings['music_j1_only'] and player.name != 'j1',
                      fullscreen_size=size if settings['fullscreen'] and all(0 < n <= 16384 for n in size) else None,
                      hud_scale=settings['hud_scale'],
-                     text_scale=settings['text_scale'], marker=marker)
+                     text_scale=settings['text_scale'], marker=marker,
+                     resume_token=token if is_host and settings['resume_last_world'] else None)
         temp.replace(source)
         overlay(bundle, source)
         print(f'PartyDeck DST {player.name.upper()}: LAN menus prepared.', flush=True)

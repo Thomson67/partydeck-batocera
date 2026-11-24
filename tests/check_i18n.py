@@ -21,6 +21,13 @@ for language, music, locale in (('fr', 'Musique uniquement pour J1', 'Français'
     assert dict((key, title) for key, title, _ in fields(3, 'dont-starve-together'))['dst.music_j1_only'] == music
     assert label_value('dst.language', 'french') == locale
 
+for language, resume in (('fr', 'Relancer automatiquement le dernier monde'),
+                         ('en', 'Automatically resume the last world')):
+    lang.set_language(language)
+    assert fields(1, 'dont-starve-together') == [('dst.resume_last_world', resume, [False, True])]
+    dst_app = SimpleNamespace(model=SimpleNamespace(data={'adapter': 'dont-starve-together'}))
+    assert 1 in App.available_tabs(dst_app)
+
 for language,host,automatic,campaign in (
         ('fr','Joueur hôte','Héberger et rejoindre automatiquement','Choisir dans le jeu'),
         ('en','Host player','Host and join automatically','Choose in game')):

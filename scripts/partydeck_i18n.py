@@ -403,6 +403,7 @@ EN = {
     'Forcer le plein écran fenêtré':'Force borderless fullscreen', 'Résolution adaptée au partage':'Fit resolution to player window',
     'Plein écran':'Fullscreen', 'Taille de l’interface en jeu':'In-game interface size',
     'Taille des textes des menus':'Menu text size',
+    'Relancer automatiquement le dernier monde':'Automatically resume the last world',
     'Préréglage graphique':'Graphics preset', 'Qualité PhysX':'PhysX quality',
     'Fichier INI (auto ou relatif au préfixe)':'INI file (auto or relative to prefix)',
     'Connexion automatique Anchor':'Connect to Anchor automatically', 'Room ID commun':'Shared Room ID',
