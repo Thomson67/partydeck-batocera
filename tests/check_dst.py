@@ -23,6 +23,7 @@ with tempfile.TemporaryDirectory() as folder:
     rom = root/"Don't Starve Together.wsquashfs"
     assert recipe_for(rom).id == 'dst'
     assert validate(defaults(rom), rom)['adapter'] == dst.ADAPTER
+    assert dst.validate({'language':'keep', 'music_j1_only':False}) == dst.defaults()
     assert not dst.matches(root/'Dont Starve.wine')
     game = root/'drive_c'/'dst'
     bin64 = game/'bin64'
@@ -33,6 +34,9 @@ with tempfile.TemporaryDirectory() as folder:
     with zipfile.ZipFile(bundle, 'w') as archive:
         archive.writestr('scripts/'+dst.TITLE, title)
         archive.writestr(dst.MENU, menu)
+        archive.writestr(dst.FRONTEND, '\n'.join(
+            f'function FrontEnd:{name}() return 1 end'
+            for name in ('GetHUDScale', 'GetProportionalHUDScale', 'GetCraftingMenuScale')))
         archive.writestr('scripts/main.lua', b'LOC = require("languages/loc")\nrequire("languages/language")')
         archive.writestr('scripts/mainfunctions.lua', b'function OnNetworkDisconnect( message, should_reset, force_immediate_reset, details, miscdata)\nend\n')
         archive.writestr('unrelated.lua', b'unmodified')
@@ -40,12 +44,15 @@ with tempfile.TemporaryDirectory() as folder:
     assert dst.find_bundle(bin64, root/'elsewhere') is None
     guest = root/'guest.zip'
     host = root/'host.zip'
-    dst.patch_bundle(bundle, guest, '192.168.247.11', language='french', mute_music=True)
+    dst.patch_bundle(bundle, guest, '192.168.247.11', language='french', mute_music=True,
+                     fullscreen_size=(1920, 540), hud_scale=125)
     dst.patch_bundle(bundle, host, language='french')
     with zipfile.ZipFile(guest) as output:
         assert b'server.ip == "192.168.247.11"' in output.read(dst.MENU)
         assert b'GetServerListingFromActualIndex(index)' in output.read(dst.MENU)
         assert b'JoinServer(selected)' in output.read(dst.MENU)
+        assert b'w == 1920 and h == 540' in output.read(dst.MENU)
+        assert b'original(self) * (125 / 100)' in output.read(dst.FRONTEND)
         assert b'StopSearchingServers' not in output.read(dst.MENU).split(b'Joining J1 over LAN', 1)[1].split(b'JoinServer(selected)', 1)[0]
         assert b'Network disconnect' in output.read('scripts/mainfunctions.lua')
         assert b'self.partydeck_wait - self.partydeck_first_seen >= 15' in output.read(dst.MENU)

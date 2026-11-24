@@ -16,6 +16,8 @@ BUNDLE = Path('data/databundles/scripts.zip')
 TITLE = 'screens/redux/mainscreen.lua'
 MENU = 'screens/redux/multiplayermainscreen.lua'
 MAIN = 'main.lua'
+FRONTEND = 'frontend.lua'
+HUD_SIZES = (100, 115, 125, 140)
 LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
              'german': 'Allemand', 'spanish': 'Espagnol', 'italian': 'Italien',
              'portuguese_br': 'Portugais brésilien', 'polish': 'Polonais',
@@ -24,17 +26,19 @@ LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
 
 
 def defaults():
-    return dict(language='keep', music_j1_only=False)
+    return dict(language='keep', music_j1_only=False, fullscreen=True, hud_scale=125)
 
 
 def validate(options):
     if options is None:
         return defaults()
     if (not isinstance(options, dict) or not isinstance(options.get('language'), str)
-            or options['language'] not in LANGUAGES or type(options.get('music_j1_only')) is not bool):
+            or options['language'] not in LANGUAGES or type(options.get('music_j1_only')) is not bool
+            or type(options.get('fullscreen', True)) is not bool
+            or type(options.get('hud_scale', 125)) is not int or options.get('hud_scale', 125) not in HUD_SIZES):
         from partydeck_i18n import tr
         raise ValueError(tr('Réglages de Don’t Starve Together invalides.'))
-    return options
+    return {**defaults(), **options}
 
 
 def matches(rom):
@@ -99,8 +103,43 @@ def patch_title(data, mute_music=False):
     return data
 
 
-def patch_menu(data, host):
-    return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', b'''
+def patch_menu(data, host, size=None):
+    code = b''
+    if size:
+        width, height = size
+        code = f'''
+    if TheFrontEnd:GetActiveScreen() == self and not self.partydeck_display then
+        self.partydeck_display_delay = (self.partydeck_display_delay or 0) + dt
+        if self.partydeck_display_delay >= 1.5 then
+            self.partydeck_display = true
+            self.inst:DoTaskInTime(0, function()
+                if TheFrontEnd:GetActiveScreen() ~= self then
+                    self.partydeck_display = nil
+                    return
+                end
+                local ok, err = pcall(function()
+                    local graphics = TheFrontEnd:GetGraphicsOptions()
+                    local mode = graphics:GetCurrentDisplayModeID(0)
+                    local w, h = graphics:GetDisplayMode(0, mode)
+                    if not (graphics:IsFullScreen() and w == {width} and h == {height}) then
+                        for i = 0, graphics:GetNumDisplayModes(0) - 1 do
+                            w, h = graphics:GetDisplayMode(0, i)
+                            if w == {width} and h == {height} then
+                                graphics:SetDisplayMode(0, i, true)
+                                return
+                            end
+                        end
+                        print("[PartyDeck] Split fullscreen mode unavailable")
+                    end
+                end)
+                if not ok then print("[PartyDeck] Fullscreen:", err) end
+            end)
+        end
+    end
+'''.encode('ascii')
+    if not host:
+        return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code)
+    return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code + b'''
     if not self.offline or TheFrontEnd:GetActiveScreen() ~= self
             or self.partydeck_joined or TheNet:HasPendingConnection() then
         return
@@ -154,12 +193,35 @@ end
     return insert(data, b'LOC = require("languages/loc")', code)
 
 
-def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False):
+def patch_hud(data, hud_scale):
+    methods = ('GetHUDScale', 'GetProportionalHUDScale', 'GetCraftingMenuScale')
+    for method in methods:
+        if f'function FrontEnd:{method}()'.encode('ascii') not in data:
+            raise ValueError('unrecognized DST HUD methods')
+    names = ', '.join(f'"{method}"' for method in methods)
+    return data + f'''
+
+local function partydeck_scale_hud(method)
+    local original = FrontEnd[method]
+    FrontEnd[method] = function(self)
+        return original(self) * ({hud_scale} / 100)
+    end
+end
+for _, method in ipairs({{{names}}}) do
+    partydeck_scale_hud(method)
+end
+'''.encode('ascii')
+
+
+def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False,
+                 fullscreen_size=None, hud_scale=100):
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
-    if host:
-        changes[MENU] = lambda data: patch_menu(data, host)
+    if host or fullscreen_size:
+        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size)
+    if hud_scale != 100:
+        changes[FRONTEND] = lambda data: patch_hud(data, hud_scale)
     with zipfile.ZipFile(source) as stock, zipfile.ZipFile(destination, 'w') as output:
         members = {}
         for name, patch in changes.items():
@@ -261,9 +323,12 @@ def prepare(player, directory, prefix, settings):
     os.close(fd)
     temp = Path(tmp)
     try:
+        size = tuple(int(os.environ.get(f'PARTYDECK_PLAYER_{axis}', '0')) for axis in ('WIDTH', 'HEIGHT'))
         patch_bundle(bundle, temp, None if player.name == 'j1' else '192.168.247.11',
                      language=settings['language'],
-                     mute_music=settings['music_j1_only'] and player.name != 'j1')
+                     mute_music=settings['music_j1_only'] and player.name != 'j1',
+                     fullscreen_size=size if settings['fullscreen'] and all(0 < n <= 16384 for n in size) else None,
+                     hud_scale=settings['hud_scale'])
         temp.replace(source)
         overlay(bundle, source)
         print(f'PartyDeck DST {player.name.upper()}: LAN menus prepared.', flush=True)

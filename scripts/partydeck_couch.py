@@ -36,7 +36,8 @@ from partydeck_storage import (settings as storage_settings, save_settings as sa
 
 from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
                                discover_outputs, output_choices, output_label)
-from partydeck_dst import ADAPTER as DST, LANGUAGES as DST_LANGUAGES, defaults as dst_defaults, matches as matches_dst
+from partydeck_dst import (ADAPTER as DST, LANGUAGES as DST_LANGUAGES, HUD_SIZES as DST_HUD_SIZES,
+                           defaults as dst_defaults, matches as matches_dst)
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
@@ -105,6 +106,8 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', 'dont-starve-together'])]
     if adapter == DST:
         return [('dst.language', tr('Langue du jeu'), list(DST_LANGUAGES)),
+                ('dst.fullscreen', tr('Plein écran'), [True, False]),
+                ('dst.hud_scale', tr('Taille de l’interface en jeu'), list(DST_HUD_SIZES)),
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter == 'celestenet':
         if tab == 2:
@@ -266,6 +269,8 @@ def label_value(key, value):
         return tr(CELESTE_LANGUAGES[value])
     if key == 'dst.language':
         return tr(DST_LANGUAGES[value])
+    if key == 'dst.hud_scale':
+        return f'{value} %'
     if key == 'l4d2.language':
         return tr(L4D2_LANGUAGES[value])
     if key == 'sm64coopdx.language':
