@@ -37,6 +37,7 @@ from partydeck_storage import (settings as storage_settings, save_settings as sa
 from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
                                discover_outputs, output_choices, output_label)
 from partydeck_dst import (ADAPTER as DST, LANGUAGES as DST_LANGUAGES, HUD_SIZES as DST_HUD_SIZES,
+                           TEXT_SIZES as DST_TEXT_SIZES,
                            defaults as dst_defaults, matches as matches_dst)
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
@@ -108,6 +109,7 @@ def fields(tab, adapter='standard', celeste_skins=()):
         return [('dst.language', tr('Langue du jeu'), list(DST_LANGUAGES)),
                 ('dst.fullscreen', tr('Plein écran'), [True, False]),
                 ('dst.hud_scale', tr('Taille de l’interface en jeu'), list(DST_HUD_SIZES)),
+                ('dst.text_scale', tr('Taille des textes des menus'), list(DST_TEXT_SIZES)),
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter == 'celestenet':
         if tab == 2:
@@ -269,7 +271,7 @@ def label_value(key, value):
         return tr(CELESTE_LANGUAGES[value])
     if key == 'dst.language':
         return tr(DST_LANGUAGES[value])
-    if key == 'dst.hud_scale':
+    if key in ('dst.hud_scale', 'dst.text_scale'):
         return f'{value} %'
     if key == 'l4d2.language':
         return tr(L4D2_LANGUAGES[value])

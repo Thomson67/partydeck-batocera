@@ -34,6 +34,7 @@ with tempfile.TemporaryDirectory() as folder:
     with zipfile.ZipFile(bundle, 'w') as archive:
         archive.writestr('scripts/'+dst.TITLE, title)
         archive.writestr(dst.MENU, menu)
+        archive.writestr(dst.TEXT, 'function Text:SetSize(sz)\n    self.inst.TextWidget:SetSize(sz)\n    self.size = sz\nend\n')
         archive.writestr(dst.FRONTEND, '\n'.join(
             f'function FrontEnd:{name}() return 1 end'
             for name in ('GetHUDScale', 'GetProportionalHUDScale', 'GetCraftingMenuScale')))
@@ -45,7 +46,7 @@ with tempfile.TemporaryDirectory() as folder:
     guest = root/'guest.zip'
     host = root/'host.zip'
     dst.patch_bundle(bundle, guest, '192.168.247.11', language='french', mute_music=True,
-                     fullscreen_size=(1920, 540), hud_scale=125)
+                     fullscreen_size=(1920, 540), hud_scale=125, text_scale=120)
     dst.patch_bundle(bundle, host, language='french')
     with zipfile.ZipFile(guest) as output:
         assert b'server.ip == "192.168.247.11"' in output.read(dst.MENU)
@@ -53,6 +54,8 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'JoinServer(selected)' in output.read(dst.MENU)
         assert b'w == 1920 and h == 540' in output.read(dst.MENU)
         assert b'original(self) * (125 / 100)' in output.read(dst.FRONTEND)
+        assert b'SetSize(sz * (120 / 100))' in output.read(dst.TEXT)
+        assert b'self.size = sz' in output.read(dst.TEXT)
         assert b'StopSearchingServers' not in output.read(dst.MENU).split(b'Joining J1 over LAN', 1)[1].split(b'JoinServer(selected)', 1)[0]
         assert b'Network disconnect' in output.read('scripts/mainfunctions.lua')
         assert b'self.partydeck_wait - self.partydeck_first_seen >= 15' in output.read(dst.MENU)
@@ -65,6 +68,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert output.read('unrelated.lua') == b'unmodified'
     with zipfile.ZipFile(host) as output:
         assert output.read(dst.MENU) == menu
+        assert b'SetSize(sz)' in output.read(dst.TEXT)
         assert b'set_music' not in output.read('scripts/'+dst.TITLE)
         assert b'Profile.GetVolume' not in output.read('scripts/main.lua')
     with zipfile.ZipFile(bundle) as stock:

@@ -17,7 +17,9 @@ TITLE = 'screens/redux/mainscreen.lua'
 MENU = 'screens/redux/multiplayermainscreen.lua'
 MAIN = 'main.lua'
 FRONTEND = 'frontend.lua'
+TEXT = 'widgets/text.lua'
 HUD_SIZES = (100, 115, 125, 140)
+TEXT_SIZES = (100, 110, 120, 130)
 LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
              'german': 'Allemand', 'spanish': 'Espagnol', 'italian': 'Italien',
              'portuguese_br': 'Portugais brésilien', 'polish': 'Polonais',
@@ -26,7 +28,7 @@ LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
 
 
 def defaults():
-    return dict(language='keep', music_j1_only=False, fullscreen=True, hud_scale=125)
+    return dict(language='keep', music_j1_only=False, fullscreen=True, hud_scale=125, text_scale=110)
 
 
 def validate(options):
@@ -35,7 +37,8 @@ def validate(options):
     if (not isinstance(options, dict) or not isinstance(options.get('language'), str)
             or options['language'] not in LANGUAGES or type(options.get('music_j1_only')) is not bool
             or type(options.get('fullscreen', True)) is not bool
-            or type(options.get('hud_scale', 125)) is not int or options.get('hud_scale', 125) not in HUD_SIZES):
+            or type(options.get('hud_scale', 125)) is not int or options.get('hud_scale', 125) not in HUD_SIZES
+            or type(options.get('text_scale', 110)) is not int or options.get('text_scale', 110) not in TEXT_SIZES):
         from partydeck_i18n import tr
         raise ValueError(tr('Réglages de Don’t Starve Together invalides.'))
     return {**defaults(), **options}
@@ -213,8 +216,17 @@ end
 '''.encode('ascii')
 
 
+def patch_text(data, scale):
+    call = b'self.inst.TextWidget:SetSize(sz)'
+    if data.count(call) != 1:
+        raise ValueError('unrecognized DST text widget')
+    # Keep the logical size intact for widgets that read it back to shrink or
+    # animate labels. Scaling the input would compound on those repeated calls.
+    return data.replace(call, f'self.inst.TextWidget:SetSize(sz * ({scale} / 100))'.encode('ascii'))
+
+
 def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False,
-                 fullscreen_size=None, hud_scale=100):
+                 fullscreen_size=None, hud_scale=100, text_scale=100):
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
@@ -222,6 +234,8 @@ def patch_bundle(source, destination, host=None, *, language='keep', mute_music=
         changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size)
     if hud_scale != 100:
         changes[FRONTEND] = lambda data: patch_hud(data, hud_scale)
+    if text_scale != 100:
+        changes[TEXT] = lambda data: patch_text(data, text_scale)
     with zipfile.ZipFile(source) as stock, zipfile.ZipFile(destination, 'w') as output:
         members = {}
         for name, patch in changes.items():
@@ -328,7 +342,8 @@ def prepare(player, directory, prefix, settings):
                      language=settings['language'],
                      mute_music=settings['music_j1_only'] and player.name != 'j1',
                      fullscreen_size=size if settings['fullscreen'] and all(0 < n <= 16384 for n in size) else None,
-                     hud_scale=settings['hud_scale'])
+                     hud_scale=settings['hud_scale'],
+                     text_scale=settings['text_scale'])
         temp.replace(source)
         overlay(bundle, source)
         print(f'PartyDeck DST {player.name.upper()}: LAN menus prepared.', flush=True)
