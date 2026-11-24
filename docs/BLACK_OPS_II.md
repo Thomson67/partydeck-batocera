@@ -33,10 +33,12 @@ La campagne garde sa commande d’origine dans EmulationStation. Si vous
 utilisez UMU, lancez d’abord le jeu en solo avec le même runner pour initialiser
 son Steam Runtime.
 
-Pour le partage d’écran, Windows Party expose un mode de rendu 16:9 d’au
-moins 1280×720 et démarre Plutonium en fenêtré sans bordure. Gamescope adapte ensuite
-l’image à la place de chaque joueur. Le journal distingue la résolution du
-jeu de la taille de la fenêtre.
+À deux joueurs en partage horizontal, **Remplir le partage horizontal**
+active un rendu Plutonium au format de chaque moitié de l’écran. Sur un
+écran 1920×1080, chaque joueur a une fenêtre 1920×540 et le jeu rend en
+2560×720 (32:9). Gamescope réduit l’image à la taille de la fenêtre. Vous
+pouvez désactiver cette option pour reprendre le rendu 16:9. Le journal
+distingue la résolution du jeu de la taille de la fenêtre.
 
 ## Modes et bots
 

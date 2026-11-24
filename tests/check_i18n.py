@@ -47,12 +47,13 @@ for language,host,automatic,campaign in (
     assert label_value('l4d2.campaign','c14m1_junkyard')=='14 · The Last Stand'
     l4d2_options={key for key,_,_ in fields(2,'l4d2-goldberg')}
     assert {'l4d2.campaign','l4d2.campaign_mode'}.isdisjoint(l4d2_options)
-for language, mode, multiplayer, original, catalog in (
-        ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental'),
-        ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN')):
+for language, mode, multiplayer, original, catalog, horizontal in (
+        ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental', 'Remplir le partage horizontal'),
+        ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN', 'Fill horizontal split-screen')):
     lang.set_language(language)
     assert fields(1, 'black-ops-2') == [
-        ('bo2.mode', mode, ['plutonium-mp', 'plutonium-zm', 'original'])]
+        ('bo2.mode', mode, ['plutonium-mp', 'plutonium-zm', 'original']),
+        ('bo2.fill_horizontal', horizontal, [True, False])]
     assert label_value('bo2.mode', 'original') == original
     assert label_value('bo2.mode', 'plutonium-mp') == f'{multiplayer} · Plutonium LAN'
     assert label_value('bo2.mode', 'plutonium-zm') == 'Zombies · Plutonium LAN'

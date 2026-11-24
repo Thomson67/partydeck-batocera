@@ -733,7 +733,7 @@ def run_compositor(command):
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
-                 track_runner=False, dst=False):
+                 track_runner=False, dst=False, split=None):
     _, _, width, height = rectangle
     bo2_resolution = None
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
@@ -743,10 +743,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            from partydeck_bo2 import ADAPTER as BO2, render_size
+            from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, render_size
             adapter = profile.get('adapter')
             if adapter == BO2:
-                render_width, render_height = render_size(width, height)
+                settings = profile['bo2']
+                fill_horizontal = (player_count == 2 and split == 'horizontal'
+                                   and settings['mode'] in PLUTONIUM_MODES and settings['fill_horizontal'])
+                render_width, render_height = render_size(width, height, fill_horizontal=fill_horizontal)
                 args.extend(['-w', str(render_width), '-h', str(render_height)])
                 bo2_resolution = f'{render_width}x{render_height}'
                 print(tr('Black Ops II {p0} : rendu {p1}, fenêtre {p2}.',
@@ -1202,7 +1205,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                                           network=network,network_index=0 if celestenet else index-1,
                                           session_token=session_token,player_count=len(players),
                                           l4d2_launch=l4d2_launch,celestenet=celestenet,
-                                          celeste_options=celeste_options,track_runner=track_runner,dst=dst))
+                                          celeste_options=celeste_options,track_runner=track_runner,dst=dst,
+                                          split=split))
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)

@@ -240,14 +240,24 @@ with patch.object(coop.subprocess, 'Popen') as popen:
                       celeste_options={'language': 'french'})
     assert '-w' not in popen.call_args.args[0]
 
-# Black Ops II's D3D11 renderer sees a standard mode, independent of the split.
+# Black Ops II's render size follows the horizontal slots without stretching.
+settings = dict(mode='plutonium-mp', fill_horizontal=True)
 with (patch.object(coop.subprocess, 'Popen') as popen,
       patch.object(coop, 'sandbox_arguments', return_value=[]),
       patch('partydeck_profiles.profile_path', return_value=Path(__file__)),
-      patch('partydeck_profiles.read_profile', return_value={'adapter': 'black-ops-2'})):
+      patch('partydeck_profiles.read_profile', return_value={'adapter': 'black-ops-2', 'bo2': settings})):
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),
-                      'bo2-j2', saves=base/'saves')
+                      'bo2-j2', saves=base/'saves', player_count=2, split='horizontal')
     args = popen.call_args.args[0]
-    for option, size in (('-w', '1280'), ('-h', '720'), ('-W', '1920'), ('-H', '540')):
+    for option, size in (('-w', '2560'), ('-h', '720'), ('-W', '1920'), ('-H', '540')):
         assert args[args.index(option) + 1] == size
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '2560x720'
+
+    settings['fill_horizontal'] = False
+    coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),
+                      'bo2-j2', saves=base/'saves', player_count=2, split='horizontal')
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'
+    settings['fill_horizontal'] = True
+    coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080),
+                      'bo2-j2', saves=base/'saves', player_count=2, split='vertical')
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'

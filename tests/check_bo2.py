@@ -42,15 +42,15 @@ with TemporaryDirectory() as folder:
         data = defaults(rom)
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
-        assert data['bo2'] == {'mode': 'plutonium-mp'}
+        assert data['bo2'] == {'mode': 'plutonium-mp', 'fill_horizontal': True}
         for old_mode in ('mp', 'zm', 'original'):
-            data['bo2']['mode'] = old_mode
+            data['bo2'] = {'mode': old_mode}
             path = profile_path(base, rom)
             path.parent.mkdir(exist_ok=True)
             path.write_text(json.dumps(data))
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
-            assert migrated['bo2'] == {'mode': expected_mode}
+            assert migrated['bo2'] == {'mode': expected_mode, 'fill_horizontal': True}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
@@ -70,6 +70,11 @@ with TemporaryDirectory() as folder:
     assert bo2.render_size(960, 1080) == (1280, 720)
     assert bo2.render_size(960, 540) == (1280, 720)
     assert bo2.render_size(1920, 1080) == (1920, 1080)
+    assert bo2.render_size(1920, 540, fill_horizontal=True) == (2560, 720)
+    assert bo2.render_size(2560, 720, fill_horizontal=True) == (2560, 720)
+    assert bo2.render_size(3840, 1080, fill_horizontal=True) == (3840, 1080)
+    assert bo2.render_size(1366, 384, fill_horizontal=True) == (2561, 720)
+    assert not bo2.validate({'mode': 'plutonium-mp', 'fill_horizontal': False})['fill_horizontal']
 
     hits = []
     for player_name, entry, tag in (('j1', 'play_wine', 't6zm'),
@@ -91,8 +96,9 @@ with TemporaryDirectory() as folder:
         hook = [sys.executable, str(Path(bo2.__file__)), str(player), str(installed_client)]
         launcher = player / 'native.sh'
         launcher.write_text(bo2.instrument_native(source, hook, 'original'))
+        resolution = '2560x720' if entry == 'play_squashfs' else '1280x720'
         env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
-                   WINE_LANG='C' if entry == 'play_squashfs' else '', PARTYDECK_BO2_RESOLUTION='1280x720')
+                   WINE_LANG='C' if entry == 'play_squashfs' else '', PARTYDECK_BO2_RESOLUTION=resolution)
         command = ['bash', str(launcher), str(prefix), entry]
         result = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         assert result.stdout.splitlines() == [str(game), 't6sp.exe', '-solo']
@@ -108,9 +114,15 @@ with TemporaryDirectory() as folder:
         runtime = game / '.partydeck-plutonium'
         windows_game = 'Z:' + str(game).replace('/', chr(92)) if entry == 'play_pc' else r'C:\game'
         expected_pluto = [str(runtime), './bin/' + bo2.BOOTSTRAPPER, tag, windows_game,
-                          '+name', f'Player {player_name[1]}', '-lan',
-                          '+set', 'r_fullscreen', '2', '+set', 'r_mode', '1280x720', '+set', 'net_port',
-                          str(bo2.HOST_PORT + int(player_name[1]) - 1)]
+                          '+name', f'Player {player_name[1]}', '-lan']
+        if entry == 'play_squashfs':
+            expected_pluto += ['+set', 'r_fullscreen', '0', '+set', 'r_mode', '2560x720',
+                               '+set', 'r_customMode', '2560x720', '+set', 'r_aspectRatio', 'auto',
+                               '+set', 'vid_xpos', '0', '+set', 'vid_ypos', '0']
+        else:
+            expected_pluto += ['+set', 'r_fullscreen', '2', '+set', 'r_mode', '1280x720',
+                               '+set', 'r_customMode', '1280x720', '+set', 'r_aspectRatio', 'auto']
+        expected_pluto += ['+set', 'net_port', str(bo2.HOST_PORT + int(player_name[1]) - 1)]
         if player_name == 'j1':
             expected_pluto += ['+set', 'sp_minplayers', '2']
         else:

@@ -124,6 +124,8 @@ EN = {
     'Sur J1, démarrez la partie personnalisée. Dans la console de J2, entrez {p0}.': 'On P1, start the custom game. On P2, enter {p0} in the console.',
     'Lancement d’origine': 'Original launch',
     'Black Ops II · LAN expérimental': 'Black Ops II · Experimental LAN',
+    'Remplir le partage horizontal': 'Fill horizontal split-screen',
+    'Option de partage horizontal Black Ops II invalide.': 'Invalid Black Ops II horizontal split-screen setting.',
     'Mode Black Ops II invalide.': 'Invalid Black Ops II mode.',
     'Black Ops II : chemin redirigé dans la vue du joueur ({p0}).': 'Black Ops II: redirected path in the player view ({p0}).',
     'Black Ops II : {p0} introuvable. Vérifiez DIR dans autorun.cmd ou essayez le lancement d’origine.': 'Black Ops II: {p0} not found. Check DIR in autorun.cmd or try Original launch.',

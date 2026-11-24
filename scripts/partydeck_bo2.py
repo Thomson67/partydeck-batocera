@@ -1,5 +1,6 @@
 """Prepare the installed Black Ops II client in each player's private view."""
 import hashlib
+from math import ceil
 import os
 from pathlib import Path, PureWindowsPath
 import re
@@ -27,7 +28,11 @@ JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 DEFAULT_RENDER_SIZE = (1280, 720)
 
 
-def render_size(width, height):
+def render_size(width, height, *, fill_horizontal=False):
+    if fill_horizontal:
+        minimum_width, minimum_height = DEFAULT_RENDER_SIZE
+        render_height = max(height, minimum_height, ceil(minimum_width * height / width))
+        return round(width * render_height / height), render_height
     if width >= 1280 and height >= 720 and width * 9 == height * 16:
         return width, height
     return DEFAULT_RENDER_SIZE
@@ -36,8 +41,16 @@ def render_size(width, height):
 def display_arguments():
     width, height = DEFAULT_RENDER_SIZE
     resolution = os.environ.get('PARTYDECK_BO2_RESOLUTION', f'{width}x{height}')
-    return ['+set', 'r_fullscreen', '2', '+set', 'r_mode', resolution]
-
+    width, height = map(int, resolution.split('x'))
+    custom_mode = width * 9 != height * 16
+    # T6 computes the aspect ratio from the active resolution. Use a window
+    # for custom modes inside Gamescope's borderless player viewport.
+    args = ['+set', 'r_fullscreen', '0' if custom_mode else '2',
+            '+set', 'r_mode', resolution, '+set', 'r_customMode', resolution,
+            '+set', 'r_aspectRatio', 'auto']
+    if custom_mode:
+        args.extend(['+set', 'vid_xpos', '0', '+set', 'vid_ypos', '0'])
+    return args
 
 
 def matches(rom):
@@ -46,7 +59,7 @@ def matches(rom):
 
 def defaults(rom=None):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
-    return {'mode': mode}
+    return {'mode': mode, 'fill_horizontal': True}
 
 
 def validate(data):
@@ -55,7 +68,10 @@ def validate(data):
         mode = f'plutonium-{mode}'
     if mode not in tuple(MODES):
         raise ValueError(tr('Mode Black Ops II invalide.'))
-    return {'mode': mode}
+    fill_horizontal = data.get('fill_horizontal', True)
+    if type(fill_horizontal) is not bool:
+        raise ValueError(tr('Option de partage horizontal Black Ops II invalide.'))
+    return {'mode': mode, 'fill_horizontal': fill_horizontal}
 
 
 def private_child(directory, name):
