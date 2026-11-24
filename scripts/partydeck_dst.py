@@ -207,7 +207,7 @@ def resume_code(token):
 '''
 
 
-def patch_menu(data, host, size=None, marker=None, resume_token=None):
+def patch_menu(data, host, size=None, marker=None, resume_token=None, *, resume_last_world=False):
     code = b''
     if size:
         width, height = size
@@ -269,7 +269,10 @@ def patch_menu(data, host, size=None, marker=None, resume_token=None):
         end
     end
 '''
-    fallback_delay = b'45' if marker else b'15'
+    # Loading a saved world usually needs less time than generating a new one.
+    fallback_delay = b'15'
+    if marker:
+        fallback_delay = b'20' if resume_last_world else b'45'
     return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code + b'''
     if not self.offline or TheFrontEnd:GetActiveScreen() ~= self
             or self.partydeck_joined or TheNet:HasPendingConnection() then
@@ -379,12 +382,14 @@ def patch_player_info(data, scale):
 
 
 def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False,
-                 fullscreen_size=None, hud_scale=100, text_scale=100, marker=None, resume_token=None):
+                 fullscreen_size=None, hud_scale=100, text_scale=100, marker=None, resume_token=None,
+                 resume_last_world=False):
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
     if host or fullscreen_size or resume_token:
-        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker, resume_token)
+        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker, resume_token,
+                                                resume_last_world=resume_last_world)
     if marker and not host:
         changes[PLAYER_HUD] = lambda data: patch_host_ready(data, marker)
     if hud_scale != 100:
@@ -506,7 +511,8 @@ def prepare(player, directory, prefix, settings):
                      fullscreen_size=size if settings['fullscreen'] and all(0 < n <= 16384 for n in size) else None,
                      hud_scale=settings['hud_scale'],
                      text_scale=settings['text_scale'], marker=marker,
-                     resume_token=token if is_host and settings['resume_last_world'] else None)
+                     resume_token=token if is_host and settings['resume_last_world'] else None,
+                     resume_last_world=settings['resume_last_world'])
         temp.replace(source)
         overlay(bundle, source)
         print(f'PartyDeck DST {player.name.upper()}: LAN menus prepared.', flush=True)

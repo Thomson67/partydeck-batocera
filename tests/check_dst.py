@@ -98,6 +98,11 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'screen:Create(true)' in resume
     with zipfile.ZipFile(guest) as output:
         assert b'partydeck_resume_session' not in output.read(dst.MENU)
+    dst.patch_bundle(bundle, guest, '192.168.247.11', marker=marker, resume_last_world=True)
+    with zipfile.ZipFile(guest) as output:
+        client = output.read(dst.MENU)
+        assert b'self.partydeck_wait - self.partydeck_first_seen >= 20' in client
+        assert b'if self.partydeck_world_ready or ' in client
     with zipfile.ZipFile(bundle) as stock:
         assert stock.read('scripts/'+dst.TITLE) == title
     try:
