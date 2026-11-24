@@ -570,10 +570,8 @@ def _run_wine(original, target, player, saves=None):
             subprocess.run(["mount", "--bind", str(private), str(destination)], check=True)
     if saves is not None:
         from partydeck_profiles import install_party_runner_hook
-        if os.environ.get('PARTYDECK_TRACK_RUNNER') == '1':
-            install_party_runner_hook(original,player,track_runner=True)
-        else:
-            install_party_runner_hook(original,player)
+        install_party_runner_hook(original, player, track_runner=os.environ.get('PARTYDECK_TRACK_RUNNER') == '1',
+                                  mono_cache=player.parents[2]/'mono-cache')
         from partydeck_mangohud import install_hook as install_mangohud
         install_mangohud(original,player)
         from partydeck_anchor import install_hook
@@ -1135,6 +1133,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     hotkey = SessionHotkey()
     dst_ready = None
     try:
+        if party:
+            from partydeck_mono import prepare_mono
+            prepare_mono(original, base/'mono-cache')
         shared_runtimes = prepare_shared_steam_runtimes(
             UMU_HOME, base / ('runtime' if party else 'coop') / game_id)
         if shared_runtimes:

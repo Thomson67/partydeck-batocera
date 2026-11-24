@@ -422,25 +422,32 @@ def track_squashfs_runner(source):
     return block.subn(replace, source)
 
 
-def install_party_runner_hook(rom, player, *, track_runner=False):
+def install_party_runner_hook(rom, player, *, track_runner=False, mono_cache=None):
     runner=selected_party_runner(rom)
     hidraw=selected_party_hidraw(rom)
-    if runner is None and hidraw is None and not track_runner:return
+    if runner is None and hidraw is None and not track_runner and mono_cache is None:return
     binary=shutil.which('batocera-wine')
     if binary is None:raise RuntimeError(tr('batocera-wine introuvable.'))
     binary=Path(binary).resolve()
     replacement=player/'batocera-wine-party-runner'
     source = binary.read_text()
+    original_source = source
     if runner is not None or hidraw is not None:
         source = instrument_runner(source,runner,hidraw)
     if track_runner:
         tracked, count = track_squashfs_runner(source)
         if count != 1:
             print('Windows Party: native runner tracking unavailable.', flush=True)
-            if runner is None and hidraw is None:
-                return
         else:
             source = tracked
+    if mono_cache is not None:
+        from partydeck_mono import instrument_boot
+        boot = instrument_boot(source, mono_cache)
+        if boot == source:
+            print('Windows Party: Wine boot hook for Mono unavailable.', flush=True)
+        source = boot
+    if source == original_source:
+        return
     atomic_write(replacement,source,0o755)
     subprocess.run(['bash','-n',str(replacement)],check=True)
     subprocess.run(['mount','--bind',str(replacement),str(binary)],check=True)
