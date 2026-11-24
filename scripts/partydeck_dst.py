@@ -20,6 +20,7 @@ FRONTEND = 'frontend.lua'
 TEXT = 'widgets/text.lua'
 PLAYER_HUD = 'screens/playerhud.lua'
 PLAYER_STATUS = 'screens/playerstatusscreen.lua'
+PLAYER_INFO = 'screens/playerinfopopupscreen.lua'
 HUD_SIZES = (100, 115, 125, 140)
 TEXT_SIZES = (100, 110, 120, 130)
 LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
@@ -361,6 +362,16 @@ def patch_player_status(data, scale):
     return insert(data, anchor, f'\n        self.root:SetScale({amount}, {amount}, 1)'.encode('ascii'))
 
 
+def patch_player_info(data, scale):
+    # Inspecting your own character opens this popup, separate from the server
+    # player list. Scale its contents while keeping its right-side anchor.
+    anchor = b'self.root = self.anchor:AddChild(Widget("root"))'
+    if data.count(anchor) != 1:
+        return data
+    amount = f'{scale / 100:g}'
+    return insert(data, anchor, f'\n    self.root:SetScale({amount}, {amount}, 1)'.encode('ascii'))
+
+
 def patch_bundle(source, destination, host=None, *, language='keep', mute_music=False,
                  fullscreen_size=None, hud_scale=100, text_scale=100, marker=None, resume_token=None):
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
@@ -387,6 +398,8 @@ def patch_bundle(source, destination, host=None, *, language='keep', mute_music=
                 data = members[entry.filename](data)
             if hud_scale != 100 and entry.filename in (PLAYER_STATUS, 'scripts/' + PLAYER_STATUS):
                 data = patch_player_status(data, hud_scale)
+            if hud_scale != 100 and entry.filename in (PLAYER_INFO, 'scripts/' + PLAYER_INFO):
+                data = patch_player_info(data, hud_scale)
             if entry.filename in ('mainfunctions.lua', 'scripts/mainfunctions.lua'):
                 disconnect = b'function OnNetworkDisconnect( message, should_reset, force_immediate_reset, details, miscdata)'
                 if data.count(disconnect) == 1:
