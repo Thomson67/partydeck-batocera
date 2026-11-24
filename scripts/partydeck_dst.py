@@ -113,18 +113,20 @@ def patch_menu(data, host):
         return
     end
     if self.partydeck_search and TheNet:GetServerListingReadDirty() then
-        for _, server in ipairs(TheNet:GetServerListings() or {}) do
+        for index, server in ipairs(TheNet:GetServerListings() or {}) do
             if server.offline and server.ip == "''' + host.encode('ascii') + b'''" then
                 if self.partydeck_port ~= server.port or not self.partydeck_first_seen then
                     self.partydeck_port = server.port
                     self.partydeck_first_seen = self.partydeck_wait
                     print("[PartyDeck] J1 advertised; waiting for world startup")
                 elseif self.partydeck_wait - self.partydeck_first_seen >= 15 then
-                    self.partydeck_joined = true
-                    print("[PartyDeck] Joining J1 over LAN")
-                    TheNet:StopSearchingServers()
-                    JoinServer(server)
-                    return
+                    local selected = TheNet:GetServerListingFromActualIndex(index)
+                    if selected and selected.ip == server.ip and selected.port == server.port then
+                        self.partydeck_joined = true
+                        print("[PartyDeck] Joining J1 over LAN", selected.ip, selected.port)
+                        JoinServer(selected)
+                        return
+                    end
                 end
             end
         end
@@ -169,6 +171,10 @@ def patch_bundle(source, destination, host=None, *, language='keep', mute_music=
             data = stock.read(entry)
             if entry.filename in members:
                 data = members[entry.filename](data)
+            if entry.filename in ('mainfunctions.lua', 'scripts/mainfunctions.lua'):
+                disconnect = b'function OnNetworkDisconnect( message, should_reset, force_immediate_reset, details, miscdata)'
+                if data.count(disconnect) == 1:
+                    data = insert(data, disconnect, b'\n    print("[PartyDeck] Network disconnect", tostring(message))\n')
             output.writestr(entry, data)
 
 

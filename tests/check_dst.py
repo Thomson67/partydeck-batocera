@@ -34,6 +34,7 @@ with tempfile.TemporaryDirectory() as folder:
         archive.writestr('scripts/'+dst.TITLE, title)
         archive.writestr(dst.MENU, menu)
         archive.writestr('scripts/main.lua', b'LOC = require("languages/loc")\nrequire("languages/language")')
+        archive.writestr('scripts/mainfunctions.lua', b'function OnNetworkDisconnect( message, should_reset, force_immediate_reset, details, miscdata)\nend\n')
         archive.writestr('unrelated.lua', b'unmodified')
     assert dst.find_bundle(bin64, root) == bundle
     assert dst.find_bundle(bin64, root/'elsewhere') is None
@@ -43,7 +44,10 @@ with tempfile.TemporaryDirectory() as folder:
     dst.patch_bundle(bundle, host, language='french')
     with zipfile.ZipFile(guest) as output:
         assert b'server.ip == "192.168.247.11"' in output.read(dst.MENU)
-        assert b'JoinServer(server)' in output.read(dst.MENU)
+        assert b'GetServerListingFromActualIndex(index)' in output.read(dst.MENU)
+        assert b'JoinServer(selected)' in output.read(dst.MENU)
+        assert b'StopSearchingServers' not in output.read(dst.MENU).split(b'Joining J1 over LAN', 1)[1].split(b'JoinServer(selected)', 1)[0]
+        assert b'Network disconnect' in output.read('scripts/mainfunctions.lua')
         assert b'self.partydeck_wait - self.partydeck_first_seen >= 15' in output.read(dst.MENU)
         patched = output.read('scripts/'+dst.TITLE)
         assert patched.count(b'GoToMultiplayerMainMenu(true)') == 3
