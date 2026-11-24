@@ -55,7 +55,8 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'GetServerListingFromActualIndex(index)' in output.read(dst.MENU)
         assert b'JoinServer(selected)' in output.read(dst.MENU)
         client = output.read(dst.MENU)
-        assert client.index(b'if not self.partydeck_world_ready then return end') < client.index(b'TheNet:SearchLANServers(true)')
+        assert b'if not self.partydeck_world_ready then return end' not in client
+        assert b'Joining via LAN readiness fallback' in client
         assert b'io.open(' + marker in client
         assert b'w == 1920 and h == 540' in output.read(dst.MENU)
         assert b'original(self) * (125 / 100)' in output.read(dst.FRONTEND)
@@ -63,7 +64,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'self.size = sz' in output.read(dst.TEXT)
         assert b'StopSearchingServers' not in output.read(dst.MENU).split(b'Joining J1 over LAN', 1)[1].split(b'JoinServer(selected)', 1)[0]
         assert b'Network disconnect' in output.read('scripts/mainfunctions.lua')
-        assert b'self.partydeck_wait - self.partydeck_first_seen >= 15' in output.read(dst.MENU)
+        assert b'self.partydeck_wait - self.partydeck_first_seen >= 45' in client
         patched = output.read('scripts/'+dst.TITLE)
         assert patched.count(b'GoToMultiplayerMainMenu(true)') == 3
         assert b'SetDisplayMode' not in patched

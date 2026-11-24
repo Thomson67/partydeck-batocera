@@ -126,14 +126,18 @@ def patch_host_ready(data, marker):
         self.inst:DoTaskInTime(1, function()
             if self.owner == maincharacter and maincharacter:IsValid() then
                 local ok, written = pcall(function()
-                    local file = io.open(''' + marker + b''', "w")
-                    if not file then return false end
-                    file:write("ready")
-                    return file:close()
+                    local file = assert(io.open(''' + marker + b''', "w"))
+                    local result, err = file:write("ready")
+                    local closed, close_err = file:close()
+                    assert(result, err)
+                    return assert(closed, close_err)
                 end)
                 self.partydeck_world_ready = ok and written
-                print(self.partydeck_world_ready and "[PartyDeck] J1 world ready"
-                    or "[PartyDeck] Could not signal J1 world readiness")
+                if self.partydeck_world_ready then
+                    print("[PartyDeck] J1 world ready")
+                else
+                    print("[PartyDeck] Could not signal J1 world readiness:", tostring(written))
+                end
             end
         end)
     end
@@ -204,8 +208,8 @@ def patch_menu(data, host, size=None, marker=None):
             TheNet:StopSearchingServers()
         end
     end
-    if not self.partydeck_world_ready then return end
 '''
+    fallback_delay = b'45' if marker else b'15'
     return insert(data, b'function MultiplayerMainScreen:OnUpdate(dt)', code + b'''
     if not self.offline or TheFrontEnd:GetActiveScreen() ~= self
             or self.partydeck_joined or TheNet:HasPendingConnection() then
@@ -229,10 +233,13 @@ def patch_menu(data, host, size=None, marker=None):
                         print("[PartyDeck] J1 advertised; waiting for world startup")
                     end
                 end
-                if self.partydeck_world_ready or self.partydeck_wait - self.partydeck_first_seen >= 15 then
+                if self.partydeck_world_ready or self.partydeck_wait - self.partydeck_first_seen >= ''' + fallback_delay + b''' then
                     local selected = TheNet:GetServerListingFromActualIndex(index)
                     if selected and selected.ip == server.ip and selected.port == server.port then
                         self.partydeck_joined = true
+                        if not self.partydeck_world_ready then
+                            print("[PartyDeck] Joining via LAN readiness fallback")
+                        end
                         print("[PartyDeck] Joining J1 over LAN", selected.ip, selected.port)
                         JoinServer(selected)
                         return
