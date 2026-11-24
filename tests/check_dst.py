@@ -61,6 +61,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'GetServerListingFromActualIndex(index)' in output.read(dst.MENU)
         assert b'JoinServer(selected)' in output.read(dst.MENU)
         client = output.read(dst.MENU)
+        assert b'Profile:SetHUDSize(10)' in client and b'Profile:SetCraftingMenuSize(10)' in client
         assert b'if not self.partydeck_world_ready then return end' not in client
         assert b'Joining via LAN readiness fallback' in client
         assert b'io.open(' + marker in client
@@ -81,7 +82,9 @@ with tempfile.TemporaryDirectory() as folder:
         assert b'LANGUAGE.FRENCH' in output.read('scripts/main.lua')
         assert output.read('unrelated.lua') == b'unmodified'
     with zipfile.ZipFile(host) as output:
-        assert output.read(dst.MENU) == menu
+        host_menu = output.read(dst.MENU)
+        assert b'Profile:SetHUDSize(10)' in host_menu and b'Profile:SetCraftingMenuSize(10)' in host_menu
+        assert b'JoinServer' not in host_menu
         assert b'J1 world ready' in output.read(dst.PLAYER_HUD)
         assert b'pcall(os.remove, ' + marker in output.read(dst.PLAYER_HUD)
         assert b'SetSize(sz)' in output.read(dst.TEXT)

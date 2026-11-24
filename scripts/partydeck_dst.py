@@ -208,10 +208,16 @@ def resume_code(token):
 
 
 def patch_menu(data, host, size=None, marker=None, resume_token=None, *, resume_last_world=False):
-    code = b''
+    code = b'''
+    if not self.partydeck_ui_size and TheFrontEnd:GetActiveScreen() == self then
+        self.partydeck_ui_size = true
+        Profile:SetHUDSize(10)
+        Profile:SetCraftingMenuSize(10)
+    end
+'''
     if size:
         width, height = size
-        code = f'''
+        code += f'''
     if TheFrontEnd:GetActiveScreen() == self and not self.partydeck_display then
         self.partydeck_display_delay = (self.partydeck_display_delay or 0) + dt
         if self.partydeck_display_delay >= 1.5 then
@@ -387,9 +393,8 @@ def patch_bundle(source, destination, host=None, *, language='keep', mute_music=
     changes = {TITLE: lambda data: patch_title(data, mute_music)}
     if language != 'keep' or mute_music:
         changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
-    if host or fullscreen_size or resume_token:
-        changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker, resume_token,
-                                                resume_last_world=resume_last_world)
+    changes[MENU] = lambda data: patch_menu(data, host, fullscreen_size, marker, resume_token,
+                                            resume_last_world=resume_last_world)
     if marker and not host:
         changes[PLAYER_HUD] = lambda data: patch_host_ready(data, marker)
     if hud_scale != 100:
