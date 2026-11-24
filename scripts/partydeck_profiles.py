@@ -19,7 +19,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 from partydeck_migrate import MEDIA_FIELDS, PARTY_ROMS
-from partydeck_dst import ADAPTER as DST, matches as matches_dst
+from partydeck_dst import ADAPTER as DST, defaults as dst_defaults, matches as matches_dst, validate as validate_dst
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
 MARKER = "# Entrée gérée par PartyDeck Wine"
@@ -67,7 +67,7 @@ def defaults(rom):
     if matches_celeste(rom):
         data.update(adapter=celestenet, celestenet=celeste_defaults())
     if matches_dst(rom):
-        data['adapter'] = DST
+        data.update(adapter=DST, dst=dst_defaults())
     return data
 
 
@@ -111,6 +111,8 @@ def validate(data, rom):
     if data.get('adapter') == 'celestenet':
         from partydeck_celestenet import validate as validate_celeste
         data['celestenet'] = validate_celeste(data.get('celestenet'))
+    if data.get('adapter') == DST:
+        data['dst'] = validate_dst(data.get('dst'))
     return data
 
 

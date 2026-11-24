@@ -36,7 +36,7 @@ from partydeck_storage import (settings as storage_settings, save_settings as sa
 
 from partydeck_display import (settings as desktop_settings, save_settings as save_desktop_settings,
                                discover_outputs, output_choices, output_label)
-from partydeck_dst import matches as matches_dst
+from partydeck_dst import ADAPTER as DST, LANGUAGES as DST_LANGUAGES, defaults as dst_defaults, matches as matches_dst
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
@@ -103,6 +103,9 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', 'dont-starve-together'])]
+    if adapter == DST:
+        return [('dst.language', tr('Langue du jeu'), list(DST_LANGUAGES)),
+                ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter == 'celestenet':
         if tab == 2:
             rows = [(f'celestenet.names.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Nom')), None)
@@ -261,6 +264,8 @@ def label_value(key, value):
         return {'': tr('Conserver'), 'Original': tr('Madeline standard')}.get(value, value)
     if key == 'celestenet.language':
         return tr(CELESTE_LANGUAGES[value])
+    if key == 'dst.language':
+        return tr(DST_LANGUAGES[value])
     if key == 'l4d2.language':
         return tr(L4D2_LANGUAGES[value])
     if key == 'sm64coopdx.language':
@@ -358,6 +363,7 @@ class Model:
         self.data.setdefault('hkmp',hkmp_defaults())
         self.data.setdefault('hkmultiplayer',multi_defaults())
         self.data.setdefault('celestenet',celeste_defaults())
+        self.data.setdefault('dst', dst_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
@@ -387,6 +393,7 @@ class Model:
         if stored.get('adapter') != 'hollowknight-hkmp':stored.pop('hkmp',None)
         if stored.get('adapter') != 'hollowknight-hkmultiplayer':stored.pop('hkmultiplayer',None)
         if stored.get('adapter') != 'celestenet':stored.pop('celestenet', None)
+        if stored.get('adapter') != DST:stored.pop('dst', None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'windows-party'), 'ajouter', str(self.rom),
@@ -775,6 +782,7 @@ class App:
         self.notice, self.notice_until = text, time.monotonic() + 5
 
     def available_tabs(self):
+        if self.model.data and self.model.data.get('adapter') == DST:return (0,3)
         if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
@@ -1774,6 +1782,8 @@ class App:
                 if self.model.data['adapter'] == 'celestenet':
                     subtitle = (tr('CelesteNet · noms et skins des joueurs') if self.tab == 2 else
                                 tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.'))
+                if self.model.data['adapter'] == DST:
+                    subtitle = tr('Résolution adaptée au partage')
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':
                     subtitle=tr('HKMultiplayer · J1 ouvre le monde · connexion et code automatiques')
                 if self.model.data['adapter']=='hollowknight-hkmp':

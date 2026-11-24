@@ -361,6 +361,8 @@ EN = {
     'Sensibilité caméra · axe X':'Camera sensitivity · X axis','Sensibilité caméra · axe Y':'Camera sensitivity · Y axis',
     'Inverser la caméra · axe X':'Invert camera · X axis','Inverser la caméra · axe Y':'Invert camera · Y axis',
     'Langue du jeu':'Game language', 'Français':'French','Anglais':'English','Allemand':'German','Italien':'Italian',
+    'Portugais brésilien':'Brazilian Portuguese', 'Chinois simplifié':'Simplified Chinese',
+    'Chinois traditionnel':'Traditional Chinese', 'Réglages de Don’t Starve Together invalides.':'Invalid Don’t Starve Together settings.',
     'Espagnol':'Spanish','Portugais':'Portuguese','Néerlandais':'Dutch','Polonais':'Polish',
     'Tchèque':'Czech','Russe':'Russian','Japonais':'Japanese',
     'Musique':'Music','Bruitages':'Sound effects','Ambiance':'Environment',

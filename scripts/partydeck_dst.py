@@ -1,4 +1,5 @@
 """Private LAN startup for Don't Starve Together."""
+import json
 import os
 from pathlib import Path
 import re
@@ -13,6 +14,26 @@ ADAPTER = 'dont-starve-together'
 BUNDLE = Path('data/databundles/scripts.zip')
 TITLE = 'screens/redux/mainscreen.lua'
 MENU = 'screens/redux/multiplayermainscreen.lua'
+MAIN = 'main.lua'
+LANGUAGES = {'keep': 'Conserver', 'english': 'Anglais', 'french': 'Français',
+             'german': 'Allemand', 'spanish': 'Espagnol', 'italian': 'Italien',
+             'portuguese_br': 'Portugais brésilien', 'polish': 'Polonais',
+             'russian': 'Russe', 'korean': 'Coréen',
+             'chinese_s': 'Chinois simplifié', 'chinese_t': 'Chinois traditionnel'}
+
+
+def defaults():
+    return dict(language='keep', music_j1_only=False)
+
+
+def validate(options):
+    if options is None:
+        return defaults()
+    if (not isinstance(options, dict) or not isinstance(options.get('language'), str)
+            or options['language'] not in LANGUAGES or type(options.get('music_j1_only')) is not bool):
+        from partydeck_i18n import tr
+        raise ValueError(tr('Réglages de Don’t Starve Together invalides.'))
+    return options
 
 
 def matches(rom):
@@ -26,15 +47,38 @@ def insert(data, anchor, addition):
     return data.replace(anchor, anchor + addition, 1)
 
 
-def patch_title(data):
-    data = insert(data, b'function MainScreen:OnUpdate(dt)', b'''
+def patch_title(data, size=None, mute_music=False):
+    display = b''
+    if size:
+        width, height = size
+        display += f'''
+    if not self.partydeck_display then
+        self.partydeck_display = true
+        pcall(function()
+            local graphics = TheFrontEnd:GetGraphicsOptions()
+            for mode = 0, graphics:GetNumDisplayModes(0) - 1 do
+                local w, h = graphics:GetDisplayMode(0, mode)
+                if w == {width} and h == {height} then
+                    graphics:SetDisplayMode(0, mode, true)
+                    return
+                end
+            end
+        end)
+    end
+'''.encode('ascii')
+    if mute_music:
+        display += b'''
+    if not self.partydeck_music_muted then
+        self.partydeck_music_muted = true
+        TheMixer:SetLevel("set_music", 0)
+    end
+'''
+    data = insert(data, b'function MainScreen:OnUpdate(dt)', display + b'''
     if not self.partydeck_started and TheFrontEnd:GetActiveScreen() == self then
         self.partydeck_delay = (self.partydeck_delay or 0) + dt
         if self.partydeck_delay >= 2 then
             self.partydeck_started = true
-            self.partydeck_choose_offline = true
             self:OnLoginButton(true)
-            self.partydeck_choose_offline = nil
             return
         end
     end
@@ -43,14 +87,25 @@ def patch_title(data):
     # native login code already offers it. Preserve license and consent checks.
     pattern = rb'(local title = STRINGS\.UI\.MAINSCREEN\.STEAMOFFLINEMODE\b[\s\S]*?TheFrontEnd:PushScreen\(confirm\))'
     data, count = re.subn(pattern, lambda m: m[1] + b'''
-        if self.partydeck_choose_offline then
-            TheFrontEnd:PopScreen()
-            GoToMultiplayerMainMenu(true)
-            return
-        end
+        TheFrontEnd:PopScreen()
+        GoToMultiplayerMainMenu(true)
+        return
 ''', data)
     if count != 1:
         raise ValueError('unrecognized DST offline prompt')
+    # The same offline choice can be offered later by the login callback.
+    pattern = rb'(print\s*\(\s*"failed_communication"\s*\)[\s\S]*?TheFrontEnd:PushScreen\(confirm\))'
+    # The original failure branch already notifies the engine after this
+    # popup is shown. Run the offline choice immediately afterwards.
+    data = re.sub(pattern + rb'(\s*TheNet:NotifyAuthenticationFailure\(\))',
+                  lambda m: m[0] + b'''
+            TheFrontEnd:PopScreen()
+            GoToMultiplayerMainMenu(true)
+''', data, count=1)
+    # A cached login can succeed even in the private LAN. Keep that native
+    # login flow but still enter the offline menu.
+    data = re.sub(rb'GoToMultiplayerMainMenu\(\s*forceOffline or false\s*\)',
+                  b'GoToMultiplayerMainMenu(true)', data)
     return data
 
 
@@ -70,11 +125,17 @@ def patch_menu(data, host):
     if self.partydeck_search and TheNet:GetServerListingReadDirty() then
         for _, server in ipairs(TheNet:GetServerListings() or {}) do
             if server.offline and server.ip == "''' + host.encode('ascii') + b'''" then
-                self.partydeck_joined = true
-                print("[PartyDeck] Joining J1 over LAN")
-                TheNet:StopSearchingServers()
-                JoinServer(server)
-                return
+                if self.partydeck_port ~= server.port or not self.partydeck_first_seen then
+                    self.partydeck_port = server.port
+                    self.partydeck_first_seen = self.partydeck_wait
+                    print("[PartyDeck] J1 advertised; waiting for world startup")
+                elseif self.partydeck_wait - self.partydeck_first_seen >= 15 then
+                    self.partydeck_joined = true
+                    print("[PartyDeck] Joining J1 over LAN")
+                    TheNet:StopSearchingServers()
+                    JoinServer(server)
+                    return
+                end
             end
         end
     end
@@ -86,8 +147,25 @@ def patch_menu(data, host):
 ''')
 
 
-def patch_bundle(source, destination, host=None):
-    changes = {TITLE: patch_title}
+def patch_startup(data, language, mute_music):
+    code = b''
+    if language != 'keep':
+        code += b'\nProfile.GetLanguageID = function() return LANGUAGE.' + language.upper().encode('ascii') + b' end\n'
+    if mute_music:
+        code += b'''
+local partydeck_get_volume = Profile.GetVolume
+Profile.GetVolume = function(self)
+    local ambience, effects = partydeck_get_volume(self)
+    return ambience, effects, 0
+end
+'''
+    return insert(data, b'LOC = require("languages/loc")', code)
+
+
+def patch_bundle(source, destination, host=None, *, size=None, language='keep', mute_music=False):
+    changes = {TITLE: lambda data: patch_title(data, size, mute_music)}
+    if language != 'keep' or mute_music:
+        changes[MAIN] = lambda data: patch_startup(data, language, mute_music)
     if host:
         changes[MENU] = lambda data: patch_menu(data, host)
     with zipfile.ZipFile(source) as stock, zipfile.ZipFile(destination, 'w') as output:
@@ -117,7 +195,7 @@ def overlay(bundle, source):
     subprocess.run(['mount', '--bind', str(source), str(bundle)], check=True)
 
 
-def prepare(player, directory, prefix):
+def prepare(player, directory, prefix, settings):
     source = player/'dst-scripts.zip'
     source.unlink(missing_ok=True)
     bundle = find_bundle(directory, prefix)
@@ -128,7 +206,11 @@ def prepare(player, directory, prefix):
     os.close(fd)
     temp = Path(tmp)
     try:
-        patch_bundle(bundle, temp, None if player.name == 'j1' else '192.168.247.11')
+        size = tuple(int(os.environ.get(f'PARTYDECK_PLAYER_{axis}', '0')) for axis in ('WIDTH', 'HEIGHT'))
+        patch_bundle(bundle, temp, None if player.name == 'j1' else '192.168.247.11',
+                     size=size if all(0 < value <= 16384 for value in size) else None,
+                     language=settings['language'],
+                     mute_music=settings['music_j1_only'] and player.name != 'j1')
         temp.replace(source)
         overlay(bundle, source)
         print(f'PartyDeck DST {player.name.upper()}: LAN menus prepared.', flush=True)
@@ -163,13 +245,14 @@ def prepare_umu(player):
     return mounted
 
 
-def install_hook(base, player):
+def install_hook(base, player, rom):
     from partydeck_anchor import instrument_native
-    from partydeck_profiles import atomic_write
+    from partydeck_profiles import atomic_write, read_profile
 
     binary = Path(shutil.which('batocera-wine') or '/usr/bin/batocera-wine').resolve()
     launcher = player/'batocera-wine-dst'
-    hook = [sys.executable, str(base/'partydeck_dst.py'), str(player)]
+    settings = read_profile(base, rom)['dst']
+    hook = [sys.executable, str(base/'partydeck_dst.py'), str(player), json.dumps(settings)]
     try:
         atomic_write(launcher, instrument_native(binary.read_text(), hook, prefix_argument=True), 0o755)
         subprocess.run(['bash', '-n', str(launcher)], check=True)
@@ -179,7 +262,8 @@ def install_hook(base, player):
 
 
 if __name__ == '__main__':
-    player, directory, prefix = (Path(arg) for arg in sys.argv[1:])
+    player, settings, directory, prefix = sys.argv[1:]
+    player = Path(player)
     if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
         raise SystemExit('PartyDeck DST: player namespace required')
-    prepare(player, directory.resolve(), prefix.resolve())
+    prepare(player, Path(directory).resolve(), Path(prefix).resolve(), validate(json.loads(settings)))

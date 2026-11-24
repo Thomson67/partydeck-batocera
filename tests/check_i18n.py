@@ -15,6 +15,12 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
 from partydeck_catalog import COMMON
 
+for language, music, locale in (('fr', 'Musique uniquement pour J1', 'Français'),
+                                ('en', 'Music on player 1 only', 'French')):
+    lang.set_language(language)
+    assert dict((key, title) for key, title, _ in fields(3, 'dont-starve-together'))['dst.music_j1_only'] == music
+    assert label_value('dst.language', 'french') == locale
+
 for language,host,automatic,campaign in (
         ('fr','Joueur hôte','Héberger et rejoindre automatiquement','Choisir dans le jeu'),
         ('en','Host player','Host and join automatically','Choose in game')):

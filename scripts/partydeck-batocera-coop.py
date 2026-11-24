@@ -594,7 +594,7 @@ def _run_wine(original, target, player, saves=None):
         install_celestenet(Path(__file__).resolve().parent,player)
         if os.environ.get('PARTYDECK_DST') == '1':
             from partydeck_dst import install_hook as install_dst
-            install_dst(Path(__file__).resolve().parent, player)
+            install_dst(Path(__file__).resolve().parent, player, original)
     # Keep the original ROM name for Batocera's per-game runner/settings lookup.
     if saves is not None:
         from partydeck_autoconnect import install_hook as install_autoconnect
@@ -739,6 +739,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
             profile = read_profile(base,original)
             if profile.get('adapter') in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
+    if dst:
+        args.extend(['-w', str(width), '-h', str(height)])
     if celestenet:
         from partydeck_celestenet import viewport_variant
         if viewport_variant(width, height):
