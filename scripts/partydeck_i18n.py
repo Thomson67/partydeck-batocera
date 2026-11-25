@@ -161,6 +161,10 @@ EN = {
     'Format 16:9': '16:9 aspect ratio',
     'Option de partage horizontal Black Ops II invalide.': 'Invalid Black Ops II horizontal split-screen setting.',
     'Mode Black Ops II invalide.': 'Invalid Black Ops II mode.',
+    'Langue Black Ops II invalide.': 'Invalid Black Ops II language.',
+    'Black Ops II : fichiers de langue {p0} introuvables dans {p1}.':
+        'Black Ops II: {p0} language files not found in {p1}.',
+    'Black Ops II : fichier de langue invalide dans {p0}.': 'Black Ops II: invalid language file in {p0}.',
     'Black Ops II : chemin redirigé dans la vue du joueur ({p0}).': 'Black Ops II: redirected path in the player view ({p0}).',
     'Black Ops II : {p0} introuvable. Vérifiez DIR dans autorun.cmd ou essayez le lancement d’origine.': 'Black Ops II: {p0} not found. Check DIR in autorun.cmd or try Original launch.',
     'Black Ops II : joueur privé invalide.': 'Black Ops II: invalid private player.',

@@ -44,7 +44,7 @@ with TemporaryDirectory() as folder:
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
         assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'automatic_join': True,
-                               'open_custom_lobby': False}
+                               'open_custom_lobby': False, 'language': 'keep'}
         for old_mode in ('mp', 'zm', 'original'):
             data['bo2'] = {'mode': old_mode}
             path = profile_path(base, rom)
@@ -53,10 +53,10 @@ with TemporaryDirectory() as folder:
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
             assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native', 'automatic_join': True,
-                                       'open_custom_lobby': False}
+                                       'open_custom_lobby': False, 'language': 'keep'}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
-        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False)
+        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False, language='english')
         save_profile(base, rom, migrated)
         assert read_profile(base, rom)['bo2'] == migrated['bo2']
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
@@ -72,6 +72,7 @@ with TemporaryDirectory() as folder:
          patch.object(bo2.subprocess, 'run'):
         bo2.install_hook(base, rom, player)
         client.assert_called_once_with(base, 't6zm')
+        assert "--language english" in (player / 'batocera-wine-bo2').read_text()
         assert "plutonium-zm" in (player / 'batocera-wine-bo2').read_text()
         assert read_profile(base, rom)['bo2']['mode'] == 'plutonium-mp'
 
@@ -137,7 +138,14 @@ with TemporaryDirectory() as folder:
         subprocess.run(['bash', '-n', str(launcher)], check=True)
         env['PARTYDECK_SESSION_PLAYERS'] = '2'
         env[bo2.PUBLISH_DISPLAY] = '1'
+        for locale in ('english', 'french'):
+            (game / 'zone' / locale).mkdir(parents=True)
+        localization = game / 'localization.txt'
+        localization.write_bytes(b'french\r\nenglish\r\n')
+        launcher.write_text(bo2.instrument_native(source, hook[:2] + ['--language', 'english'] + hook[2:],
+                                                  pluto_mode, log=player_log))
         launched = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
+        assert localization.read_bytes() == b'english\r\nenglish\r\n'
         runtime = game / '.partydeck-plutonium'
         windows_game = 'Z:' + str(game).replace('/', chr(92)) if entry == 'play_pc' else r'C:\game'
         expected_pluto = [str(runtime), './bin/' + bo2.BOOTSTRAPPER, tag, windows_game,

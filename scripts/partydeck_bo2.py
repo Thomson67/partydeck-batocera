@@ -26,6 +26,7 @@ MODES = {
 }
 EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
+LANGUAGES = {'keep': 'Conserver', 'french': 'Français', 'english': 'Anglais'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
@@ -94,7 +95,8 @@ def matches(rom):
 
 def defaults(rom=None):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
-    return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False}
+    return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False,
+            'language': 'keep'}
 
 
 def validate(data):
@@ -112,8 +114,11 @@ def validate(data):
     open_custom_lobby = data.get('open_custom_lobby', False)
     if type(open_custom_lobby) is not bool:
         raise ValueError(tr('Option d’ouverture du salon Black Ops II invalide.'))
+    language = data.get('language', 'keep')
+    if language not in tuple(LANGUAGES):
+        raise ValueError(tr('Langue Black Ops II invalide.'))
     return {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join,
-            'open_custom_lobby': open_custom_lobby}
+            'open_custom_lobby': open_custom_lobby, 'language': language}
 
 
 def private_child(directory, name):
@@ -189,7 +194,7 @@ def configure_client(directory, player):
     return 'Goldberg'
 
 
-def prepare(player, mode, directory, root, plutonium_source):
+def prepare(player, mode, directory, root, plutonium_source, language='keep'):
     if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
         raise ValueError(tr('Black Ops II : espace privé du joueur requis.'))
     from partydeck_bottles import private_windows_paths
@@ -202,7 +207,7 @@ def prepare(player, mode, directory, root, plutonium_source):
     game_mode = plutonium_mode[2:] if plutonium_mode else mode
     exe = find_game(directory, root, game_mode, allowed)
     if plutonium_mode:
-        return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode)
+        return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode, language)
 
     client = configure_client(exe.parent if exe else directory, player)
     status = (tr('Black Ops II {p0} : profil privé {p1} appliqué.', p0=player.name.upper(), p1=client)
@@ -240,7 +245,27 @@ def windows_game_path(game, root):
     return str(PureWindowsPath('Z:/', *game.parts[1:]))
 
 
-def prepare_plutonium(player, game, root, source, mode):
+def apply_language(game, language):
+    zone = private_child(game, 'zone')
+    if not private_child(zone, language).is_dir():
+        raise ValueError(tr('Black Ops II : fichiers de langue {p0} introuvables dans {p1}.',
+                            p0=tr(LANGUAGES[language]), p1=zone))
+    path = private_child(game, 'localization.txt')
+    previous = path.read_bytes() if path.is_file() else b''
+    # Plutonium selects its language from the first entry in localization.txt.
+    # Retain the other entries and line endings from the installed game.
+    if previous:
+        updated, replaced = re.subn(rb'\A((?:\xef\xbb\xbf)?[ \t]*)[A-Za-z]+(?=[ \t\r\n]|$)',
+                                    lambda m: m[1] + language.encode('ascii'), previous, count=1)
+        if not replaced:
+            raise ValueError(tr('Black Ops II : fichier de langue invalide dans {p0}.', p0=game))
+    else:
+        updated = language.encode('ascii') + b'\r\n'
+    if updated != previous:
+        write_bytes(path, updated)
+
+
+def prepare_plutonium(player, game, root, source, mode, language='keep'):
     binaries = private_child(source, 'bin')
     games = private_child(source, 'games')
     bootstrapper = private_child(binaries, BOOTSTRAPPER)
@@ -263,6 +288,8 @@ def prepare_plutonium(player, game, root, source, mode):
     storage = private_child(source, 'storage')
     if storage.is_dir():
         copy_client_files(storage, private_child(runtime, storage.name), sync=False)
+    if language != 'keep':
+        apply_language(game, language)
 
     _, _, name = identity(player)
     port = HOST_PORT + int(player.name[1:]) - 1
@@ -604,7 +631,8 @@ def install_hook(base, rom, player):
     binary = Path(binary).resolve()
     mode = validate({'mode': os.environ.get(SESSION_MODE, profile['bo2']['mode'])})['mode']
     source = client_path(base, PLUTONIUM_MODES.get(mode)) or base / 'plutonium'
-    hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player), str(source)]
+    hook = [sys.executable, str(base / 'partydeck_bo2.py'), '--language', profile['bo2']['language'],
+            str(player), str(source)]
     replacement = player / 'batocera-wine-bo2'
     log = None
     token = os.environ.get('PARTYDECK_SESSION_TOKEN', '')
@@ -616,10 +644,17 @@ def install_hook(base, rom, player):
 
 
 if __name__ == '__main__':
-    player, source, mode, directory, root = sys.argv[1:]
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--language', choices=LANGUAGES, default='keep')
+    for field in ('player', 'source', 'mode', 'directory', 'root'):
+        parser.add_argument(field)
+    args = parser.parse_args()
     try:
-        mode = validate({'mode': mode})['mode']
-        cwd, command = prepare(Path(player), mode, Path(directory), Path(root), Path(source))
+        mode = validate({'mode': args.mode})['mode']
+        cwd, command = prepare(Path(args.player), mode, Path(args.directory), Path(args.root), Path(args.source),
+                               args.language)
         if cwd is not None:
             if '\n' in str(cwd):
                 raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=cwd))

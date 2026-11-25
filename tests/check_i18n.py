@@ -57,8 +57,11 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
         ('bo2.open_custom_lobby', 'Ouvrir Parties personnalisées au démarrage' if language == 'fr'
          else 'Open Custom Games at startup', [False, True]),
         ('bo2.automatic_join', automatic, [True, False]),
+        ('bo2.language', 'Langue du jeu' if language == 'fr' else 'Game language', ['keep', 'french', 'english']),
         ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
     assert lang.tr(BO2_MODES['original']) == original
+    assert label_value('bo2.language', 'french') == ('Français' if language == 'fr' else 'French')
+    assert label_value('bo2.language', 'english') == ('Anglais' if language == 'fr' else 'English')
     assert lang.tr('Choisir le mode de jeu') == ('Choisir le mode de jeu' if language == 'fr' else 'Choose the game mode')
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
     assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']
