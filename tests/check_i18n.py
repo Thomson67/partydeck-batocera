@@ -120,9 +120,12 @@ for language, automatic, skin, default_skin in (
     assert label_value(distance_mode[0], 'game') == (
         'Suivre la distance du jeu' if language == 'fr' else 'Follow the game’s camera distance')
     assert label_value(distance_mode[0], 'fixed') == ('Distance fixe' if language == 'fr' else 'Fixed distance')
-    assert [row[0].split('.')[-1] for row in gameplay[3:]] == ['third_x', 'third_y', 'first_x', 'first_y']
-    assert gameplay[-1][1] == ('Vue 1re personne et visée · inverser l’axe vertical' if language == 'fr'
+    assert [row[0].split('.')[-1] for row in gameplay[3:-1]] == ['third_x', 'third_y', 'first_x', 'first_y']
+    assert gameplay[-2][1] == ('Vue 1re personne et visée · inverser l’axe vertical' if language == 'fr'
                                 else 'First person and aiming · invert vertical axis')
+    assert gameplay[-1][:2] == ('ocarina-story-coop.remove_black_bars',
+        'Supprimer les bandes noires en cinématique et en visée' if language == 'fr'
+        else 'Remove black bars in cutscenes and while targeting')
     for key, _, choices in gameplay[3:]:
         assert choices == ['keep', 'on', 'off']
         assert label_value(key, 'keep') == ('Conserver' if language == 'fr' else 'Keep current')

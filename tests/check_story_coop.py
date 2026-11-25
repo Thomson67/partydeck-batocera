@@ -76,11 +76,12 @@ with TemporaryDirectory() as folder:
     assert story.validate({'camera_axes': {'first_y': 'off'}})['camera_axes'] == {
         'third_x': 'keep', 'third_y': 'keep', 'first_x': 'keep', 'first_y': 'off'}
     assert story.validate({})['camera_distance_mode'] == 'keep'
+    assert story.validate({})['remove_black_bars'] == 'keep'
     assert story.validate({'camera_distance_mode': 'fixed'})['camera_distance'] == 185
     for distance in (100, 140, 900):
         assert story.validate({'camera_distance': distance})['camera_distance'] == distance
     for invalid in ({'camera_distance': 99}, {'camera_distance': 901}, {'camera_distance': '140'},
-                    {'camera_distance': True}, {'camera_distance_mode': []}):
+                    {'camera_distance': True}, {'camera_distance_mode': []}, {'remove_black_bars': []}):
         try:
             story.validate(invalid)
         except ValueError:
@@ -206,18 +207,22 @@ with TemporaryDirectory() as folder:
                  patch.object(story, 'patch_client', return_value=False):
                 configured = options | {'camera_axes': {'third_x': 'on', 'third_y': 'off',
                                                         'first_x': 'off', 'first_y': 'on'},
-                                        'camera_distance_mode': 'fixed', 'camera_distance': 140}
+                                        'camera_distance_mode': 'fixed', 'camera_distance': 140,
+                                        'remove_black_bars': 'on'}
                 expected = {'FreeLook': {'InvertXAxis': 1, 'InvertYAxis': 0, 'UseGameDistance': 0,
                                          'MaxCameraDistance': 140},
                             'Controls': {'InvertAimingXAxis': 0, 'InvertAimingYAxis': 1}}
                 before = json.loads(path.read_text())
                 original_camera = {'InvertYAxis': 1, 'UseGameDistance': 0, 'MaxCameraDistance': 215}
                 before['CVars']['gSettings']['FreeLook'] = original_camera
+                before['CVars']['gEnhancements'] = {'DisableBlackBars': 0, 'Unrelated': 1}
                 path.write_text(json.dumps(before))
                 for _ in range(2):
                     story.configure_client(player, archive, private, player, configured, base / 'skins')
-                    current = json.loads(path.read_text())['CVars']['gSettings']
+                    cvars = json.loads(path.read_text())['CVars']
+                    current = cvars['gSettings']
                     assert {section: current[section] for section in expected} == expected
+                    assert cvars['gEnhancements'] == {'DisableBlackBars': 1, 'Unrelated': 1}
                 story.configure_client(player, archive, private, player,
                                        options | {'camera_distance_mode': 'game'}, base / 'skins')
                 adaptive = json.loads(path.read_text())['CVars']['gSettings']['FreeLook']
@@ -227,6 +232,15 @@ with TemporaryDirectory() as folder:
                 assert restored['FreeLook'] == original_camera
                 assert restored['Controls'] == {}
                 assert not (private / 'partydeck-camera-axes-original.json').exists()
+                before = json.loads(path.read_text())
+                assert before['CVars']['gEnhancements'] == {'DisableBlackBars': 0, 'Unrelated': 1}
+                before['CVars']['gEnhancements'].pop('DisableBlackBars')
+                path.write_text(json.dumps(before))
+                story.configure_client(player, archive, private, player,
+                                       options | {'remove_black_bars': 'off'}, base / 'skins')
+                assert json.loads(path.read_text())['CVars']['gEnhancements']['DisableBlackBars'] == 0
+                story.configure_client(player, archive, private, player, options, base / 'skins')
+                assert json.loads(path.read_text())['CVars']['gEnhancements'] == {'Unrelated': 1}
             player_mods = private / 'mods'
             player_mods.mkdir()
             pack = player_mods / '01 - Enhanced 3DS Link Reworked'

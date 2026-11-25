@@ -208,6 +208,7 @@ EN = {
     'Horloge commune du serveur': 'Shared server clock',
     'Cycle d’origine par joueur': 'Original cycle per player',
     'Caméra libre au stick droit': 'Free camera on right stick',
+    'Supprimer les bandes noires en cinématique et en visée': 'Remove black bars in cutscenes and while targeting',
     'Distance de la caméra libre': 'Free camera distance',
     'Suivre la distance du jeu': 'Follow the game’s camera distance',
     'Distance fixe': 'Fixed distance',

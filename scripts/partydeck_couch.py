@@ -150,7 +150,9 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     (f'{adapter}.camera_distance_mode', tr('Distance de la caméra libre'), list(DISTANCE_MODES)),
                     (f'{adapter}.camera_distance', tr('Distance fixe de la caméra libre'), None),
                     *[(f'{adapter}.camera_axes.{key}', tr(label), list(STORY_SHARING_CHOICES))
-                      for key, (_, _, label) in STORY_CAMERA_AXES.items()]]
+                      for key, (_, _, label) in STORY_CAMERA_AXES.items()],
+                    (f'{adapter}.remove_black_bars', tr('Supprimer les bandes noires en cinématique et en visée'),
+                     list(STORY_SHARING_CHOICES))]
         return soh_graphics_fields(adapter)
     if adapter == 'celestenet':
         if tab == 2:
@@ -326,7 +328,8 @@ def label_value(key, value):
             return tr('Link standard' if value else 'Mods du jeu')
         reference = value.split('|', 1)[0]
         return STORY_SKINS.get(reference, (reference, None))[0]
-    if key.startswith((f'{STORY_COOP}.consumables.', f'{STORY_COOP}.camera_axes.')):
+    if (key == f'{STORY_COOP}.remove_black_bars'
+            or key.startswith((f'{STORY_COOP}.consumables.', f'{STORY_COOP}.camera_axes.'))):
         return tr(STORY_SHARING_CHOICES[value])
     if key == f'{STORY_COOP}.camera_distance_mode':
         return tr(DISTANCE_MODES[value])

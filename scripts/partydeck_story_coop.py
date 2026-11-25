@@ -78,7 +78,7 @@ def defaults():
     return dict(automatic=True, port=PORT, room='', config=CONFIG,
                 sync=True, locations=True, teleport=True, consumables=dict.fromkeys(CONSUMABLES, 'keep'),
                 freecam=False, camera_axes=dict.fromkeys(CAMERA_AXES, 'keep'), time_mode='shared',
-                camera_distance_mode='keep', camera_distance=DEFAULT_DISTANCE,
+                camera_distance_mode='keep', camera_distance=DEFAULT_DISTANCE, remove_black_bars='keep',
                 names=[f'J{i}' for i in range(1, 5)], skins=[''] * 4, graphics=graphics_defaults())
 
 
@@ -90,6 +90,7 @@ def validate(options):
     options = defaults() | options
     sharing = options['consumables']
     camera_axes = options['camera_axes']
+    remove_black_bars = options['remove_black_bars']
     distance_mode, distance = options['camera_distance_mode'], options['camera_distance']
     if isinstance(sharing, str) and sharing in SHARING_CHOICES:
         sharing = dict.fromkeys(CONSUMABLES, sharing)
@@ -100,6 +101,7 @@ def validate(options):
             or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in sharing.values())
             or not isinstance(camera_axes, dict) or not camera_axes.keys() <= CAMERA_AXES.keys()
             or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in camera_axes.values())
+            or not isinstance(remove_black_bars, str) or remove_black_bars not in SHARING_CHOICES
             or not isinstance(distance_mode, str) or distance_mode not in DISTANCE_MODES
             or type(distance) is not int or not MIN_DISTANCE <= distance <= MAX_DISTANCE
             or not isinstance(options['config'], str)
@@ -461,7 +463,8 @@ def configure_client(player, rom, directory, root, options, skin_cache, controll
     restored_camera = configure_freecam(graphics, camera_backup, options.get('freecam', False), controller_template)
     # Keep using the same backup so profiles with active axis overrides migrate.
     settings_backup = config_path(directory, 'partydeck-camera-axes-original.json')
-    saved_camera = configure_camera_settings(graphics, settings_backup, options.get('camera_axes', {}),
+    camera_modes = options.get('camera_axes', {}) | {'remove_black_bars': options.get('remove_black_bars', 'keep')}
+    saved_camera = configure_camera_settings(cvars, settings_backup, camera_modes,
                                               options.get('camera_distance_mode', 'keep'),
                                               options.get('camera_distance', DEFAULT_DISTANCE),
                                               persistent=source == path)

@@ -17,13 +17,14 @@ CAMERA_AXES = {
 DISTANCE_MODES = {'keep': 'Conserver', 'game': 'Suivre la distance du jeu', 'fixed': 'Distance fixe'}
 MIN_DISTANCE, DEFAULT_DISTANCE, MAX_DISTANCE = 100, 185, 900
 CAMERA_SETTINGS = {
-    **{name: (group, key) for name, (group, key, _) in CAMERA_AXES.items()},
-    'use_game_distance': ('FreeLook', 'UseGameDistance'),
-    'max_camera_distance': ('FreeLook', 'MaxCameraDistance'),
+    **{name: ('gSettings', group, key) for name, (group, key, _) in CAMERA_AXES.items()},
+    'use_game_distance': ('gSettings', 'FreeLook', 'UseGameDistance'),
+    'max_camera_distance': ('gSettings', 'FreeLook', 'MaxCameraDistance'),
+    'remove_black_bars': ('gEnhancements', 'DisableBlackBars'),
 }
 
 
-def configure_camera_settings(settings, backup, modes, distance_mode, distance, *, persistent):
+def configure_camera_settings(cvars, backup, modes, distance_mode, distance, *, persistent):
     from partydeck_profiles import atomic_write
 
     overrides = {name: int(mode == 'on') for name, mode in modes.items() if mode != 'keep'}
@@ -34,17 +35,19 @@ def configure_camera_settings(settings, backup, modes, distance_mode, distance, 
 
     original = json.loads(backup.read_text()) if backup.is_file() else {}
     active = {}
-    for name, (group, key) in CAMERA_SETTINGS.items():
-        if name not in overrides:
-            if persistent and name in original:
-                if original[name] is None:
-                    settings.get(group, {}).pop(key, None)
-                else:
-                    settings.setdefault(group, {})[key] = original[name]
-        else:
-            section = settings.setdefault(group, {})
+    for name, (*groups, key) in CAMERA_SETTINGS.items():
+        if name not in overrides and not (persistent and name in original):
+            continue
+        section = cvars
+        for group in groups:
+            section = section.setdefault(group, {})
+        if name in overrides:
             active[name] = original.get(name, section.get(key)) if persistent else section.get(key)
             section[key] = overrides[name]
+        elif original[name] is None:
+            section.pop(key, None)
+        else:
+            section[key] = original[name]
     saved = original | active
     if original != saved:
         atomic_write(backup, json.dumps(saved))
