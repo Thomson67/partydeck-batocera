@@ -39,7 +39,8 @@ CUSTOM_GAMES_BUTTONS = {'plutonium-mp': (700, 99), 'plutonium-zm': (700, 135)}
 STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?common_" + mode[2:].encode() + rb"\b")
                    for mode in PLUTONIUM_MODES.values()}
 # Plutonium r5369 issues this command as it enters the online menu.
-ONLINE_MENU_ENTERED = b'Unknown command "session_rejoinsession"'
+ONLINE_MENU_MARKER = re.compile(rb'Unknown command:? "session_rejoinsession"')
+ZOMBIES_DLC_LOAD = re.compile(rb"Loading fastfile '?\w+_load_zm\b")
 # Xwayland's evdev keycode for the physical key under Escape (grave or ²).
 CONSOLE_KEYCODE = '49'
 DEFAULT_RENDER_SIZE = (1280, 720)
@@ -439,6 +440,8 @@ class AutoJoin:
     def start(self):
         if self.guests:
             print(tr('Black Ops II : les invités attendent le lancement de la partie de J1.'), flush=True)
+        if self.lobby_button is not None:
+            print(tr('Black Ops II J1 : ouverture automatique du salon activée.'), flush=True)
         self.thread.start()
 
     def close(self):
@@ -508,16 +511,22 @@ class AutoJoin:
     def observe_lobby(self, line, now):
         if b'------- Game Initialization -------' in line:
             self.lobby_button = None
-        elif ONLINE_MENU_ENTERED in line:
+        elif ONLINE_MENU_MARKER.search(line):
             if self.lobby_button == ONLINE_BUTTON:
                 # J1 already navigated manually.
                 self.lobby_button = None
             elif self.lobby_click_at is None:
                 self.lobby_click_at = now + 1
-        elif (self.lobby_button == ONLINE_BUTTON and self.lobby_click_at is None
-              and STARTUP_MARKERS[PLUTONIUM_MODES[self.mode]].search(line)):
-            self.lobby_click_at = now + 5
-            self.lobby_deadline = self.lobby_click_at + 20
+        elif self.lobby_button == ONLINE_BUTTON:
+            if self.lobby_click_at is None and STARTUP_MARKERS[PLUTONIUM_MODES[self.mode]].search(line):
+                self.lobby_click_at = now + 5
+                self.lobby_deadline = self.lobby_click_at + 20
+            elif (self.lobby_click_at is not None and self.mode == 'plutonium-zm'
+                  and ZOMBIES_DLC_LOAD.search(line)):
+                # Zombies can still be loading DLC after common_zm, with a
+                # visible window that does not yet accept menu input.
+                self.lobby_click_at = now + 5
+                self.lobby_deadline = self.lobby_click_at + 20
 
     def poll_lobby(self, now):
         if self.lobby_deadline is None or self.stop.is_set():

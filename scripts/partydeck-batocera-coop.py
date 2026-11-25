@@ -932,10 +932,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                         player.name == 'j1' and settings['open_custom_lobby']
                     ))
                 )
-                horizontal_render = 'standard'
-                if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
-                    horizontal_render = settings['horizontal_render']
-                render_width, render_height = render_size(width, height, horizontal_render=horizontal_render)
+                render = 'standard'
+                if player_count == 2 and settings['mode'] in PLUTONIUM_MODES:
+                    if split == 'horizontal':
+                        render = settings['horizontal_render']
+                    elif split == 'vertical':
+                        render = 'native'
+                render_width, render_height = render_size(width, height, horizontal_render=render)
                 desktop_width, desktop_height = desktop_size(render_width, render_height)
                 args.extend(['-w', str(desktop_width), '-h', str(desktop_height)])
                 bo2_resolution = f'{render_width}x{render_height}'

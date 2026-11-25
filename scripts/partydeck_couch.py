@@ -18,7 +18,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, HORIZONTAL_RENDER,
+from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER,
                            defaults as bo2_defaults, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
@@ -677,7 +677,8 @@ def choose_l4d2_session(settings, count):
 
 
 def choose_bo2_mode(settings, count):
-    return choose_session_screen(bo2_session_screen, settings, count, settings['mode'],
+    mode = settings['mode'] if settings['mode'] in PLUTONIUM_MODES else 'plutonium-mp'
+    return choose_session_screen(bo2_session_screen, settings | {'mode': mode}, count, mode,
                                  tr('Sélecteur Black Ops II indisponible. Mode du profil utilisé.'))
 
 
@@ -703,7 +704,7 @@ def bo2_session_screen(pg, screen, settings, _count):
     family = pads.family if pads.devices else 'keyboard'
     fonts = {size: pg.font.SysFont('DejaVu Sans', size, bold=size >= 28) for size in (20, 23, 28, 52)}
     orange, white, muted = (255, 177, 97), (239, 243, 246), (179, 194, 206)
-    modes = tuple(BO2_MODES)
+    modes = tuple(PLUTONIUM_MODES)
     row = modes.index(settings['mode'])
     keymap = {pg.K_UP: 'up', pg.K_DOWN: 'down', pg.K_RETURN: 'ok', pg.K_ESCAPE: 'back', pg.K_F5: 'launch'}
     subtitle = tr('Choisir le mode de jeu')

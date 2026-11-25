@@ -140,6 +140,7 @@ EN = {
         'Black Ops II {p0}: {p1} initialization not confirmed after 10 s.',
     'Black Ops II : partie de J1 détectée.': 'Black Ops II: P1’s match detected.',
     'Black Ops II J1 : clic sur En ligne envoyé.': 'Black Ops II P1: Online button click sent.',
+    'Black Ops II J1 : ouverture automatique du salon activée.': 'Black Ops II P1: automatic lobby shortcut enabled.',
     'Black Ops II J1 : clic sur Parties personnalisées envoyé.': 'Black Ops II P1: Custom Games button click sent.',
     'Black Ops II J1 : passage automatique au salon interrompu.': 'Black Ops II P1: automatic lobby shortcut stopped.',
     'Black Ops II {p0} : connexion à la partie de J1 demandée.': 'Black Ops II {p0}: requested to join P1’s match.',

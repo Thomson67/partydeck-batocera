@@ -87,8 +87,8 @@ with tempfile.TemporaryDirectory() as folder:
 
 for mode, navigation, expected in (
         ('plutonium-mp', ['down', 'ok'], 'plutonium-zm'),
-        ('plutonium-zm', ['down', 'ok'], 'original'),
-        ('original', ['up', 'ok'], 'plutonium-zm'),
+        ('plutonium-zm', ['down', 'ok'], 'plutonium-mp'),
+        ('original', ['ok'], 'plutonium-mp'),
         ('plutonium-zm', ['back'], None)):
     pads = Mock(devices=[object()], family='xbox')
     pads.poll.side_effect = [[], [], navigation]

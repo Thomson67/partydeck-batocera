@@ -271,7 +271,7 @@ with TemporaryDirectory() as folder:
         observer.poll(6)
         observer.poll(7)
         assert click.call_args_list == [online_click]
-        log.write_bytes(startup + bo2.ONLINE_MENU_ENTERED + b'\n')
+        log.write_bytes(startup + b'Unknown command "session_rejoinsession"\n')
         observer.poll(8)
         observer.poll(9)
         observer.poll(10)
@@ -297,11 +297,16 @@ with TemporaryDirectory() as folder:
         with log.open('ab') as stream:
             stream.write(b'Loading fastfile common_zm\n')
         observer.poll(8)
-        observer.poll(13)
         with log.open('ab') as stream:
-            stream.write(bo2.ONLINE_MENU_ENTERED + b'\n')
-        observer.poll(14)
-        observer.poll(15)
+            stream.write(b'Loading fastfile fr_seasonpass_load_zm\n')
+        observer.poll(12)
+        observer.poll(13)
+        click.assert_not_called()
+        observer.poll(17)
+        with log.open('ab') as stream:
+            stream.write(b'Unknown command: "session_rejoinsession"\n')
+        observer.poll(18)
+        observer.poll(19)
         assert click.call_args_list == [online_click,
             call(host_display, ':0', bo2.CUSTOM_GAMES_BUTTONS['plutonium-zm'])]
 
