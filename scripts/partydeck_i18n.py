@@ -181,7 +181,8 @@ EN = {
     'Story Co-op {p0} : correctif du crash audio appliqué.': 'Story Co-op {p0}: audio crash fix applied.',
     'Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.':
         'Story Co-op: first run the game solo to generate oot.o2r.',
-    'Story Co-op {p0} : connexion automatique à {p1}.': 'Story Co-op {p0}: automatic connection to {p1}.',
+    'Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.':
+        'Story Co-op {p0}: starting at file select, automatic connection to {p1}.',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',
     'Manettes détectées : {p0}. Manettes nécessaires : {p1}.': 'Controllers detected: {p0}. Controllers required: {p1}.',
     'Le clavier et la souris sont réservés aux menus pour ce jeu.': 'The keyboard and mouse are reserved for menus in this game.',

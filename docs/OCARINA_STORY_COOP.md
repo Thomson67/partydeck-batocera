@@ -43,8 +43,10 @@ dans **Windows Party**. Le profil **Ocarina of Time · Story Co-op** détecte
 ce nom. Il est aussi sélectionnable dans **Session → Profil du jeu**.
 Choisissez de deux à quatre joueurs.
 
-Windows Party lance le serveur local, puis connecte
-chaque joueur automatiquement. Dans la fenêtre **Zelda Online**, J1 crée un
+Windows Party lance le serveur local, connecte chaque joueur automatiquement
+et ouvre directement le choix de la sauvegarde. La démo de l’écran titre est
+sautée pour éviter que les personnages distants y apparaissent. Dans la
+fenêtre **Zelda Online**, J1 crée un
 groupe avec **Story Co-op** activé et invite J2. J2 accepte. Aux sessions
 suivantes, recréez le groupe avec le même code d’équipe pour retrouver la
 campagne. Le code par défaut est `partydeck`.

@@ -272,6 +272,8 @@ def configure_client(player, rom, directory, root):
         raise ValueError(tr('Le fichier est un lien symbolique : {p0}', p0=path))
     data = json.loads(path.read_text(encoding='utf-8-sig')) if path.is_file() else {}
     cvars = data.setdefault('CVars', {})
+    # Story Co-op 1.0.5 can spawn remote players in the title screen demo.
+    cvars.setdefault('gSettings', {})['BootSequence'] = 2  # BOOTSEQUENCE_FILESELECT
     online = cvars.setdefault('gZeldaOnline', {})
     address = f'127.0.0.1:{PORT}'
     online.update(Enabled=1, AutoConnect=1, Host='127.0.0.1', Port=PORT, Nickname=player.name.upper())
@@ -288,7 +290,7 @@ def configure_client(player, rom, directory, root):
     if width.isdecimal() and height.isdecimal() and int(width) > 0 and int(height) > 0:
         window.update(Width=int(width), Height=int(height), PositionX=0, PositionY=0)
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
-    print(tr('Story Co-op {p0} : connexion automatique à {p1}.',
+    print(tr('Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.',
              p0=player.name.upper(), p1=address), flush=True)
 
 

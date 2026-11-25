@@ -115,9 +115,11 @@ with TemporaryDirectory() as folder:
         client.hardlink_to(game / 'soh.exe')
         (private/'oot.o2r').write_bytes(fixture.read_bytes())
         path = private / 'shipofharkinian.json'
-        path.write_text(json.dumps({'CVars': {'gRemote': {'Anchor': {'Enabled': 1}},
-                                               'gZeldaOnline': {'Party': {'StoryCode': 'existing-campaign'}}},
-                                    'Window': {'Backend': {'Id': 1}}}))
+        cvars = {'gRemote': {'Anchor': {'Enabled': 1}},
+                 'gZeldaOnline': {'Party': {'StoryCode': 'existing-campaign'}}}
+        if index == 2:
+            cvars['gSettings'] = {'BootSequence': 1, 'Language': 2}
+        path.write_text(json.dumps({'CVars': cvars, 'Window': {'Backend': {'Id': 1}}}))
         fixed = binary.replace(b'client', b'stable', 1)
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
                         PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='540'), \
@@ -131,6 +133,8 @@ with TemporaryDirectory() as folder:
             story.configure_client(player, archive, private, player)
             assert client.stat().st_ino == inode
         data = json.loads(path.read_text())
+        assert data['CVars']['gSettings'] == ({'BootSequence': 2} if index == 1
+                                             else {'BootSequence': 2, 'Language': 2})
         assert data['CVars']['gZeldaOnline'] == {
             'AutoConnect': 1, 'Enabled': 1, 'Host': '127.0.0.1', 'Port': story.PORT, 'Nickname': f'J{index}',
             'Party': {'StoryCoop': 1, 'StoryCode': 'existing-campaign'}}
@@ -149,4 +153,4 @@ with TemporaryDirectory() as folder:
     else:
         raise AssertionError('An unknown executable was accepted for the audio fix')
 
-print('Story Co-op: archive contents, version pinning, private audio fix and campaign continuity verified.')
+print('Story Co-op: archive contents, private audio fix, file selection and campaign continuity verified.')
