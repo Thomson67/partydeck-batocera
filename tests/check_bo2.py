@@ -75,6 +75,9 @@ with TemporaryDirectory() as folder:
     assert bo2.render_size(3840, 1080, horizontal_render='720p') == (3840, 1080)
     assert bo2.render_size(1366, 384, horizontal_render='720p') == (2561, 720)
     assert bo2.render_size(1920, 540, horizontal_render='native') == (1920, 540)
+    assert bo2.desktop_size(1920, 540) == (2560, 720)
+    assert bo2.desktop_size(800, 600) == (800, 600)
+    assert bo2.desktop_size(2560, 720) == (2560, 720)
     assert bo2.validate({'mode': 'plutonium-mp', 'fill_horizontal': False})['horizontal_render'] == 'standard'
     assert bo2.validate({'mode': 'plutonium-zm', 'fill_horizontal': True})['horizontal_render'] == 'native'
 
@@ -101,6 +104,7 @@ with TemporaryDirectory() as folder:
         resolution = '1920x540' if entry == 'play_squashfs' else '1280x720'
         env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
                    WINE_LANG='C' if entry == 'play_squashfs' else '', PARTYDECK_BO2_RESOLUTION=resolution)
+        env[bo2.DESKTOP_MODE] = '2560x720' if entry == 'play_squashfs' else resolution
         command = ['bash', str(launcher), str(prefix), entry]
         result = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         assert result.stdout.splitlines() == [str(game), 't6sp.exe', '-solo']
@@ -120,7 +124,7 @@ with TemporaryDirectory() as folder:
         expected_pluto = [str(runtime), './bin/' + bo2.BOOTSTRAPPER, tag, windows_game,
                           '+name', f'Player {player_name[1]}', '-lan']
         if entry == 'play_squashfs':
-            expected_pluto += ['+set', 'r_fullscreen', '0', '+set', 'r_mode', '1920x540',
+            expected_pluto += ['+set', 'r_fullscreen', '0', '+set', 'r_mode', '2560x720',
                                '+set', 'r_customMode', '1920x540', '+set', 'r_aspectRatio', 'auto',
                                '+set', 'vid_xpos', '0', '+set', 'vid_ypos', '0']
         else:

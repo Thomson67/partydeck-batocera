@@ -742,8 +742,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                  track_runner=False, dst=False, split=None):
     _, _, width, height = rectangle
     bo2_resolution = None
+    bo2_desktop = None
     bo2_automatic = False
-    from partydeck_bo2 import ADAPTER as BO2, AUTO_JOIN, PLUTONIUM_MODES, render_size
+    from partydeck_bo2 import ADAPTER as BO2, AUTO_JOIN, DESKTOP_MODE, PLUTONIUM_MODES, desktop_size, render_size
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if saves is not None:
@@ -760,10 +761,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
                     horizontal_render = settings['horizontal_render']
                 render_width, render_height = render_size(width, height, horizontal_render=horizontal_render)
-                args.extend(['-w', str(render_width), '-h', str(render_height)])
+                desktop_width, desktop_height = desktop_size(render_width, render_height)
+                args.extend(['-w', str(desktop_width), '-h', str(desktop_height)])
                 bo2_resolution = f'{render_width}x{render_height}'
-                print(tr('Black Ops II {p0} : rendu {p1}, fenêtre {p2}.',
-                         p0=player.name.upper(), p1=bo2_resolution, p2=f'{width}x{height}'), flush=True)
+                bo2_desktop = f'{desktop_width}x{desktop_height}'
+                print(tr('Black Ops II {p0} : rendu demandé {p1}, écran virtuel {p2}, fenêtre {p3}.',
+                         p0=player.name.upper(), p1=bo2_resolution, p2=bo2_desktop,
+                         p3=f'{width}x{height}'), flush=True)
             elif adapter in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if dst:
@@ -801,11 +805,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                                        "PARTYDECK_PLAYER_HEIGHT": str(height)}
     environment.pop('PARTYDECK_PRIVATE_LAN_IP',None)
     environment.pop('PARTYDECK_BO2_RESOLUTION', None)
+    environment.pop(DESKTOP_MODE, None)
     environment.pop(AUTO_JOIN, None)
     if bo2_automatic:
         environment[AUTO_JOIN] = '1'
     if bo2_resolution is not None:
         environment['PARTYDECK_BO2_RESOLUTION'] = bo2_resolution
+        environment[DESKTOP_MODE] = bo2_desktop
     environment.pop('PARTYDECK_SESSION_TOKEN',None)
     environment['PARTYDECK_SESSION_PLAYERS']=str(player_count)
     if session_token is not None:environment['PARTYDECK_SESSION_TOKEN']=session_token

@@ -42,11 +42,14 @@ son Steam Runtime.
 
 À deux joueurs en partage horizontal, **Rendu en partage horizontal**
 utilise par défaut la résolution de chaque moitié. Sur un écran 1920×1080,
-chaque joueur rend directement en 1920×540 (32:9).
-**Ultrawide · hauteur minimale 720p** reprend le rendu 2560×720 sur cet
-écran si le jeu refuse de démarrer à 540 pixels de haut. **Format 16:9**
-garde le mode standard. Le journal distingue la résolution du jeu de la
-taille de la fenêtre.
+Windows Party demande un rendu de 1920×540 (32:9) pour chaque joueur.
+T6 vérifie qu’un mode d’écran d’au moins 800×600 est disponible au démarrage.
+Windows Party expose donc un écran virtuel de 2560×720 à T6 et lui demande de
+créer une fenêtre de jeu de 1920×540 via `r_customMode`.
+**Ultrawide · hauteur minimale 720p** utilise aussi 2560×720 pour le rendu
+du jeu si le mode personnalisé échoue. **Format 16:9** garde le mode
+standard. Le journal indique le rendu demandé, le mode d’écran virtuel et
+la taille de la fenêtre de chaque joueur.
 
 ## Modes et bots
 

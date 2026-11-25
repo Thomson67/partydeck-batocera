@@ -60,6 +60,11 @@ for language, mode, multiplayer, original, catalog, horizontal, automatic in (
         'fr': 'Résolution de chaque moitié', 'en': 'Match each half of the screen'}[language]
     assert label_value('bo2.horizontal_render', '720p') == {
         'fr': 'Ultrawide · hauteur minimale 720p', 'en': 'Ultrawide · 720p minimum height'}[language]
+    assert lang.tr('Black Ops II {p0} : rendu demandé {p1}, écran virtuel {p2}, fenêtre {p3}.',
+                   p0='J1', p1='1920x540', p2='2560x720', p3='1920x540') == {
+        'fr': 'Black Ops II J1 : rendu demandé 1920x540, écran virtuel 2560x720, fenêtre 1920x540.',
+        'en': 'Black Ops II J1: requested render size 1920x540, virtual display 2560x720, window 1920x540.',
+    }[language]
     assert label_value('bo2.mode', 'plutonium-mp') == f'{multiplayer} · Plutonium LAN'
     assert label_value('bo2.mode', 'plutonium-zm') == 'Zombies · Plutonium LAN'
     assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'

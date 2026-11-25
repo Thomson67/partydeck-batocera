@@ -113,7 +113,8 @@ EN = {
     'Difficulté Left 4 Dead 2 invalide.': 'Invalid Left 4 Dead 2 difficulty.',
     'Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.': 'Left 4 Dead 2 setup screen unavailable. Using profile settings.',
     'Partie locale · {p0} joueurs · hôte J{p1}': 'Local game · {p0} players · host P{p1}',
-    'Black Ops II {p0} : rendu {p1}, fenêtre {p2}.': 'Black Ops II {p0}: render {p1}, window {p2}.',
+    'Black Ops II {p0} : rendu demandé {p1}, écran virtuel {p2}, fenêtre {p3}.':
+        'Black Ops II {p0}: requested render size {p1}, virtual display {p2}, window {p3}.',
     'Multijoueur · Plutonium LAN': 'Multiplayer · Plutonium LAN',
     'Black Ops II : binkw32.dll introuvable dans {p0}.': 'Black Ops II: binkw32.dll was not found in {p0}.',
     'Black Ops II : symbole Bink attendu absent de {p0}. Vérifiez les fichiers du jeu.': 'Black Ops II: expected Bink symbol missing from {p0}. Verify the game files.',

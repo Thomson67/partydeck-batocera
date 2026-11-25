@@ -240,7 +240,7 @@ with patch.object(coop.subprocess, 'Popen') as popen:
                       celeste_options={'language': 'french'})
     assert '-w' not in popen.call_args.args[0]
 
-# Black Ops II's render size follows the horizontal slots without stretching.
+# T6 requires a larger desktop mode even when rendering at the native slot size.
 settings = dict(mode='plutonium-mp', horizontal_render='native', automatic_join=True)
 with (patch.object(coop.subprocess, 'Popen') as popen,
       patch.object(coop, 'sandbox_arguments', return_value=[]),
@@ -249,14 +249,16 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),
                       'bo2-j2', saves=base/'saves', player_count=2, split='horizontal')
     args = popen.call_args.args[0]
-    for option, size in (('-w', '1920'), ('-h', '540'), ('-W', '1920'), ('-H', '540')):
+    for option, size in (('-w', '2560'), ('-h', '720'), ('-W', '1920'), ('-H', '540')):
         assert args[args.index(option) + 1] == size
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1920x540'
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_DESKTOP_MODE'] == '2560x720'
 
     settings['horizontal_render'] = '720p'
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),
                       'bo2-j2', saves=base/'saves', player_count=2, split='horizontal')
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '2560x720'
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_DESKTOP_MODE'] == '2560x720'
 
     settings['horizontal_render'] = 'standard'
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),

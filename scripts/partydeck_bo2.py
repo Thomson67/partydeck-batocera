@@ -32,6 +32,8 @@ JOIN_KEY = 'F9'
 AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
 GAME_WINDOW = r'[Bb]lack [Oo]ps (II|2).*(Multiplayer|Multijoueur|Zombies)'
 DEFAULT_RENDER_SIZE = (1280, 720)
+MIN_DISPLAY_SIZE = (800, 600)
+DESKTOP_MODE = 'PARTYDECK_BO2_DESKTOP_MODE'
 HORIZONTAL_RENDER = {'native': 'Résolution de chaque moitié',
                      '720p': 'Ultrawide · hauteur minimale 720p',
                      'standard': 'Format 16:9'}
@@ -49,15 +51,25 @@ def render_size(width, height, *, horizontal_render='standard'):
     return DEFAULT_RENDER_SIZE
 
 
+def desktop_size(width, height):
+    # T6 aborts video initialization if DXGI exposes no mode of at least
+    # 800x600. Its custom window can still use a smaller back buffer.
+    minimum_width, minimum_height = MIN_DISPLAY_SIZE
+    if width < minimum_width or height < minimum_height:
+        return render_size(width, height, horizontal_render='720p')
+    return width, height
+
+
 def display_arguments():
     width, height = DEFAULT_RENDER_SIZE
     resolution = os.environ.get('PARTYDECK_BO2_RESOLUTION', f'{width}x{height}')
     width, height = map(int, resolution.split('x'))
-    custom_mode = width * 9 != height * 16
+    desktop_mode = os.environ.get(DESKTOP_MODE, resolution)
+    custom_mode = resolution != desktop_mode or width * 9 != height * 16
     # T6 computes the aspect ratio from the active resolution. Use a window
     # for custom modes inside Gamescope's borderless player viewport.
     args = ['+set', 'r_fullscreen', '0' if custom_mode else '2',
-            '+set', 'r_mode', resolution, '+set', 'r_customMode', resolution,
+            '+set', 'r_mode', desktop_mode, '+set', 'r_customMode', resolution,
             '+set', 'r_aspectRatio', 'auto']
     if custom_mode:
         args.extend(['+set', 'vid_xpos', '0', '+set', 'vid_ypos', '0'])
