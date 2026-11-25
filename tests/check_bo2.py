@@ -42,7 +42,7 @@ with TemporaryDirectory() as folder:
         data = defaults(rom)
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
-        assert data['bo2'] == {'mode': 'plutonium-mp', 'fill_horizontal': True, 'automatic_join': True}
+        assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'automatic_join': True}
         for old_mode in ('mp', 'zm', 'original'):
             data['bo2'] = {'mode': old_mode}
             path = profile_path(base, rom)
@@ -50,7 +50,7 @@ with TemporaryDirectory() as folder:
             path.write_text(json.dumps(data))
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
-            assert migrated['bo2'] == {'mode': expected_mode, 'fill_horizontal': True, 'automatic_join': True}
+            assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native', 'automatic_join': True}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
@@ -70,11 +70,13 @@ with TemporaryDirectory() as folder:
     assert bo2.render_size(960, 1080) == (1280, 720)
     assert bo2.render_size(960, 540) == (1280, 720)
     assert bo2.render_size(1920, 1080) == (1920, 1080)
-    assert bo2.render_size(1920, 540, fill_horizontal=True) == (2560, 720)
-    assert bo2.render_size(2560, 720, fill_horizontal=True) == (2560, 720)
-    assert bo2.render_size(3840, 1080, fill_horizontal=True) == (3840, 1080)
-    assert bo2.render_size(1366, 384, fill_horizontal=True) == (2561, 720)
-    assert not bo2.validate({'mode': 'plutonium-mp', 'fill_horizontal': False})['fill_horizontal']
+    assert bo2.render_size(1920, 540, horizontal_render='720p') == (2560, 720)
+    assert bo2.render_size(2560, 720, horizontal_render='720p') == (2560, 720)
+    assert bo2.render_size(3840, 1080, horizontal_render='720p') == (3840, 1080)
+    assert bo2.render_size(1366, 384, horizontal_render='720p') == (2561, 720)
+    assert bo2.render_size(1920, 540, horizontal_render='native') == (1920, 540)
+    assert bo2.validate({'mode': 'plutonium-mp', 'fill_horizontal': False})['horizontal_render'] == 'standard'
+    assert bo2.validate({'mode': 'plutonium-zm', 'fill_horizontal': True})['horizontal_render'] == 'native'
 
     hits = []
     for player_name, entry, tag in (('j1', 'play_wine', 't6zm'),
@@ -96,7 +98,7 @@ with TemporaryDirectory() as folder:
         hook = [sys.executable, str(Path(bo2.__file__)), str(player), str(installed_client)]
         launcher = player / 'native.sh'
         launcher.write_text(bo2.instrument_native(source, hook, 'original'))
-        resolution = '2560x720' if entry == 'play_squashfs' else '1280x720'
+        resolution = '1920x540' if entry == 'play_squashfs' else '1280x720'
         env = dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
                    WINE_LANG='C' if entry == 'play_squashfs' else '', PARTYDECK_BO2_RESOLUTION=resolution)
         command = ['bash', str(launcher), str(prefix), entry]
@@ -118,8 +120,8 @@ with TemporaryDirectory() as folder:
         expected_pluto = [str(runtime), './bin/' + bo2.BOOTSTRAPPER, tag, windows_game,
                           '+name', f'Player {player_name[1]}', '-lan']
         if entry == 'play_squashfs':
-            expected_pluto += ['+set', 'r_fullscreen', '0', '+set', 'r_mode', '2560x720',
-                               '+set', 'r_customMode', '2560x720', '+set', 'r_aspectRatio', 'auto',
+            expected_pluto += ['+set', 'r_fullscreen', '0', '+set', 'r_mode', '1920x540',
+                               '+set', 'r_customMode', '1920x540', '+set', 'r_aspectRatio', 'auto',
                                '+set', 'vid_xpos', '0', '+set', 'vid_ypos', '0']
         else:
             expected_pluto += ['+set', 'r_fullscreen', '2', '+set', 'r_mode', '1280x720',

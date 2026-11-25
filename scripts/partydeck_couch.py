@@ -18,7 +18,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, JOIN_HOST,
+from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER, JOIN_HOST,
                            defaults as bo2_defaults, matches as matches_bo2)
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
@@ -120,7 +120,7 @@ def fields(tab, adapter='standard', celeste_skins=()):
     if adapter == BO2:
         return [('bo2.mode', tr('Mode de jeu'), list(BO2_MODES)),
                 ('bo2.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
-                ('bo2.fill_horizontal', tr('Remplir le partage horizontal'), [True, False])] if tab == 1 else []
+                ('bo2.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))] if tab == 1 else []
     if adapter == 'celestenet':
         if tab == 2:
             rows = [(f'celestenet.names.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Nom')), None)
@@ -262,6 +262,8 @@ def label_value(key, value):
         return tr('Activé') if value else tr('Désactivé')
     if key == 'bo2.mode':
         return tr(BO2_MODES[value])
+    if key == 'bo2.horizontal_render':
+        return tr(HORIZONTAL_RENDER[value])
     if key == 'adapter':
         if value == BO2:
             return 'Black Ops II'

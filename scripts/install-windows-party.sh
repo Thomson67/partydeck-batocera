@@ -233,7 +233,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_hkmultiplayer.py && -f $source_dir/../plugins/WindowsParty.HKMultiplayer.dll && -f $source_dir/../plugins/WindowsParty.NativeWide.dll ]] || die 'Module HKMultiplayer absent / HKMultiplayer module missing.'
     [[ -f $source_dir/partydeck_hkmp.py && -f $source_dir/../plugins/WindowsParty.HKMP.dll ]] || die 'Module Hollow Knight absent du paquet.'
     [[ -f $source_dir/partydeck_nfsmw.py ]] || die 'Module Most Wanted absent du paquet.'
-    [[ -f $source_dir/partydeck_bo2.py ]] || die 'Module Black Ops II absent / Black Ops II module missing.'
+    [[ -f $source_dir/partydeck_bo2.py && -f $source_dir/partydeck_plutonium.py ]] || die 'Module Black Ops II absent / Black Ops II module missing.'
     [[ -f $source_dir/partydeck_l4d2.py ]] || die 'Module Left 4 Dead 2 absent du paquet.'
     [[ -f $source_dir/partydeck_celestenet.py ]] || die 'Module CelesteNet absent / CelesteNet module missing.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
@@ -316,6 +316,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_celestenet.py" "$base/partydeck_celestenet.py"
     cp -- "$source_dir/partydeck_bo2.py" "$staging/partydeck_bo2.py"
     mv -fT -- "$staging/partydeck_bo2.py" "$base/partydeck_bo2.py"
+    cp -- "$source_dir/partydeck_plutonium.py" "$staging/partydeck_plutonium.py"
+    mv -fT -- "$staging/partydeck_plutonium.py" "$base/partydeck_plutonium.py"
     cp -- "$source_dir/partydeck_dst.py" "$staging/partydeck_dst.py"
     mv -fT -- "$staging/partydeck_dst.py" "$base/partydeck_dst.py"
     cp -- "$source_dir/partydeck_umu.py" "$base/partydeck_umu.py"

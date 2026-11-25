@@ -756,9 +756,10 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 settings = profile['bo2']
                 bo2_automatic = (network is not None and settings['mode'] in PLUTONIUM_MODES
                                  and settings['automatic_join'])
-                fill_horizontal = (player_count == 2 and split == 'horizontal'
-                                   and settings['mode'] in PLUTONIUM_MODES and settings['fill_horizontal'])
-                render_width, render_height = render_size(width, height, fill_horizontal=fill_horizontal)
+                horizontal_render = 'standard'
+                if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
+                    horizontal_render = settings['horizontal_render']
+                render_width, render_height = render_size(width, height, horizontal_render=horizontal_render)
                 args.extend(['-w', str(render_width), '-h', str(render_height)])
                 bo2_resolution = f'{render_width}x{render_height}'
                 print(tr('Black Ops II {p0} : rendu {p1}, fenêtre {p2}.',
@@ -1096,6 +1097,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     started = time.time_ns()
+    from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path
+    bo2_mode = PLUTONIUM_MODES.get(profile['bo2']['mode']) if profile and profile.get('adapter') == BO2 else None
+    if bo2_mode:
+        from partydeck_plutonium import prepare as prepare_plutonium
+        prepare_plutonium(base, bo2_mode)
     track_runner = party and original.suffix.lower() == '.wsquashfs'
     keep_latest_runner = track_runner and storage_settings(base)['keep_latest_runner']
     from partydeck_celestenet import ADAPTER as CELESTENET
@@ -1194,10 +1200,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             from partydeck_private_lan import PrivateLAN
             network=PrivateLAN(len(players),shared=True) if celestenet else PrivateLAN(len(players))
             network.start()
-        from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path
-        if network is not None and profile and profile.get('adapter') == BO2:
-            settings = profile['bo2']
-            bo2_automatic = settings['mode'] in PLUTONIUM_MODES and settings['automatic_join']
+        if network is not None and bo2_mode:
+            bo2_automatic = profile['bo2']['automatic_join']
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1419,6 +1423,15 @@ def main():
                           args.base / "windows-party", original,
                           args.count, args.split, args.input_mode,
                           mode="party" if party else "coop", profile=party)
+        if party:
+            from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES
+            from partydeck_profiles import read_profile
+            profile = read_profile(args.base, original)
+            if profile.get('adapter') == BO2:
+                mode = PLUTONIUM_MODES.get(profile['bo2']['mode'])
+                if mode:
+                    from partydeck_plutonium import prefetch
+                    prefetch(args.base, mode)
         print(f"Entrée enregistrée : {port}")
         print("Actualise les listes de jeux dans EmulationStation, puis ouvre "
               + ("Windows Party." if party else "Ports."))

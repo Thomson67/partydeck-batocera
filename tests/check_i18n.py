@@ -48,14 +48,18 @@ for language,host,automatic,campaign in (
     l4d2_options={key for key,_,_ in fields(2,'l4d2-goldberg')}
     assert {'l4d2.campaign','l4d2.campaign_mode'}.isdisjoint(l4d2_options)
 for language, mode, multiplayer, original, catalog, horizontal, automatic in (
-        ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental', 'Remplir le partage horizontal', 'Rejoindre automatiquement la partie de J1'),
-        ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN', 'Fill horizontal split-screen', 'Automatically join P1’s match')):
+        ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental', 'Rendu en partage horizontal', 'Rejoindre automatiquement la partie de J1'),
+        ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN', 'Horizontal split-screen rendering', 'Automatically join P1’s match')):
     lang.set_language(language)
     assert fields(1, 'black-ops-2') == [
         ('bo2.mode', mode, ['plutonium-mp', 'plutonium-zm', 'original']),
         ('bo2.automatic_join', automatic, [True, False]),
-        ('bo2.fill_horizontal', horizontal, [True, False])]
+        ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
     assert label_value('bo2.mode', 'original') == original
+    assert label_value('bo2.horizontal_render', 'native') == {
+        'fr': 'Résolution de chaque moitié', 'en': 'Match each half of the screen'}[language]
+    assert label_value('bo2.horizontal_render', '720p') == {
+        'fr': 'Ultrawide · hauteur minimale 720p', 'en': 'Ultrawide · 720p minimum height'}[language]
     assert label_value('bo2.mode', 'plutonium-mp') == f'{multiplayer} · Plutonium LAN'
     assert label_value('bo2.mode', 'plutonium-zm') == 'Zombies · Plutonium LAN'
     assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'

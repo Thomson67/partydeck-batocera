@@ -11,18 +11,15 @@ Le réseau privé de Windows Party relie les joueurs sur la même machine.
 Utilisez le client Plutonium en mode LAN pour jouer quand le menu
 « Online » du client d’origine reste bloqué sur la connexion.
 
-1. Installez [Plutonium](https://plutonium.pw/docs/install/) sur Windows, ouvrez
-   son lanceur et laissez-le télécharger les fichiers du client. Configurez
-   Black Ops II avec les fichiers d’une installation valide.
-2. Dans l’explorateur Windows, ouvrez `%LOCALAPPDATA%\Plutonium`. Sur Batocera,
-   créez `/userdata/system/windows-party/plutonium/` et copiez-y les dossiers
-   `bin` et `games`, ainsi que `storage` s’il existe. Vérifiez que
-   `bin/plutonium-bootstrapper-win32.exe` et `games/t6mp.exe` ou
-   `games/t6zm.exe` se trouvent directement sous cette arborescence.
-3. Dans **Configurer Windows Party**, liez le jeu et choisissez
-   **Options → Mode de jeu → Multijoueur · Plutonium LAN** ou
+1. Dans **Configurer Windows Party**, liez le jeu et enregistrez son
+   profil **Black Ops II**. Windows Party récupère le client T6 depuis le
+   serveur officiel de Plutonium en arrière-plan si l’installation est
+   nécessaire. Si le téléchargement a échoué, Windows Party réessaie au
+   lancement, avant de créer le LAN privé. L’archive du jeu est fournie
+   séparément par l’utilisateur.
+2. Choisissez **Options → Mode de jeu → Multijoueur · Plutonium LAN** ou
    **Zombies · Plutonium LAN**. Pour le premier essai, choisissez deux joueurs.
-4. Sur **J1**, choisissez **Partie personnalisée** et lancez la carte.
+3. Sur **J1**, choisissez **Partie personnalisée** et lancez la carte.
    Laissez **J2** et les autres invités au menu. Ils rejoignent J1
    automatiquement dès que la partie est prête. En Zombies, J1 peut
    attendre les invités pendant le chargement.
@@ -33,17 +30,23 @@ défaut. Si la connexion échoue, ouvrez la
 invité et saisissez `connect 192.168.247.11:1111`. Si l’option est activée,
 `F9` envoie aussi cette commande depuis la fenêtre de l’invité.
 
+Une installation manuelle existante dans
+`/userdata/system/windows-party/plutonium/` garde la priorité. Le détail
+du premier téléchargement figure dans `logs/plutonium-t6.log`.
+L’installateur ne met pas automatiquement à jour un client déjà disponible.
+
 Les fichiers du client sont préparés dans la vue privée de chaque joueur.
 La campagne garde sa commande d’origine dans EmulationStation. Si vous
 utilisez UMU, lancez d’abord le jeu en solo avec le même runner pour initialiser
 son Steam Runtime.
 
-À deux joueurs en partage horizontal, **Remplir le partage horizontal**
-active un rendu Plutonium au format de chaque moitié de l’écran. Sur un
-écran 1920×1080, chaque joueur a une fenêtre 1920×540 et le jeu rend en
-2560×720 (32:9). Gamescope réduit l’image à la taille de la fenêtre. Vous
-pouvez désactiver cette option pour reprendre le rendu 16:9. Le journal
-distingue la résolution du jeu de la taille de la fenêtre.
+À deux joueurs en partage horizontal, **Rendu en partage horizontal**
+utilise par défaut la résolution de chaque moitié. Sur un écran 1920×1080,
+chaque joueur rend directement en 1920×540 (32:9).
+**Ultrawide · hauteur minimale 720p** reprend le rendu 2560×720 sur cet
+écran si le jeu refuse de démarrer à 540 pixels de haut. **Format 16:9**
+garde le mode standard. Le journal distingue la résolution du jeu de la
+taille de la fenêtre.
 
 ## Modes et bots
 

@@ -16,6 +16,7 @@ import time
 from partydeck_borderlands2 import child, decode, patch_ini, write_bytes
 from partydeck_i18n import tr
 from partydeck_l4d2 import ACCOUNT_MAX, STEAM64_BASE
+from partydeck_plutonium import BOOTSTRAPPER, client_path
 
 ADAPTER = 'black-ops-2'
 MODES = {
@@ -25,17 +26,21 @@ MODES = {
 }
 EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
-BOOTSTRAPPER = 'plutonium-bootstrapper-win32.exe'
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 JOIN_KEY = 'F9'
 AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
 GAME_WINDOW = r'[Bb]lack [Oo]ps (II|2).*(Multiplayer|Multijoueur|Zombies)'
 DEFAULT_RENDER_SIZE = (1280, 720)
+HORIZONTAL_RENDER = {'native': 'Résolution de chaque moitié',
+                     '720p': 'Ultrawide · hauteur minimale 720p',
+                     'standard': 'Format 16:9'}
 
 
-def render_size(width, height, *, fill_horizontal=False):
-    if fill_horizontal:
+def render_size(width, height, *, horizontal_render='standard'):
+    if horizontal_render == 'native':
+        return width, height
+    if horizontal_render == '720p':
         minimum_width, minimum_height = DEFAULT_RENDER_SIZE
         render_height = max(height, minimum_height, ceil(minimum_width * height / width))
         return round(width * render_height / height), render_height
@@ -65,7 +70,7 @@ def matches(rom):
 
 def defaults(rom=None):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
-    return {'mode': mode, 'fill_horizontal': True, 'automatic_join': True}
+    return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True}
 
 
 def validate(data):
@@ -74,13 +79,13 @@ def validate(data):
         mode = f'plutonium-{mode}'
     if mode not in tuple(MODES):
         raise ValueError(tr('Mode Black Ops II invalide.'))
-    fill_horizontal = data.get('fill_horizontal', True)
-    if type(fill_horizontal) is not bool:
+    horizontal_render = data.get('horizontal_render', 'standard' if data.get('fill_horizontal') is False else 'native')
+    if horizontal_render not in tuple(HORIZONTAL_RENDER):
         raise ValueError(tr('Option de partage horizontal Black Ops II invalide.'))
     automatic_join = data.get('automatic_join', True)
     if type(automatic_join) is not bool:
         raise ValueError(tr('Option de connexion automatique Black Ops II invalide.'))
-    return {'mode': mode, 'fill_horizontal': fill_horizontal, 'automatic_join': automatic_join}
+    return {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join}
 
 
 def private_child(directory, name):
@@ -411,13 +416,15 @@ def install_hook(base, rom, player):
     if binary is None:
         raise RuntimeError(tr('batocera-wine introuvable.'))
     binary = Path(binary).resolve()
-    hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player), str(base / 'plutonium')]
+    mode = profile['bo2']['mode']
+    source = client_path(base, PLUTONIUM_MODES.get(mode)) or base / 'plutonium'
+    hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player), str(source)]
     replacement = player / 'batocera-wine-bo2'
     log = None
     token = os.environ.get('PARTYDECK_SESSION_TOKEN', '')
     if os.environ.get(AUTO_JOIN) == '1' and re.fullmatch(r'[a-f0-9]{32}', token):
         log = automatic_path(player, token, 'log')
-    atomic_write(replacement, instrument_native(binary.read_text(), hook, profile['bo2']['mode'], log=log), 0o755)
+    atomic_write(replacement, instrument_native(binary.read_text(), hook, mode, log=log), 0o755)
     subprocess.run(['bash', '-n', str(replacement)], check=True)
     subprocess.run(['mount', '--bind', str(replacement), str(binary)], check=True)
 
