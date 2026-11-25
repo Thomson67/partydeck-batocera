@@ -61,6 +61,12 @@ se règlent séparément. **Conserver** suit le réglage combiné enregistré da
 le jeu. Chaque joueur paie ses propres achats. Le réglage des PV concerne
 les cœurs de soin ramassés. Les réceptacles et les quarts de cœur font partie
 de la progression d’équipe.
+
+Dans **Réseau → Cycle jour/nuit**, **Horloge commune du serveur** garde
+l’horloge synchronisée de Story Co-op. **Cycle d’origine par joueur**
+applique les règles de temps du jeu à chaque zone, avec une heure locale
+pour chaque joueur. Le temps reste notamment figé au village.
+
 Le code de campagne
 vide reprend celui du JSON de J1, ou `partydeck` si celui-ci est vide.
 Le serveur associe une campagne au nom de J1 et à ce code. Conservez les
@@ -81,8 +87,15 @@ Quand un joueur choisit explicitement un skin, Windows Party masque dans
 son instance le pack **Enhanced 3DS Link** et les archives O2R qui
 remplacent le squelette de Link. Choisissez **Mods du jeu** pour retrouver
 l’apparence de votre installation, même après avoir utilisé un skin
-personnalisé. Si la préparation du skin échoue, le jeu
+personnalisé. Windows Party prépare aussi le pack **Enhanced 3DS Link**
+pour que les autres joueurs voient cette apparence. Si la préparation du skin échoue, le jeu
 se lance avec l’apparence précédente et l’erreur figure dans le journal.
+
+Dans **Joueurs**, **Caméra libre au stick droit** utilise la manette
+attribuée à chaque joueur au lancement. Les boutons C auparavant
+associés aux directions du stick passent sur la croix directionnelle
+lorsqu’ils n’ont pas déjà une autre commande à la manette. Désactiver
+l’option restaure les affectations précédentes.
 
 L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,
 le filtre des textures, les volumes et la musique sur J1 uniquement.

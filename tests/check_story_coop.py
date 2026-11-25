@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_story_coop as story
 from partydeck_catalog import recipe_for
 from partydeck_profiles import defaults, read_profile, save_profile
-from partydeck_story_lobby import CLIENT_STORY_SHARE_ITEM, Lobby, Player, is_selected_pickup
+from partydeck_soh_camera import configure_freecam
+from partydeck_story_lobby import CLIENT_STORY_SHARE_ITEM, Lobby, Player, is_selected_pickup, share_game_skin
 
 
 with TemporaryDirectory() as folder:
@@ -222,6 +223,54 @@ with TemporaryDirectory() as folder:
         assert invalid.read_bytes() == b'unsupported Windows build'
     else:
         raise AssertionError('An unknown executable was accepted for the audio fix')
+
+    client = base / 'clock-soh.exe'
+    binary = b'audio original; time original; window original'
+    fixed = binary.replace(b'audio original', b'audio repaired')
+    hidden = fixed.replace(b'window original', b'window repaired')
+    local = fixed.replace(b'time original', b'time private!')
+    local_hidden = hidden.replace(b'time original', b'time private!')
+    client.write_bytes(binary)
+
+    def digest(data):
+        return hashlib.sha256(data).hexdigest()
+
+    with patch.multiple(story, CLIENT_DIGEST=digest(binary), FIXED_CLIENT_DIGEST=digest(fixed),
+                        HIDDEN_WINDOW_DIGEST=digest(hidden), ORIGINAL_TIME_DIGEST=digest(local),
+                        ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST=digest(local_hidden),
+                        AUDIO_GUARD_OFFSET=0, AUDIO_GUARD_ORIGINAL=b'audio original', AUDIO_GUARD_PATCH=b'audio repaired',
+                        HIDE_WINDOW_OFFSET=binary.index(b'window'), HIDE_WINDOW_ORIGINAL=b'window original',
+                        HIDE_WINDOW_PATCH=b'window repaired', LOCAL_TIME_OFFSET=binary.index(b'time'),
+                        LOCAL_TIME_PATCH=b'time private!', LOCAL_TIME_ORIGINAL=b'time original'):
+        for hide_window, original_time, expected in ((True, True, local_hidden), (True, False, hidden),
+                                                    (False, True, local), (False, False, fixed)):
+            assert story.patch_client(client, hide_window, original_time)
+            assert client.read_bytes() == expected
+            assert not story.patch_client(client, hide_window, original_time)
+
+    template = Path(__file__).resolve().parents[1] / 'templates' / 'soh-common.json'
+    camera = base / 'camera.json'
+    graphics = {'FreeLook': {'Enabled': 0, 'InvertYAxis': 1}}
+    configure_freecam(graphics, camera, True, template)
+    assert graphics['FreeLook'] == {'Enabled': 1, 'InvertYAxis': 1}
+    controls = graphics['Controllers']
+    port = controls['Port1']
+    assert port['RightStick']['UpAxisDirectionMappingIds'] == 'P0-S1-D2-SDLA3-ADN,'
+    c_up = port['Buttons']['8ButtonMappingIds'].split(',')
+    assert 'P0-B8-SDLB11' in c_up and all('SDLA3' not in entry for entry in c_up)
+    configured = json.dumps(graphics)
+    configure_freecam(graphics, camera, True, template)
+    assert json.dumps(graphics) == configured
+    assert configure_freecam(graphics, camera, False, template)
+    assert graphics == {'FreeLook': {'Enabled': 0, 'InvertYAxis': 1}}
+
+    reference = 'partydeck-0123456789abcdef'
+    empty = b'\x09\x02\x00\x02J2'
+    explicit = b'\x09\x02\x04link\x02J2'
+    assert share_game_skin(empty, reference) == b'\x09\x02\x1a' + reference.encode() + b'\x02J2'
+    assert share_game_skin(explicit, reference) == explicit
+    assert share_game_skin(empty, '') == empty
+    assert share_game_skin(empty[:-1], reference) == empty[:-1]
 
     for modes, old, expected in (
             (('on', 'on', 'off'), False, {'rupees', 'ammo'}),

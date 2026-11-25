@@ -22,6 +22,7 @@ from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, 
                            defaults as bo2_defaults, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
+                                 TIME_MODES as STORY_TIME_MODES,
                                  defaults as story_defaults,
                                  matches as matches_story_coop, skin_choices as story_skin_choices)
 from partydeck_story_skins import CATALOGUE as STORY_SKINS
@@ -134,14 +135,16 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     (f'{adapter}.config', tr('Chemin du JSON SoH'), None),
                     (f'{adapter}.locations', tr('Positions visibles'), [True, False]),
                     (f'{adapter}.teleport', tr('Téléportation'), [True, False]),
+                    (f'{adapter}.time_mode', tr('Cycle jour/nuit'), list(STORY_TIME_MODES)),
                     (f'{adapter}.sync', tr('Objets et progression partagés'), [True, False]),
                     *[(f'{adapter}.consumables.{key}', tr(label), list(STORY_SHARING_CHOICES))
                       for key, label in STORY_CONSUMABLES.items()]]
         if tab == 2:
-            return [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
+            rows = [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
                     for index in range(4)
                     for key, label, choices in [('names', 'Nom', None),
                                                 ('skins', 'Skin', ['', *dict.fromkeys((*STORY_SKINS, *story_skins))])]]
+            return [*rows, (f'{adapter}.freecam', tr('Caméra libre au stick droit'), [True, False])]
         return soh_graphics_fields(adapter)
     if adapter == 'celestenet':
         if tab == 2:
@@ -319,6 +322,8 @@ def label_value(key, value):
         return STORY_SKINS.get(reference, (reference, None))[0]
     if key.startswith(f'{STORY_COOP}.consumables.'):
         return tr(STORY_SHARING_CHOICES[value])
+    if key == f'{STORY_COOP}.time_mode':
+        return tr(STORY_TIME_MODES[value])
     if key == f'{STORY_COOP}.room' and not value:
         return tr('Conserver')
     if key == 'celestenet.language':

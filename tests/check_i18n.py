@@ -86,6 +86,10 @@ for language, automatic, skin, default_skin in (
     lang.set_language(language)
     network = {key: label for key, label, _ in fields(1, 'ocarina-story-coop')}
     assert network['ocarina-story-coop.automatic'] == automatic
+    time_mode = 'ocarina-story-coop.time_mode'
+    assert network[time_mode] == ('Cycle jour/nuit' if language == 'fr' else 'Day/night cycle')
+    assert label_value(time_mode, 'original') == (
+        'Cycle d’origine par joueur' if language == 'fr' else 'Original cycle per player')
     for key, fr, en in (('rupees', 'Partager les rubis', 'Share rupees'),
                         ('ammo', 'Partager les munitions', 'Share ammo'),
                         ('healing', 'Partager les PV', 'Share healing')):
@@ -96,6 +100,8 @@ for language, automatic, skin, default_skin in (
     assert label_value(player_fields[1][0], 'link') == default_skin
     assert label_value(player_fields[1][0], '') == ('Mods du jeu' if language == 'fr' else 'Game mods')
     assert label_value(player_fields[1][0], 'linkle') == 'Linkle by DanatheElf'
+    assert player_fields[-1][:2] == ('ocarina-story-coop.freecam',
+        'Caméra libre au stick droit' if language == 'fr' else 'Free camera on right stick')
     assert [field[1:] for field in fields(3, 'ocarina-story-coop')] == [
         field[1:] for field in fields(3, 'soh-anchor')]
 lang.set_language('fr')

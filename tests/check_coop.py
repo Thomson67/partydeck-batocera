@@ -200,12 +200,15 @@ for split, second_position, inputs, shared, party, virtual, title in [
             ready = stack.enter_context(patch('partydeck_bo2.startup_ready', side_effect=read_boot))
         if story:
             network = stack.enter_context(patch('partydeck_private_lan.PrivateLAN'))
+            skin = 'partydeck-0123456789abcdef'
+            prepare_skin = stack.enter_context(patch('partydeck_story_coop.prepare_game_skin', return_value=skin))
             def start_story(archive, work, lan, cache, options, count, host_settings):
                 starts.assert_not_called()
                 assert archive == game and lan is network.return_value
                 assert work.is_relative_to(base / 'party-saves') and work.name == 'story-coop'
                 assert cache == base / 'dependencies/ocarina-story-coop/v1.0.5'
                 assert count == 2 and options['automatic']
+                assert options['local_skin'] == skin
                 assert host_settings.is_relative_to(base / 'runtime') and host_settings.parent.name == 'j1'
                 return server
             server = Mock()
@@ -238,6 +241,8 @@ for split, second_position, inputs, shared, party, virtual, title in [
             network.assert_called_once_with(2, shared=True)
             assert all(call.kwargs['story_coop'] and call.kwargs['network_index'] == 0
                        for call in starts.call_args_list)
+            assert all(call.kwargs['story_coop']['local_skin'] == skin for call in starts.call_args_list)
+            prepare_skin.assert_called_once_with(game, base / 'dependencies/ocarina-story-coop/v1.0.5')
             assert boot_story.call_count == 1
             stop_story.assert_called_once_with(server)
         assert place.call_args_list[1].args == ("811", second_position)

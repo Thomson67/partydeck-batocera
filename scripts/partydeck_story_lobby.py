@@ -13,7 +13,9 @@ from partydeck_story_coop import CONSUMABLES, client_host
 # PacketTypes.hpp distinguishes the client and server packet ID spaces.
 CLIENT_INIT_LIST, CLIENT_CREATE, CLIENT_LEAVE, CLIENT_INVITE, CLIENT_JOIN, CLIENT_TELEPORT = 24, 25, 26, 27, 28, 31
 CLIENT_STORY_SHARE_ITEM = 40
+CLIENT_APPEARANCE = 9
 SERVER_AUTH, SERVER_LIST_APPEND, SERVER_LIST_UPDATE, SERVER_JOIN, SERVER_INVITE = 3, 21, 23, 24, 25
+SERVER_WORLD_TIME = 8
 
 # MOD_NONE GetItemID values from v1.0.5 z64item.h. The randomizer
 # also uses these vanilla entries for rupee and ammunition refills.
@@ -37,6 +39,15 @@ def is_selected_pickup(packet, enabled):
         or ('ammo' in enabled and item in AMMO_PICKUPS)
         or ('healing' in enabled and item == 0x48)  # GI_HEART
     )
+
+
+def share_game_skin(packet, reference):
+    # Client appearance: type, age, skin length and skin, name length and name.
+    # An empty skin means the local player uses their normal game assets.
+    if not reference or len(packet) < 4 or packet[2] or packet[3] != len(packet) - 4:
+        return packet
+    skin = reference.encode('ascii')
+    return packet[:2] + bytes((len(skin),)) + skin + packet[3:]
 
 
 def send(writer, packet):
@@ -139,6 +150,8 @@ class Lobby:
                 self.invite(host, guest)
 
     async def client_packets(self, player, reader):
+        local_skins = self.options.get('local_skins', [])
+        reference = local_skins[player.slot - 1] if player.slot <= len(local_skins) else ''
         while True:
             packet = await read_packet(reader)
             kind = packet[0] if packet else -1
@@ -150,6 +163,8 @@ class Lobby:
                 sharing = self.party_sharing.get(player.party_id)
                 if sharing is not None and not is_selected_pickup(packet, sharing):
                     continue
+            elif kind == CLIENT_APPEARANCE:
+                packet = share_game_skin(packet, reference)
             send(player.writer, packet)
             if kind == CLIENT_INIT_LIST and player.network_id is not None:
                 # The client has already sent its appearance and name. The
@@ -164,6 +179,8 @@ class Lobby:
         while True:
             packet = await read_packet(reader)
             kind = packet[0] if packet else -1
+            if kind == SERVER_WORLD_TIME and self.options.get('original_time'):
+                continue
             if kind == SERVER_AUTH and len(packet) == 3:
                 player.network_id, = struct.unpack_from('<H', packet, 1)
             elif kind == SERVER_JOIN and len(packet) >= 7:

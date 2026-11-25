@@ -246,6 +246,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_story_coop.py ]] || die 'Module Story Co-op absent / Story Co-op module missing.'
     [[ -f $source_dir/partydeck_story_lobby.py ]] || die 'Module réseau Story Co-op absent / Story Co-op network module missing.'
     [[ -f $source_dir/partydeck_story_skins.py ]] || die 'Module de skins Story Co-op absent / Story Co-op skin module missing.'
+    [[ -f $source_dir/partydeck_soh_camera.py ]] || die 'Module de caméra SoH absent / SoH camera module missing.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_dir/partydeck_virtual_input.py ]] || die 'Module contrôles virtuels absent du paquet.'
@@ -330,6 +331,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_story_lobby.py" "$base/partydeck_story_lobby.py"
     cp -- "$source_dir/partydeck_story_skins.py" "$staging/partydeck_story_skins.py"
     mv -fT -- "$staging/partydeck_story_skins.py" "$base/partydeck_story_skins.py"
+    cp -- "$source_dir/partydeck_soh_camera.py" "$staging/partydeck_soh_camera.py"
+    mv -fT -- "$staging/partydeck_soh_camera.py" "$base/partydeck_soh_camera.py"
     cp -- "$source_dir/partydeck_bo2.py" "$staging/partydeck_bo2.py"
     mv -fT -- "$staging/partydeck_bo2.py" "$base/partydeck_bo2.py"
     cp -- "$source_dir/partydeck_plutonium.py" "$staging/partydeck_plutonium.py"

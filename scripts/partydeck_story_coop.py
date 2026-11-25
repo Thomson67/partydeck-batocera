@@ -23,6 +23,7 @@ VERSION = 'v1.0.5'
 PORT = 21050
 CONSUMABLES = {'rupees': 'Partager les rubis', 'ammo': 'Partager les munitions', 'healing': 'Partager les PV'}
 SHARING_CHOICES = {'keep': 'Conserver', 'on': 'Activé', 'off': 'Désactivé'}
+TIME_MODES = {'shared': 'Horloge commune du serveur', 'original': 'Cycle d’origine par joueur'}
 GAME_DIR = Path('drive_c/game')
 CONFIG = 'shipofharkinian.json'
 SERVER_DIR = 'PartyDeck-Story-Coop'
@@ -35,6 +36,8 @@ LINUX_DIGEST = '4a305e237487d628be52afcc3e554ad4b5551bdfc0442ece6f8d05f8b36ace60
 CLIENT_DIGEST = 'ef4470bbe7b7c7277662438190177ab9045fed3e61e77f3ecfa92a75028f5377'
 FIXED_CLIENT_DIGEST = '969354419e80ea9b712928da264b5ce23f32c227f3a6c769d300877976c03576'
 HIDDEN_WINDOW_DIGEST = '2b612c990d14611010b70ae9f6a073ff057489c52597c31308650e6e0f6f1769'
+ORIGINAL_TIME_DIGEST = 'f905a5e7d9afff4db6f407f74701870a2bb884567c670cbefff624095661d6be'
+ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST = 'f97d64c0a1d841d6a933bfae9a1df6235c97795a50119a093b4ef48574cefe37'
 # Audio_StopSfxById in the official v1.0.5 Windows build (7b91267).
 # Return through the existing epilogue when the bank index is >= 7.
 # For a valid bank, load the same sound entry as the original code.
@@ -46,6 +49,10 @@ AUDIO_GUARD_PATCH = bytes.fromhex('83f8070f832e010000488d0dc6284a0131d2488b04c19
 HIDE_WINDOW_OFFSET = 0xE24808
 HIDE_WINDOW_ORIGINAL = bytes.fromhex('e823b7ffff')
 HIDE_WINDOW_PATCH = bytes.fromhex('e8435d8100')
+# ShouldFreezeTime only gates Zelda Online's writes to the game clock.
+LOCAL_TIME_OFFSET = 0xDAF6B0
+LOCAL_TIME_ORIGINAL = bytes.fromhex('89542410')
+LOCAL_TIME_PATCH = bytes.fromhex('b001c390')  # mov al, 1; ret; nop
 SERVER_FILES = {
     'OOTServer': 'f1ce1e80bdff661fa17316080b616bab5b8e6f380164c2326f4fc08fde3c2b57',
     'config.json': '0b43c81bbc154e19a002f175d9b8a2fdb58ed7834f9d0dd277e1f7fc39dbae5f',
@@ -62,6 +69,7 @@ def matches(rom):
 def defaults():
     return dict(automatic=True, port=PORT, room='', config=CONFIG,
                 sync=True, locations=True, teleport=True, consumables=dict.fromkeys(CONSUMABLES, 'keep'),
+                freecam=False, time_mode='shared',
                 names=[f'J{i}' for i in range(1, 5)], skins=[''] * 4, graphics=graphics_defaults())
 
 
@@ -75,7 +83,8 @@ def validate(options):
     if isinstance(sharing, str) and sharing in SHARING_CHOICES:
         sharing = dict.fromkeys(CONSUMABLES, sharing)
     if (type(options['port']) is not int or not 1024 < options['port'] < 65535
-            or any(type(options[key]) is not bool for key in ('automatic', 'sync', 'locations', 'teleport'))
+            or any(type(options[key]) is not bool for key in ('automatic', 'sync', 'locations', 'teleport', 'freecam'))
+            or not isinstance(options['time_mode'], str) or options['time_mode'] not in TIME_MODES
             or not isinstance(sharing, dict) or sharing.keys() != CONSUMABLES.keys()
             or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in sharing.values())
             or not isinstance(options['config'], str)
@@ -120,6 +129,7 @@ def installed_skins(directory):
                 for entry in archive.namelist():
                     parts = entry.replace('\\', '/').split('/', 3)
                     if (len(parts) < 3 or parts[0] in ('alt', 'link')
+                            or skins.LOCAL_SKIN.fullmatch(parts[0])
                             or not re.fullmatch(r'[A-Za-z0-9_-]+', parts[0])
                             or parts[1] not in ('objects', 'textures', 'scenes', 'audio', 'overlays', 'misc')):
                         continue
@@ -270,6 +280,14 @@ def bundled_server_files(rom):
     return None
 
 
+def prepare_game_skin(rom, cache):
+    try:
+        return skins.prepare_game_skin(rom, game_dirs(rom), cache / 'skins')
+    except (OSError, subprocess.SubprocessError) as error:
+        print(tr('Story Co-op : partage du mod de Link indisponible ({p0}).', p0=error), flush=True)
+        return ''
+
+
 def cached_server_files(cache):
     from partydeck_borderlands2 import write_bytes
 
@@ -308,6 +326,11 @@ def start_server(rom, work, lan, cache, options, players, host_settings):
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             raise RuntimeError(tr('Story Co-op : serveur Linux indisponible ({p0}).', p0=error)) from error
     skins.prepare(options['skins'][:players], cache / 'skins')
+    original_time = options['time_mode'] == 'original'
+    if original_time:
+        config = json.loads(files['config.json'])
+        config.update(daySpeed=0, nightSpeed=0)
+        files['config.json'] = json.dumps(config).encode()
     work.mkdir(parents=True, exist_ok=True)
     program = work / 'OOTServer'
     for name, data in files.items():
@@ -319,6 +342,10 @@ def start_server(rom, work, lan, cache, options, players, host_settings):
     program.chmod(0o700)
     log = work / 'server.log'
     relay_options = {key: options[key] for key in ('automatic', 'locations', 'teleport', 'consumables')}
+    relay_options['original_time'] = original_time
+    reference = options.get('local_skin', '')
+    if reference:
+        relay_options['local_skins'] = [reference if not skin else '' for skin in options['skins'][:players]]
     with log.open('wb') as output:
         lobby = Path(__file__).with_name('partydeck_story_lobby.py')
         process = subprocess.Popen([*lan.prefix(0), sys.executable, str(lobby), str(program),
@@ -342,15 +369,21 @@ def start_server(rom, work, lan, cache, options, players, host_settings):
         raise
 
 
-def patch_client(client, hide_window):
+def patch_client(client, hide_window, original_time=False):
     from partydeck_borderlands2 import write_bytes
 
     original = client.read_bytes()
     checksum = hashlib.sha256(original).hexdigest()
-    expected = HIDDEN_WINDOW_DIGEST if hide_window else FIXED_CLIENT_DIGEST
+    variants = {
+        (False, False): FIXED_CLIENT_DIGEST,
+        (True, False): HIDDEN_WINDOW_DIGEST,
+        (False, True): ORIGINAL_TIME_DIGEST,
+        (True, True): ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST,
+    }
+    expected = variants[hide_window, original_time]
     if checksum == expected:
         return False
-    if checksum not in (CLIENT_DIGEST, FIXED_CLIENT_DIGEST, HIDDEN_WINDOW_DIGEST):
+    if checksum != CLIENT_DIGEST and checksum not in variants.values():
         raise ValueError(tr('Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.', p0=VERSION))
     patched = bytearray(original)
     if checksum == CLIENT_DIGEST:
@@ -359,16 +392,19 @@ def patch_client(client, hide_window):
         if original[start:stop] != AUDIO_GUARD_ORIGINAL:
             raise ValueError(tr('Story Co-op : impossible de vérifier les correctifs de soh.exe.'))
         patched[start:stop] = AUDIO_GUARD_PATCH
-    if hide_window or checksum == HIDDEN_WINDOW_DIGEST:
+    if hide_window or checksum in (HIDDEN_WINDOW_DIGEST, ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST):
         start = HIDE_WINDOW_OFFSET
         patched[start:start + len(HIDE_WINDOW_PATCH)] = HIDE_WINDOW_PATCH if hide_window else HIDE_WINDOW_ORIGINAL
+    if original_time or checksum in (ORIGINAL_TIME_DIGEST, ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST):
+        start = LOCAL_TIME_OFFSET
+        patched[start:start + len(LOCAL_TIME_PATCH)] = LOCAL_TIME_PATCH if original_time else LOCAL_TIME_ORIGINAL
     if hashlib.sha256(patched).hexdigest() != expected:
         raise ValueError(tr('Story Co-op : impossible de vérifier les correctifs de soh.exe.'))
     write_bytes(client, patched)
     return True
 
 
-def configure_client(player, rom, directory, root, options, skin_cache):
+def configure_client(player, rom, directory, root, options, skin_cache, controller_template=None):
     from partydeck_bottles import private_windows_paths
     from partydeck_profiles import atomic_write
 
@@ -385,7 +421,7 @@ def configure_client(player, rom, directory, root, options, skin_cache):
         raise ValueError(tr('Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.', p0=VERSION))
     if not any((directory / asset).is_file() for asset in ASSETS):
         raise ValueError(tr('Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.'))
-    if patch_client(client, options['automatic']):
+    if patch_client(client, options['automatic'], options.get('time_mode') == 'original'):
         print(tr('Story Co-op {p0} : correctifs du client appliqués.', p0=player.name.upper()), flush=True)
     index = int(player.name.removeprefix('j'))
     path = config_path(directory, CONFIG)
@@ -399,6 +435,9 @@ def configure_client(player, rom, directory, root, options, skin_cache):
     # them before applying a new mix so toggling J1-only music is reversible.
     graphics.setdefault('Volume', {}).update({key: 100 for key, _ in VOLUME_FIELDS})
     apply_graphics(data, options['graphics'], index - 1)
+    from partydeck_soh_camera import configure_freecam
+    camera_backup = config_path(directory, 'partydeck-freecam-original.json')
+    restored_camera = configure_freecam(graphics, camera_backup, options.get('freecam', False), controller_template)
     online = cvars.setdefault('gZeldaOnline', {})
     host, port = client_host(index), options['port']
     online.update(Enabled=1, AutoConnect=1, Host=host, Port=port, Nickname=options['names'][index - 1])
@@ -414,6 +453,7 @@ def configure_client(player, rom, directory, root, options, skin_cache):
         available = installed_skins(directory)
         references = {item.split('|', 1)[0] for item in available}
         skins.stage(options['skins'], skin_cache, directory, references)
+        skins.stage_game_skin(os.environ.get('PARTYDECK_STORY_LOCAL_SKIN', ''), skin_cache, directory)
         if index == 1:
             atomic_write(player / 'story-skins.json', json.dumps(available))
         if skin == 'link' or (skin and skin.split('|', 1)[0] in references):
@@ -452,6 +492,8 @@ def configure_client(player, rom, directory, root, options, skin_cache):
     if width.isdecimal() and height.isdecimal() and int(width) > 0 and int(height) > 0:
         window.update(Width=int(width), Height=int(height), PositionX=0, PositionY=0)
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    if restored_camera:
+        camera_backup.unlink(missing_ok=True)
     print(tr('Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.',
              p0=player.name.upper(), p1=f'{host}:{port}'), flush=True)
 
@@ -481,7 +523,8 @@ if __name__ == '__main__':
             from partydeck_profiles import read_profile
             base, player, rom, directory, root = map(Path, sys.argv[2:])
             skin_cache = base / 'dependencies' / ADAPTER / VERSION / 'skins'
-            configure_client(player, rom, directory, root, read_profile(base, rom)[ADAPTER], skin_cache)
+            configure_client(player, rom, directory, root, read_profile(base, rom)[ADAPTER], skin_cache,
+                             base / 'templates' / 'soh-common.json')
         else:
             parser = argparse.ArgumentParser(description=LABEL)
             parser.add_argument('source', type=Path)

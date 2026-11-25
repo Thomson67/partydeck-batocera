@@ -837,10 +837,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if dst:
         environment['PARTYDECK_DST'] = '1'
     environment.pop('PARTYDECK_STORY_COOP', None)
+    environment.pop('PARTYDECK_STORY_LOCAL_SKIN', None)
     if story_coop:
         from partydeck_story_coop import client_host
         host = client_host(int(player.name.removeprefix('j')))
         environment.update(PARTYDECK_STORY_COOP=session_token, OOT_SERVER=f'{host}:{story_coop["port"]}')
+        if story_coop.get('local_skin'):
+            environment['PARTYDECK_STORY_LOCAL_SKIN'] = story_coop['local_skin']
     if celestenet:
         environment['PARTYDECK_CELESTENET']='1'
     environment.pop('PARTYDECK_EXIT_STATE',None)
@@ -1131,6 +1134,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1
     from partydeck_story_coop import (ADAPTER as STORY_COOP, VERSION as STORY_VERSION,
+                                     prepare_game_skin,
                                      session_config as story_session_config, start_server as start_story_server,
                                      stop_server as stop_story_server)
     story_coop = profile[STORY_COOP] if party and len(players) > 1 and (profile or {}).get('adapter') == STORY_COOP else None
@@ -1237,6 +1241,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
         if story_coop:
             cache = base / 'dependencies' / STORY_COOP / STORY_VERSION
+            if '' in story_coop['skins'][:len(players)]:
+                story_coop = story_coop | {'local_skin': prepare_game_skin(target, cache)}
             story_settings = story_session_config(base / 'runtime' / game_id / 'j1', session_token)
             story_server = start_story_server(target, PARTY_SAVES / save_name / 'story-coop',
                                              network, cache, story_coop, len(players), story_settings)
