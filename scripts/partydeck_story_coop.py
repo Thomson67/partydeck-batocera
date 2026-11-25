@@ -28,6 +28,13 @@ LINUX_ARCHIVE = f'OcarinaStoryCoop-{VERSION}-linux.tar.gz'
 WINDOWS_DIGEST = '0e5bd2ddaf61bf1707ae8ee23c396c272733bfd7478fbfc8add35957c64f8742'
 LINUX_DIGEST = '4a305e237487d628be52afcc3e554ad4b5551bdfc0442ece6f8d05f8b36ace60'
 CLIENT_DIGEST = 'ef4470bbe7b7c7277662438190177ab9045fed3e61e77f3ecfa92a75028f5377'
+FIXED_CLIENT_DIGEST = '969354419e80ea9b712928da264b5ce23f32c227f3a6c769d300877976c03576'
+# Audio_StopSfxById in the official v1.0.5 Windows build (7b91267).
+# Return through the existing epilogue when the bank index is >= 7.
+# For a valid bank, load the same sound entry as the original code.
+AUDIO_GUARD_OFFSET = 0xFFF7AA
+AUDIO_GUARD_ORIGINAL = bytes.fromhex('25ff0000008bc0488d0dc8284a01ba50000000486bd200488b04c1')
+AUDIO_GUARD_PATCH = bytes.fromhex('83f8070f832e010000488d0dc6284a0131d2488b04c19090909090')
 SERVER_FILES = {
     'OOTServer': 'f1ce1e80bdff661fa17316080b616bab5b8e6f380164c2326f4fc08fde3c2b57',
     'config.json': '0b43c81bbc154e19a002f175d9b8a2fdb58ed7834f9d0dd277e1f7fc39dbae5f',
@@ -222,6 +229,25 @@ def start_server(rom, work, lan, cache):
         raise
 
 
+def repair_client_audio(client):
+    from partydeck_borderlands2 import write_bytes
+
+    original = client.read_bytes()
+    checksum = hashlib.sha256(original).hexdigest()
+    if checksum == FIXED_CLIENT_DIGEST:
+        return False
+    if checksum != CLIENT_DIGEST:
+        raise ValueError(tr('Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.', p0=VERSION))
+    start = AUDIO_GUARD_OFFSET
+    stop = start + len(AUDIO_GUARD_ORIGINAL)
+    patched = original[:start] + AUDIO_GUARD_PATCH + original[stop:]
+    if (original[start:stop] != AUDIO_GUARD_ORIGINAL
+            or hashlib.sha256(patched).hexdigest() != FIXED_CLIENT_DIGEST):
+        raise ValueError(tr('Story Co-op : impossible de vérifier le correctif audio de soh.exe.'))
+    write_bytes(client, patched)
+    return True
+
+
 def configure_client(player, rom, directory, root):
     from partydeck_bottles import private_windows_paths
     from partydeck_profiles import atomic_write
@@ -235,10 +261,12 @@ def configure_client(player, rom, directory, root):
             or not any(directory.is_relative_to(path) for path in allowed)):
         raise ValueError(tr('Story Co-op : espace privé du joueur requis.'))
     client = directory / 'soh.exe'
-    if not client.is_file() or digest(client) != CLIENT_DIGEST:
+    if not client.is_file() or client.is_symlink():
         raise ValueError(tr('Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.', p0=VERSION))
     if not any((directory / asset).is_file() for asset in ASSETS):
         raise ValueError(tr('Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.'))
+    if repair_client_audio(client):
+        print(tr('Story Co-op {p0} : correctif du crash audio appliqué.', p0=player.name.upper()), flush=True)
     path = directory / 'shipofharkinian.json'
     if path.is_symlink():
         raise ValueError(tr('Le fichier est un lien symbolique : {p0}', p0=path))

@@ -49,6 +49,9 @@ groupe avec **Story Co-op** activé et invite J2. J2 accepte. Aux sessions
 suivantes, recréez le groupe avec le même code d’équipe pour retrouver la
 campagne. Le code par défaut est `partydeck`.
 
+Windows Party applique à la copie privée de `soh.exe` de chaque joueur le
+correctif du crash audio observé pendant l’introduction de la version 1.0.5.
+
 Les sauvegardes d’équipe se trouvent dans
 `/userdata/saves/windows-party/<jeu>/story-coop/data/story/`. Le journal du
 serveur est dans `story-coop/server.log`, à côté du dossier `data`.

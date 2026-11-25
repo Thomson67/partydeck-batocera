@@ -111,16 +111,25 @@ with TemporaryDirectory() as folder:
         player = base / f'j{index}'
         private = player / story.GAME_DIR
         private.mkdir(parents=True)
-        (private/'soh.exe').write_bytes(binary)
+        client = private / 'soh.exe'
+        client.hardlink_to(game / 'soh.exe')
         (private/'oot.o2r').write_bytes(fixture.read_bytes())
         path = private / 'shipofharkinian.json'
         path.write_text(json.dumps({'CVars': {'gRemote': {'Anchor': {'Enabled': 1}},
                                                'gZeldaOnline': {'Party': {'StoryCode': 'existing-campaign'}}},
                                     'Window': {'Backend': {'Id': 1}}}))
+        fixed = binary.replace(b'client', b'stable', 1)
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
                         PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='540'), \
-             patch.object(story, 'CLIENT_DIGEST', hashlib.sha256(binary).hexdigest()):
+             patch.multiple(story, CLIENT_DIGEST=hashlib.sha256(binary).hexdigest(),
+                            FIXED_CLIENT_DIGEST=hashlib.sha256(fixed).hexdigest(),
+                            AUDIO_GUARD_OFFSET=binary.index(b'client'),
+                            AUDIO_GUARD_ORIGINAL=b'client', AUDIO_GUARD_PATCH=b'stable'):
             story.configure_client(player, archive, private, player)
+            assert client.read_bytes() == fixed
+            inode = client.stat().st_ino
+            story.configure_client(player, archive, private, player)
+            assert client.stat().st_ino == inode
         data = json.loads(path.read_text())
         assert data['CVars']['gZeldaOnline'] == {
             'AutoConnect': 1, 'Enabled': 1, 'Host': '127.0.0.1', 'Port': story.PORT, 'Nickname': f'J{index}',
@@ -130,5 +139,14 @@ with TemporaryDirectory() as folder:
         assert not data['Window']['Fullscreen']['Enabled']
         assert (data['Window']['Width'], data['Window']['Height']) == (1920, 540)
     assert not (game/'shipofharkinian.json').exists()
+    assert (game/'soh.exe').read_bytes() == binary
+    invalid = base / 'unknown-soh.exe'
+    invalid.write_bytes(b'unsupported Windows build')
+    try:
+        story.repair_client_audio(invalid)
+    except ValueError:
+        assert invalid.read_bytes() == b'unsupported Windows build'
+    else:
+        raise AssertionError('An unknown executable was accepted for the audio fix')
 
-print('Story Co-op: archive contents, version pinning, private clients and campaign continuity verified.')
+print('Story Co-op: archive contents, version pinning, private audio fix and campaign continuity verified.')

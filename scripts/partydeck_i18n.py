@@ -176,6 +176,9 @@ EN = {
     'Story Co-op : espace privé du joueur requis.': 'Story Co-op: private player namespace required.',
     'Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.':
         'Story Co-op: soh.exe {p0} is required in the game folder.',
+    'Story Co-op : impossible de vérifier le correctif audio de soh.exe.':
+        'Story Co-op: could not verify the soh.exe audio fix.',
+    'Story Co-op {p0} : correctif du crash audio appliqué.': 'Story Co-op {p0}: audio crash fix applied.',
     'Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.':
         'Story Co-op: first run the game solo to generate oot.o2r.',
     'Story Co-op {p0} : connexion automatique à {p1}.': 'Story Co-op {p0}: automatic connection to {p1}.',
