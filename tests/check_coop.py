@@ -241,7 +241,7 @@ with patch.object(coop.subprocess, 'Popen') as popen:
     assert '-w' not in popen.call_args.args[0]
 
 # Black Ops II's render size follows the horizontal slots without stretching.
-settings = dict(mode='plutonium-mp', fill_horizontal=True)
+settings = dict(mode='plutonium-mp', fill_horizontal=True, automatic_join=True)
 with (patch.object(coop.subprocess, 'Popen') as popen,
       patch.object(coop, 'sandbox_arguments', return_value=[]),
       patch('partydeck_profiles.profile_path', return_value=Path(__file__)),

@@ -22,11 +22,16 @@ Utilisez le client Plutonium en mode LAN pour jouer quand le menu
 3. Dans **Configurer Windows Party**, liez le jeu et choisissez
    **Options → Mode de jeu → Multijoueur · Plutonium LAN** ou
    **Zombies · Plutonium LAN**. Pour le premier essai, choisissez deux joueurs.
-4. Sur **J1**, choisissez **Partie personnalisée** et lancez une carte.
-   Sur **J2**, une fois au menu, ouvrez la
-   [console de jeu](https://plutonium.pw/docs/opening-console/) et saisissez
-   `connect 192.168.247.11:1111`. En Zombies, J1 peut attendre les autres
-   joueurs pendant le chargement de la carte.
+4. Sur **J1**, choisissez **Partie personnalisée** et lancez la carte.
+   Laissez **J2** et les autres invités au menu. Ils rejoignent J1
+   automatiquement dès que la partie est prête. En Zombies, J1 peut
+   attendre les invités pendant le chargement.
+
+**Options → Rejoindre automatiquement la partie de J1** est activé par
+défaut. Si la connexion échoue, ouvrez la
+[console de jeu](https://plutonium.pw/docs/opening-console/) sur le joueur
+invité et saisissez `connect 192.168.247.11:1111`. Si l’option est activée,
+`F9` envoie aussi cette commande depuis la fenêtre de l’invité.
 
 Les fichiers du client sont préparés dans la vue privée de chaque joueur.
 La campagne garde sa commande d’origine dans EmulationStation. Si vous

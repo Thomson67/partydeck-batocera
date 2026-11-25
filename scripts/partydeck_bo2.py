@@ -1,5 +1,6 @@
 """Prepare the installed Black Ops II client in each player's private view."""
 import hashlib
+import json
 from math import ceil
 import os
 from pathlib import Path, PureWindowsPath
@@ -9,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 from partydeck_borderlands2 import child, decode, patch_ini, write_bytes
 from partydeck_i18n import tr
@@ -25,6 +28,9 @@ PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
 BOOTSTRAPPER = 'plutonium-bootstrapper-win32.exe'
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
+JOIN_KEY = 'F9'
+AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
+GAME_WINDOW = r'[Bb]lack [Oo]ps (II|2).*(Multiplayer|Multijoueur|Zombies)'
 DEFAULT_RENDER_SIZE = (1280, 720)
 
 
@@ -59,7 +65,7 @@ def matches(rom):
 
 def defaults(rom=None):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
-    return {'mode': mode, 'fill_horizontal': True}
+    return {'mode': mode, 'fill_horizontal': True, 'automatic_join': True}
 
 
 def validate(data):
@@ -71,7 +77,10 @@ def validate(data):
     fill_horizontal = data.get('fill_horizontal', True)
     if type(fill_horizontal) is not bool:
         raise ValueError(tr('Option de partage horizontal Black Ops II invalide.'))
-    return {'mode': mode, 'fill_horizontal': fill_horizontal}
+    automatic_join = data.get('automatic_join', True)
+    if type(automatic_join) is not bool:
+        raise ValueError(tr('Option de connexion automatique Black Ops II invalide.'))
+    return {'mode': mode, 'fill_horizontal': fill_horizontal, 'automatic_join': automatic_join}
 
 
 def private_child(directory, name):
@@ -232,6 +241,8 @@ def prepare_plutonium(player, game, root, source, mode):
         if count in ('1', '2', '3', '4'):
             args += ['+set', 'sp_minplayers', count]
     if player.name != 'j1':
+        if os.environ.get(AUTO_JOIN) == '1':
+            args += ['+bind', JOIN_KEY, JOIN_HOST]
         print(tr('Black Ops II {p0} : rejoindre J1 avec {p1}.', p0=player.name.upper(),
                  p1=JOIN_HOST), file=sys.stderr, flush=True)
     print(tr('Black Ops II {p0} : Plutonium LAN ({p1}, port {p2}).',
@@ -240,7 +251,7 @@ def prepare_plutonium(player, game, root, source, mode):
     return runtime, shlex.join(args)
 
 
-def instrument_native(source, hook, mode):
+def instrument_native(source, hook, mode, *, log=None):
     """Keep Batocera's mounts, Wine setup and runner choice for all ROM types."""
     pattern = re.compile(r'(\(cd "(\$\{(?:WINEPOINT|GAMENAME)\})/\$\{WINE_DIR\}" && )')
     parts = re.split(r'(?m)^(?=[a-zA-Z_][a-zA-Z_0-9]*\(\) \{)', source)
@@ -263,8 +274,129 @@ def instrument_native(source, hook, mode):
             setup += ("    partydeck_bo2_cwd=${partydeck_bo2_launch%%$'\\n'*}\n"
                       "    WINE_CMD=${partydeck_bo2_launch#*$'\\n'}\n")
             body = pattern.sub('(cd "${partydeck_bo2_cwd}" && ', body)
+        if log is not None:
+            # Each player has its own output stream. Keep the main session
+            # journal intact and preserve the native Wine exit status.
+            body = re.sub(r'(?m)^( *\(cd "\$\{partydeck_bo2_cwd\}".*)\)$',
+                          lambda match: f'{match[1]} > >(tee -- {shlex.quote(str(log))}) 2>&1)', body)
         parts[index] = body.replace(marker, setup + marker)
     return ''.join(parts)
+
+
+def automatic_path(player, token, kind):
+    if not re.fullmatch(r'[0-9a-f]{32}', token) or kind not in ('display', 'log'):
+        raise ValueError('Invalid Black Ops II session state')
+    return player / f'bo2-{token}.{kind}'
+
+
+def join_window(display_file, outer_display):
+    try:
+        display = json.loads(display_file.read_text())
+    except (OSError, ValueError):
+        return False
+    screen = display.get('DISPLAY') if isinstance(display, dict) else None
+    if (not isinstance(screen, str) or not re.fullmatch(r':[0-9]+(?:\.[0-9]+)?', screen)
+            or screen.split('.')[0] == outer_display.split('.')[0]):
+        return False
+    env = {**os.environ, 'DISPLAY': screen}
+    env.pop('XAUTHORITY', None)
+    if display.get('XAUTHORITY'):
+        env['XAUTHORITY'] = display['XAUTHORITY']
+    try:
+        windows = subprocess.run(['xdotool', 'search', '--onlyvisible', '--name', GAME_WINDOW],
+                                 env=env, timeout=2, capture_output=True, text=True)
+        ids = windows.stdout.split()
+        if windows.returncode or len(ids) != 1 or not ids[0].isdecimal():
+            return False
+        # Use native XTEST input on the private X server, which Wine accepts
+        # even when a synthetic XSendEvent to the game window is ignored.
+        result = subprocess.run(['xdotool', 'windowfocus', ids[0], 'key', JOIN_KEY],
+                                env=env, timeout=2, capture_output=True)
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+class AutoJoin:
+    """Wait for a real host match and dispatch the guest's private LAN bind."""
+
+    def __init__(self, players, token, mode, outer_display, started):
+        self.host, *self.guests = players
+        self.token = token
+        self.mode = mode
+        self.outer_display = outer_display
+        self.started = started
+        self.offsets = {}
+        self.host_ready = None
+        self.connected = set()
+        self.attempts = dict.fromkeys(self.guests, 0)
+        self.retry_at = dict.fromkeys(self.guests, 0)
+        self.stop = threading.Event()
+        self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def start(self):
+        print(tr('Black Ops II : les invités attendent le lancement de la partie de J1.'), flush=True)
+        self.thread.start()
+
+    def close(self):
+        self.stop.set()
+        self.thread.join(timeout=5)
+
+    def host_output(self):
+        # Wine normally writes to our tee. UMU captures Proton output in
+        # separate per-player runner logs, so include only logs of this run.
+        session_log = automatic_path(self.host, self.token, 'log')
+        logs = [session_log, *(self.host / 'umu-logs').glob('runner-*.log')]
+        for path in logs:
+            try:
+                info = path.stat()
+                if path != session_log and info.st_mtime_ns < self.started:
+                    continue
+                with path.open('rb') as stream:
+                    stream.seek(self.offsets.get(path, 0))
+                    data = stream.read(262144)
+                    end = data.rfind(b'\n') + 1
+                    self.offsets[path] = stream.tell() - len(data) + end
+            except OSError:
+                continue
+            yield from data[:end].splitlines()
+
+    def poll(self, now):
+        for line in self.host_output():
+            connected = re.search(rb"client 'Player ([1-4])' connected", line)
+            if connected:
+                self.connected.add('j' + connected[1].decode('ascii'))
+            if self.host_ready is None and (
+                    'j1' in self.connected or
+                    (self.mode == 'plutonium-zm' and
+                     (b'Game Initialization' in line or b'Initializing game at' in line))):
+                # Zombies can wait for guests before the host is fully in-game.
+                self.host_ready = now + 2
+        if self.host_ready is None or now < self.host_ready:
+            return False
+
+        for player in self.guests:
+            if self.stop.is_set():
+                return True
+            if player.name in self.connected or now < self.retry_at[player]:
+                continue
+            if self.attempts[player] == 3:
+                print(tr('Black Ops II {p0} : connexion automatique non confirmée. Utilisez {p1}.',
+                         p0=player.name.upper(), p1=JOIN_HOST), flush=True)
+                self.attempts[player] += 1
+            elif self.attempts[player] < 3 and join_window(
+                    automatic_path(player, self.token, 'display'), self.outer_display):
+                self.attempts[player] += 1
+                self.retry_at[player] = now + 18
+                print(tr('Black Ops II {p0} : connexion à la partie de J1 demandée.',
+                         p0=player.name.upper()), flush=True)
+        return all(player.name in self.connected or self.attempts[player] > 3 for player in self.guests)
+
+    def run(self):
+        while not self.stop.is_set():
+            if self.poll(time.monotonic()):
+                return
+            self.stop.wait(1)
 
 
 def install_hook(base, rom, player):
@@ -281,7 +413,11 @@ def install_hook(base, rom, player):
     binary = Path(binary).resolve()
     hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player), str(base / 'plutonium')]
     replacement = player / 'batocera-wine-bo2'
-    atomic_write(replacement, instrument_native(binary.read_text(), hook, profile['bo2']['mode']), 0o755)
+    log = None
+    token = os.environ.get('PARTYDECK_SESSION_TOKEN', '')
+    if os.environ.get(AUTO_JOIN) == '1' and re.fullmatch(r'[a-f0-9]{32}', token):
+        log = automatic_path(player, token, 'log')
+    atomic_write(replacement, instrument_native(binary.read_text(), hook, profile['bo2']['mode'], log=log), 0o755)
     subprocess.run(['bash', '-n', str(replacement)], check=True)
     subprocess.run(['mount', '--bind', str(replacement), str(binary)], check=True)
 

@@ -119,6 +119,7 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter == BO2:
         return [('bo2.mode', tr('Mode de jeu'), list(BO2_MODES)),
+                ('bo2.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
                 ('bo2.fill_horizontal', tr('Remplir le partage horizontal'), [True, False])] if tab == 1 else []
     if adapter == 'celestenet':
         if tab == 2:
@@ -821,7 +822,7 @@ class App:
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
                     self.model.celeste_skins)
         if self.model.data and self.model.data.get('adapter') == BO2 and self.model.data['bo2']['mode'] == 'original':
-            rows = [row for row in rows if row[0] != 'bo2.fill_horizontal']
+            rows = [row for row in rows if row[0] == 'bo2.mode'] if self.tab == 1 else rows
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows
@@ -1840,9 +1841,13 @@ class App:
                     subtitle = (tr('CelesteNet · noms et skins des joueurs') if self.tab == 2 else
                                 tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.'))
                 if self.model.data['adapter'] == BO2:
-                    if self.model.data['bo2']['mode'] in PLUTONIUM_MODES:
-                        subtitle = tr('Sur J1, démarrez la partie personnalisée. Dans la console de J2, entrez {p0}.',
-                                      p0=JOIN_HOST)
+                    bo2_settings = self.model.data['bo2']
+                    if bo2_settings['mode'] in PLUTONIUM_MODES:
+                        if bo2_settings['automatic_join']:
+                            subtitle = tr('Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.')
+                        else:
+                            subtitle = tr('Sur J1, démarrez la partie personnalisée. Dans la console de J2, entrez {p0}.',
+                                          p0=JOIN_HOST)
                     else:
                         subtitle = tr('Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.')
                 if self.model.data['adapter'] == DST:

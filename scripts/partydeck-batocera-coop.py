@@ -534,13 +534,19 @@ def run_wine(original, target, player, saves=None):
     # Report native completion independently of the compositor's lifetime/code.
     status = 1
     try:
+        from partydeck_bo2 import AUTO_JOIN
+        if os.environ.get(AUTO_JOIN) == '1':
+            from partydeck_bo2 import automatic_path
+            from partydeck_profiles import atomic_write
+            token = os.environ['PARTYDECK_SESSION_TOKEN']
+            display = {key: os.environ[key] for key in ('DISPLAY', 'XAUTHORITY') if key in os.environ}
+            atomic_write(automatic_path(player, token, 'display'), json.dumps(display))
         status = _run_wine(original,target,player,saves)
         return status
     finally:
         state = os.environ.get('PARTYDECK_EXIT_STATE')
         if state:
             from partydeck_profiles import atomic_write
-            import json
             path = Path(state)
             if path.parent.resolve() != player.resolve() or not re.fullmatch(r'session-[0-9a-f]{32}\.json',path.name):
                 raise ValueError(tr('État de fin Wine hors du dossier privé du joueur.'))
@@ -736,6 +742,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                  track_runner=False, dst=False, split=None):
     _, _, width, height = rectangle
     bo2_resolution = None
+    bo2_automatic = False
+    from partydeck_bo2 import ADAPTER as BO2, AUTO_JOIN, PLUTONIUM_MODES, render_size
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if saves is not None:
@@ -743,10 +751,11 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         base = Path(__file__).resolve().parent
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
-            from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, render_size
             adapter = profile.get('adapter')
             if adapter == BO2:
                 settings = profile['bo2']
+                bo2_automatic = (network is not None and settings['mode'] in PLUTONIUM_MODES
+                                 and settings['automatic_join'])
                 fill_horizontal = (player_count == 2 and split == 'horizontal'
                                    and settings['mode'] in PLUTONIUM_MODES and settings['fill_horizontal'])
                 render_width, render_height = render_size(width, height, fill_horizontal=fill_horizontal)
@@ -791,6 +800,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                                        "PARTYDECK_PLAYER_HEIGHT": str(height)}
     environment.pop('PARTYDECK_PRIVATE_LAN_IP',None)
     environment.pop('PARTYDECK_BO2_RESOLUTION', None)
+    environment.pop(AUTO_JOIN, None)
+    if bo2_automatic:
+        environment[AUTO_JOIN] = '1'
     if bo2_resolution is not None:
         environment['PARTYDECK_BO2_RESOLUTION'] = bo2_resolution
     environment.pop('PARTYDECK_SESSION_TOKEN',None)
@@ -1143,6 +1155,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     virtual_watcher=None
     network=None
     celeste_processes=[]
+    bo2_join = None
+    bo2_automatic = False
     bl2_host=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
@@ -1180,6 +1194,10 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             from partydeck_private_lan import PrivateLAN
             network=PrivateLAN(len(players),shared=True) if celestenet else PrivateLAN(len(players))
             network.start()
+        from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path
+        if network is not None and profile and profile.get('adapter') == BO2:
+            settings = profile['bo2']
+            bo2_automatic = settings['mode'] in PLUTONIUM_MODES and settings['automatic_join']
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1210,6 +1228,10 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
+        if bo2_automatic:
+            bo2_join = AutoJoin([state.parent for state in states], session_token,
+                                profile['bo2']['mode'], os.environ.get('DISPLAY', ''), started)
+            bo2_join.start()
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)
             virtual_watcher.start()
@@ -1278,6 +1300,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             signal.signal(signum, signal.SIG_IGN)
         try:
             try:
+                if bo2_join is not None:
+                    bo2_join.close()
                 if virtual_watcher is not None:virtual_watcher.close()
             finally:
                 try:stop_players(processes,states=states)
@@ -1341,6 +1365,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 path.with_suffix('.display').unlink(missing_ok=True)
                 path.with_suffix('.runner').unlink(missing_ok=True)
                 path.with_suffix('.native').unlink(missing_ok=True)
+                if bo2_automatic:
+                    for kind in ('log', 'display'):
+                        automatic_path(path.parent, session_token, kind).unlink(missing_ok=True)
                 if dst:
                     (path.parent/'dst-scripts.zip').unlink(missing_ok=True)
             if dst_ready is not None:

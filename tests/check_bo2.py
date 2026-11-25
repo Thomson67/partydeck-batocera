@@ -6,7 +6,7 @@ import shlex
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_bo2 as bo2
@@ -42,7 +42,7 @@ with TemporaryDirectory() as folder:
         data = defaults(rom)
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
-        assert data['bo2'] == {'mode': 'plutonium-mp', 'fill_horizontal': True}
+        assert data['bo2'] == {'mode': 'plutonium-mp', 'fill_horizontal': True, 'automatic_join': True}
         for old_mode in ('mp', 'zm', 'original'):
             data['bo2'] = {'mode': old_mode}
             path = profile_path(base, rom)
@@ -50,7 +50,7 @@ with TemporaryDirectory() as folder:
             path.write_text(json.dumps(data))
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
-            assert migrated['bo2'] == {'mode': expected_mode, 'fill_horizontal': True}
+            assert migrated['bo2'] == {'mode': expected_mode, 'fill_horizontal': True, 'automatic_join': True}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
@@ -107,9 +107,11 @@ with TemporaryDirectory() as folder:
         hits.append(steamid)
 
         pluto_mode = 'plutonium-' + tag[2:]
-        launcher.write_text(bo2.instrument_native(source, hook, pluto_mode))
+        player_log = player / 'only this player.log'
+        launcher.write_text(bo2.instrument_native(source, hook, pluto_mode, log=player_log))
         subprocess.run(['bash', '-n', str(launcher)], check=True)
         env['PARTYDECK_SESSION_PLAYERS'] = '2'
+        env[bo2.AUTO_JOIN] = '1'
         launched = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         runtime = game / '.partydeck-plutonium'
         windows_game = 'Z:' + str(game).replace('/', chr(92)) if entry == 'play_pc' else r'C:\game'
@@ -127,7 +129,9 @@ with TemporaryDirectory() as folder:
             expected_pluto += ['+set', 'sp_minplayers', '2']
         else:
             assert bo2.JOIN_HOST in launched.stderr
+            expected_pluto += ['+bind', 'F9', bo2.JOIN_HOST]
         assert launched.stdout.splitlines() == expected_pluto
+        assert player_log.read_text() == launched.stdout
         assert windows_game in launched.stderr
         assert bink.read_bytes() == b'_BinkWaitStopAsyncThread@4\0'
         assert (runtime / 'games' / f'{tag}.exe').is_file()
@@ -178,4 +182,52 @@ with TemporaryDirectory() as folder:
     else:
         raise AssertionError('Expected rejection of a redirected identity file')
 
-print('BO2: profile migration, absolute Plutonium paths, Bink diagnostics, original autorun and private identities verified.')
+with TemporaryDirectory() as folder:
+    base = Path(folder)
+    players = [base / 'j1', base / 'j2', base / 'j3']
+    host, guest, other = players
+    for player in players:
+        player.mkdir()
+    token = '1' * 32
+    log = bo2.automatic_path(host, token, 'log')
+    display = bo2.automatic_path(guest, token, 'display')
+    display.write_text(json.dumps({'DISPLAY': ':0.0'}))
+    with patch.object(bo2.subprocess, 'run') as run:
+        assert not bo2.join_window(display, ':0')
+        run.assert_not_called()
+        display.write_text(json.dumps({'DISPLAY': ':2', 'XAUTHORITY': '/tmp/player-auth'}))
+        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(returncode=0)]
+        assert bo2.join_window(display, ':0')
+        assert run.call_args.args[0] == ['xdotool', 'windowfocus', '2718', 'key', 'F9']
+        assert run.call_args.kwargs['env']['DISPLAY'] == ':2'
+
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0)
+        log.write_bytes(b'------- Game Initialization -------\n')
+        assert not observer.poll(1)
+        join.assert_not_called()
+        with log.open('ab') as stream:
+            stream.write(b"client 'Player 1' connected\nclient 'Player 3' connected")
+        assert not observer.poll(2)
+        with log.open('ab') as stream:
+            stream.write(b'\n')
+        assert not observer.poll(4)
+        join.assert_called_once_with(display, ':0')
+        assert not observer.poll(10)
+        assert join.call_count == 1
+        with log.open('ab') as stream:
+            stream.write(b"client 'Player 2' connected\n")
+        assert observer.poll(30)
+        assert join.call_count == 1
+
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        observer = bo2.AutoJoin([host, guest], token, 'plutonium-zm', ':0', 0)
+        log.write_bytes(b'------- Game Initialization -------\n')
+        assert not observer.poll(1)
+        assert not observer.poll(3)
+        assert not observer.poll(21)
+        assert not observer.poll(39)
+        assert observer.poll(57)
+        assert join.call_count == 3
+
+print('BO2: profile migration, absolute Plutonium paths, Bink diagnostics, original autorun, private identities and automatic join verified.')
