@@ -31,6 +31,13 @@ JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
 GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
                r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)')
+# Positions of the two native buttons in the verified 1920x540 layout.
+MENU_SIZE = (1920, 540)
+ONLINE_BUTTON = (668, 326)
+CUSTOM_GAMES_BUTTON = (700, 99)
+MP_STARTUP = re.compile(rb"Loading fastfile '?common_mp\b")
+# Plutonium r5369 issues this command as it enters the online menu.
+ONLINE_MENU_ENTERED = b'Unknown command "session_rejoinsession"'
 # Xwayland's evdev keycode for the physical key under Escape (grave or ²).
 CONSOLE_KEYCODE = '49'
 DEFAULT_RENDER_SIZE = (1280, 720)
@@ -330,30 +337,44 @@ def startup_ready(player, token, started, mode):
     return False
 
 
-def join_window(display_file, outer_display):
+def game_display(display_file, outer_display):
     try:
         display = json.loads(display_file.read_text())
     except (OSError, ValueError):
-        return False
+        return None
     screen = display.get('DISPLAY') if isinstance(display, dict) else None
     if (not isinstance(screen, str) or not re.fullmatch(r':[0-9]+(?:\.[0-9]+)?', screen)
             or screen.split('.')[0] == outer_display.split('.')[0]):
-        return False
+        return None
     env = {**os.environ, 'DISPLAY': screen}
     env.pop('XAUTHORITY', None)
     if display.get('XAUTHORITY'):
         env['XAUTHORITY'] = display['XAUTHORITY']
+    return env
+
+
+def game_window(env):
+    windows = subprocess.run(['xdotool', 'search', '--onlyvisible', '--name', GAME_WINDOW],
+                             env=env, timeout=2, capture_output=True, text=True)
+    ids = windows.stdout.split()
+    if windows.returncode == 0 and len(ids) == 1 and ids[0].isdecimal():
+        return ids[0]
+    return None
+
+
+def join_window(display_file, outer_display):
+    env = game_display(display_file, outer_display)
+    if env is None:
+        return False
     try:
-        windows = subprocess.run(['xdotool', 'search', '--onlyvisible', '--name', GAME_WINDOW],
-                                 env=env, timeout=2, capture_output=True, text=True)
-        ids = windows.stdout.split()
-        if windows.returncode or len(ids) != 1 or not ids[0].isdecimal():
+        window = game_window(env)
+        if window is None:
             return False
         # Gameplay binds are ignored in the main menu. Use the console with
         # XTEST on this guest's display. Passing --window to key/type would
         # make xdotool send synthetic XSendEvent events instead.
         for command in (
-            ['windowfocus', '--sync', ids[0], 'sleep', '0.2',
+            ['windowfocus', '--sync', window, 'sleep', '0.2',
              'key', '--clearmodifiers', CONSOLE_KEYCODE, 'sleep', '0.3'],
             ['type', '--clearmodifiers', '--delay', '20', JOIN_HOST],
             ['key', '--clearmodifiers', '--delay', '50', 'Return', CONSOLE_KEYCODE],
@@ -364,10 +385,35 @@ def join_window(display_file, outer_display):
         return False
 
 
+def click_menu_button(display_file, outer_display, button):
+    env = game_display(display_file, outer_display)
+    if env is None:
+        return False
+    try:
+        window = game_window(env)
+        if window is None:
+            return False
+        geometry = subprocess.run(['xdotool', 'getwindowgeometry', '--shell', window],
+                                  env=env, timeout=2, capture_output=True, text=True, check=True)
+        dimensions = dict(re.findall(r'^(WIDTH|HEIGHT)=([0-9]+)$', geometry.stdout, re.M))
+        width, height = (int(dimensions.get(key, '0')) for key in ('WIDTH', 'HEIGHT'))
+        measured_width, measured_height = MENU_SIZE
+        if height < 540 or width * measured_height != height * measured_width:
+            return False
+        x, y = button
+        subprocess.run(['xdotool', 'windowfocus', '--sync', window,
+                        'mousemove', '--window', window, str(round(x * width / measured_width)),
+                        str(round(y * height / measured_height)), 'sleep', '0.2', 'click', '1'],
+                       env=env, timeout=2, capture_output=True, check=True)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 class AutoJoin:
     """Track host matches for the lifetime of the split-screen session."""
 
-    def __init__(self, players, token, mode, outer_display, started):
+    def __init__(self, players, token, mode, outer_display, started, *, open_custom_lobby=False):
         self.host, *self.guests = players
         self.token = token
         self.mode = mode
@@ -376,6 +422,9 @@ class AutoJoin:
         self.offsets = {}
         self.host_log = None
         self.host_ready = None
+        self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode == 'plutonium-mp' else None
+        self.lobby_click_at = None
+        self.lobby_deadline = None
         self.connected = set()
         self.attempts = dict.fromkeys((guest.name for guest in self.guests), 0)
         self.retry_at = dict.fromkeys(self.attempts, 0)
@@ -450,10 +499,48 @@ class AutoJoin:
             print(tr('Black Ops II : partie de J1 détectée.'), flush=True)
         return True
 
+    def observe_lobby(self, line, now):
+        if b'------- Game Initialization -------' in line:
+            self.lobby_button = None
+        elif ONLINE_MENU_ENTERED in line:
+            if self.lobby_button == ONLINE_BUTTON:
+                # J1 already navigated manually.
+                self.lobby_button = None
+            elif self.lobby_click_at is None:
+                self.lobby_click_at = now + 1
+        elif self.lobby_button == ONLINE_BUTTON and self.lobby_click_at is None and MP_STARTUP.search(line):
+            self.lobby_click_at = now + 5
+            self.lobby_deadline = self.lobby_click_at + 20
+
+    def poll_lobby(self, now):
+        if self.lobby_deadline is None or self.stop.is_set():
+            return
+        if now >= self.lobby_deadline:
+            self.lobby_button = None
+            print(tr('Black Ops II J1 : passage automatique au salon interrompu.'), flush=True)
+            return
+        if self.lobby_click_at is None or now < self.lobby_click_at:
+            return
+        if not click_menu_button(automatic_path(self.host, self.token, 'display'),
+                                 self.outer_display, self.lobby_button):
+            return
+        if self.lobby_button == ONLINE_BUTTON:
+            print(tr('Black Ops II J1 : clic sur En ligne envoyé.'), flush=True)
+            self.lobby_button = CUSTOM_GAMES_BUTTON
+            self.lobby_click_at = None
+            self.lobby_deadline = now + 20
+        else:
+            print(tr('Black Ops II J1 : clic sur Parties personnalisées envoyé.'), flush=True)
+            self.lobby_button = None
+
     def poll(self, now):
         for path, line in self.host_output():
+            if self.lobby_button is not None:
+                self.observe_lobby(line, now)
             if self.observe_host(line, now):
                 self.host_log = path
+        if self.lobby_button is not None:
+            self.poll_lobby(now)
         if self.host_ready is None or now < self.host_ready:
             return
 

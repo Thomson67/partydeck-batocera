@@ -133,6 +133,9 @@ EN = {
     'Black Ops II {p0} : initialisation de {p1} non confirmée après 10 s.':
         'Black Ops II {p0}: {p1} initialization not confirmed after 10 s.',
     'Black Ops II : partie de J1 détectée.': 'Black Ops II: P1’s match detected.',
+    'Black Ops II J1 : clic sur En ligne envoyé.': 'Black Ops II P1: Online button click sent.',
+    'Black Ops II J1 : clic sur Parties personnalisées envoyé.': 'Black Ops II P1: Custom Games button click sent.',
+    'Black Ops II J1 : passage automatique au salon interrompu.': 'Black Ops II P1: automatic lobby shortcut stopped.',
     'Black Ops II {p0} : connexion à la partie de J1 demandée.': 'Black Ops II {p0}: requested to join P1’s match.',
     'Black Ops II {p0} : connexion confirmée par J1.': 'Black Ops II {p0}: P1 confirmed the connection.',
     'Black Ops II {p0} : impossible d’envoyer la commande de connexion à la console.':

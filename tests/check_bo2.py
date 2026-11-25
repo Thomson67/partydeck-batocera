@@ -228,6 +228,49 @@ with TemporaryDirectory() as folder:
         assert all(call.kwargs['env']['DISPLAY'] == ':2' and
                    call.kwargs['env']['XAUTHORITY'] == '/tmp/player-auth' for call in run.call_args_list)
 
+    host_display = bo2.automatic_path(host, token, 'display')
+    host_display.write_text(json.dumps({'DISPLAY': ':1'}))
+    with patch.object(bo2.subprocess, 'run') as run:
+        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(stdout='WIDTH=2560\nHEIGHT=720\n'), Mock()]
+        assert bo2.click_menu_button(host_display, ':0', bo2.ONLINE_BUTTON)
+        assert run.call_args.args[0] == ['xdotool', 'windowfocus', '--sync', '2718',
+                                        'mousemove', '--window', '2718', '891', '435',
+                                        'sleep', '0.2', 'click', '1']
+        assert all(item.kwargs['env']['DISPLAY'] == ':1' for item in run.call_args_list)
+        run.reset_mock()
+        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(stdout='WIDTH=1280\nHEIGHT=720\n')]
+        assert not bo2.click_menu_button(host_display, ':0', bo2.ONLINE_BUTTON)
+        assert run.call_count == 2
+
+    with patch.object(bo2, 'click_menu_button', return_value=True) as click:
+        online_click = call(host_display, ':0', bo2.ONLINE_BUTTON)
+        custom_click = call(host_display, ':0', bo2.CUSTOM_GAMES_BUTTON)
+        startup = log.read_bytes()
+        observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
+        observer.poll(1)
+        observer.poll(5)
+        click.assert_not_called()
+        observer.poll(6)
+        observer.poll(7)
+        assert click.call_args_list == [online_click]
+        log.write_bytes(startup + bo2.ONLINE_MENU_ENTERED + b'\n')
+        observer.poll(8)
+        observer.poll(9)
+        observer.poll(10)
+        assert click.call_args_list == [online_click, custom_click]
+
+        observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
+        observer.poll(1)
+        observer.poll(7)
+        assert click.call_count == 2  # J1 already opened the online menu.
+        log.write_bytes(startup)
+        observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
+        observer.poll(1)
+        observer.poll(6)
+        observer.poll(26)
+        assert observer.lobby_button is None
+        assert click.call_args_list == [online_click, custom_click, online_click]
+
     with patch.object(bo2, 'join_window', return_value=True) as join:
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0)
         log.write_bytes(initialization)
