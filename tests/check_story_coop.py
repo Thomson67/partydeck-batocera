@@ -24,7 +24,7 @@ with TemporaryDirectory() as folder:
     base = Path(folder)
     fixture = base / 'oot.o2r'
     fixture.write_bytes(b'user assets')
-    binary = b'official client fixture'
+    binary = b'official client fixture with console'
     server = b'official server fixture'
     config = b'{"dataDir": "data"}'
     windows = base / 'windows.zip'
@@ -148,14 +148,16 @@ with TemporaryDirectory() as folder:
                             AUDIO_GUARD_OFFSET=binary.index(b'client'),
                             AUDIO_GUARD_ORIGINAL=b'client', AUDIO_GUARD_PATCH=b'stable',
                             HIDE_WINDOW_OFFSET=binary.index(b'fixture'),
-                            HIDE_WINDOW_ORIGINAL=b'fixture', HIDE_WINDOW_PATCH=b'quieted'):
+                            HIDE_WINDOW_ORIGINAL=b'fixture', HIDE_WINDOW_PATCH=b'quieted',
+                            STARTUP_CONSOLE_OFFSET=binary.index(b'console'),
+                            STARTUP_CONSOLE_ORIGINAL=b'console', STARTUP_CONSOLE_PATCH=b'no-cons'):
             story.configure_client(player, archive, private, player, options, base / 'skins')
-            assert client.read_bytes() == hidden
+            assert client.read_bytes() == hidden.replace(b'console', b'no-cons')
             inode = client.stat().st_ino
             story.configure_client(player, archive, private, player, options, base / 'skins')
             assert client.stat().st_ino == inode
-            assert story.patch_client(client, False) and client.read_bytes() == fixed
-            assert story.patch_client(client, True) and client.read_bytes() == hidden
+            assert story.patch_client(client, False) and client.read_bytes() == fixed.replace(b'console', b'no-cons')
+            assert story.patch_client(client, True) and client.read_bytes() == hidden.replace(b'console', b'no-cons')
         data = json.loads(path.read_text())
         graphics = data['CVars']['gSettings']
         assert graphics['BootSequence'] == 2 and graphics['MSAAValue'] == 2
@@ -245,7 +247,7 @@ with TemporaryDirectory() as folder:
         raise AssertionError('An unknown executable was accepted for the audio fix')
 
     client = base / 'clock-soh.exe'
-    binary = b'audio original; time original; window original'
+    binary = b'audio original; time original; window original; console original'
     fixed = binary.replace(b'audio original', b'audio repaired')
     hidden = fixed.replace(b'window original', b'window repaired')
     local = fixed.replace(b'time original', b'time private!')
@@ -261,12 +263,17 @@ with TemporaryDirectory() as folder:
                         AUDIO_GUARD_OFFSET=0, AUDIO_GUARD_ORIGINAL=b'audio original', AUDIO_GUARD_PATCH=b'audio repaired',
                         HIDE_WINDOW_OFFSET=binary.index(b'window'), HIDE_WINDOW_ORIGINAL=b'window original',
                         HIDE_WINDOW_PATCH=b'window repaired', LOCAL_TIME_OFFSET=binary.index(b'time'),
-                        LOCAL_TIME_PATCH=b'time private!', LOCAL_TIME_ORIGINAL=b'time original'):
+                        LOCAL_TIME_PATCH=b'time private!', LOCAL_TIME_ORIGINAL=b'time original',
+                        STARTUP_CONSOLE_OFFSET=binary.index(b'console'),
+                        STARTUP_CONSOLE_ORIGINAL=b'console original', STARTUP_CONSOLE_PATCH=b'console bypassed'):
         for hide_window, original_time, expected in ((True, True, local_hidden), (True, False, hidden),
                                                     (False, True, local), (False, False, fixed)):
             assert story.patch_client(client, hide_window, original_time)
-            assert client.read_bytes() == expected
+            assert client.read_bytes() == expected.replace(b'console original', b'console bypassed')
             assert not story.patch_client(client, hide_window, original_time)
+            client.write_bytes(expected)  # A private executable from before the console fix.
+            assert story.patch_client(client, hide_window, original_time)
+            assert client.read_bytes() == expected.replace(b'console original', b'console bypassed')
 
     template = Path(__file__).resolve().parents[1] / 'templates' / 'soh-common.json'
     camera = base / 'camera.json'

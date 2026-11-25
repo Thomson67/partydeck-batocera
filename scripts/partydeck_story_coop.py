@@ -54,6 +54,12 @@ HIDE_WINDOW_PATCH = bytes.fromhex('e8435d8100')
 LOCAL_TIME_OFFSET = 0xDAF6B0
 LOCAL_TIME_ORIGINAL = bytes.fromhex('89542410')
 LOCAL_TIME_PATCH = bytes.fromhex('b001c390')  # mov al, 1; ret; nop
+# SDL_main opens a console, redirects the standard streams, and immediately
+# hides it. Skip that block and resume at setlocale before GameConsole_Init.
+# Closing the transient Wine console while Gamescope focuses it can abort Xwayland.
+STARTUP_CONSOLE_OFFSET = 0x10153AD
+STARTUP_CONSOLE_ORIGINAL = bytes.fromhex('ff1525b3ae00')
+STARTUP_CONSOLE_PATCH = bytes.fromhex('e96f00000090')  # jmp 0x141016021; nop
 SERVER_FILES = {
     'OOTServer': 'f1ce1e80bdff661fa17316080b616bab5b8e6f380164c2326f4fc08fde3c2b57',
     'config.json': '0b43c81bbc154e19a002f175d9b8a2fdb58ed7834f9d0dd277e1f7fc39dbae5f',
@@ -377,8 +383,14 @@ def start_server(rom, work, lan, cache, options, players, host_settings):
 def patch_client(client, hide_window, original_time=False):
     from partydeck_borderlands2 import write_bytes
 
-    original = client.read_bytes()
-    checksum = hashlib.sha256(original).hexdigest()
+    patched = bytearray(client.read_bytes())
+    console = slice(STARTUP_CONSOLE_OFFSET, STARTUP_CONSOLE_OFFSET + len(STARTUP_CONSOLE_ORIGINAL))
+    console_patched = patched[console] == STARTUP_CONSOLE_PATCH
+    # Use the existing allowlist for private clients with and without this
+    # fix by hashing each executable with only the console call restored.
+    if console_patched:
+        patched[console] = STARTUP_CONSOLE_ORIGINAL
+    checksum = hashlib.sha256(patched).hexdigest()
     variants = {
         (False, False): FIXED_CLIENT_DIGEST,
         (True, False): HIDDEN_WINDOW_DIGEST,
@@ -386,15 +398,14 @@ def patch_client(client, hide_window, original_time=False):
         (True, True): ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST,
     }
     expected = variants[hide_window, original_time]
-    if checksum == expected:
+    if checksum == expected and console_patched:
         return False
     if checksum != CLIENT_DIGEST and checksum not in variants.values():
         raise ValueError(tr('Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.', p0=VERSION))
-    patched = bytearray(original)
     if checksum == CLIENT_DIGEST:
         start = AUDIO_GUARD_OFFSET
         stop = start + len(AUDIO_GUARD_ORIGINAL)
-        if original[start:stop] != AUDIO_GUARD_ORIGINAL:
+        if patched[start:stop] != AUDIO_GUARD_ORIGINAL:
             raise ValueError(tr('Story Co-op : impossible de vérifier les correctifs de soh.exe.'))
         patched[start:stop] = AUDIO_GUARD_PATCH
     if hide_window or checksum in (HIDDEN_WINDOW_DIGEST, ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST):
@@ -403,8 +414,9 @@ def patch_client(client, hide_window, original_time=False):
     if original_time or checksum in (ORIGINAL_TIME_DIGEST, ORIGINAL_TIME_HIDDEN_WINDOW_DIGEST):
         start = LOCAL_TIME_OFFSET
         patched[start:start + len(LOCAL_TIME_PATCH)] = LOCAL_TIME_PATCH if original_time else LOCAL_TIME_ORIGINAL
-    if hashlib.sha256(patched).hexdigest() != expected:
+    if patched[console] != STARTUP_CONSOLE_ORIGINAL or hashlib.sha256(patched).hexdigest() != expected:
         raise ValueError(tr('Story Co-op : impossible de vérifier les correctifs de soh.exe.'))
+    patched[console] = STARTUP_CONSOLE_PATCH
     write_bytes(client, patched)
     return True
 

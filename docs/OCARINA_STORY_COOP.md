@@ -118,6 +118,8 @@ le filtre des textures, les volumes et la musique sur J1 uniquement.
 
 Windows Party applique à la copie privée de `soh.exe` de chaque joueur le
 correctif du crash audio observé pendant l’introduction de la version 1.0.5.
+Il désactive aussi la console Windows temporaire du démarrage. Sa fermeture
+a précédé un crash de Gamescope pendant le lancement d’un joueur.
 
 Les sauvegardes d’équipe se trouvent dans
 `/userdata/saves/windows-party/<jeu>/story-coop/data/story/`. Le journal du
