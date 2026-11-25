@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -135,7 +136,6 @@ with TemporaryDirectory() as folder:
             expected_pluto += ['+set', 'sp_minplayers', '2']
         else:
             assert bo2.JOIN_HOST in launched.stderr
-            expected_pluto += ['+bind', 'F9', bo2.JOIN_HOST]
         assert launched.stdout.splitlines() == expected_pluto
         assert player_log.read_text() == launched.stdout
         assert windows_game in launched.stderr
@@ -197,15 +197,29 @@ with TemporaryDirectory() as folder:
     token = '1' * 32
     log = bo2.automatic_path(host, token, 'log')
     display = bo2.automatic_path(guest, token, 'display')
+    for title in ('Plutonium T6 Multiplayer (r5369 LAN)', 'Plutonium T6: Zombies',
+                  'Plutonium T6 MP', 'Call of Duty(R): Black Ops II - Multiplayer'):
+        assert re.search(bo2.GAME_WINDOW, title, re.I), title
+    assert not re.search(bo2.GAME_WINDOW, 'Plutonium T6 Console (r5369)', re.I)
     display.write_text(json.dumps({'DISPLAY': ':0.0'}))
     with patch.object(bo2.subprocess, 'run') as run:
         assert not bo2.join_window(display, ':0')
         run.assert_not_called()
         display.write_text(json.dumps({'DISPLAY': ':2', 'XAUTHORITY': '/tmp/player-auth'}))
-        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(returncode=0)]
+        run.side_effect = [Mock(returncode=0, stdout='2518\n2718\n')]
+        assert not bo2.join_window(display, ':0')
+        assert run.call_count == 1
+        run.reset_mock()
+        run.side_effect = [Mock(returncode=0, stdout='2718\n'), *(Mock(returncode=0) for _ in range(3))]
         assert bo2.join_window(display, ':0')
-        assert run.call_args.args[0] == ['xdotool', 'windowfocus', '2718', 'key', 'F9']
-        assert run.call_args.kwargs['env']['DISPLAY'] == ':2'
+        search, focus, typing, submit = run.call_args_list
+        assert search.args[0] == ['xdotool', 'search', '--onlyvisible', '--name', bo2.GAME_WINDOW]
+        assert focus.args[0] == ['xdotool', 'windowfocus', '--sync', '2718', 'sleep', '0.2',
+                                 'key', '--clearmodifiers', '49', 'sleep', '0.3']
+        assert typing.args[0] == ['xdotool', 'type', '--clearmodifiers', '--delay', '20', bo2.JOIN_HOST]
+        assert submit.args[0] == ['xdotool', 'key', '--clearmodifiers', '--delay', '50', 'Return', '49']
+        assert all(call.kwargs['env']['DISPLAY'] == ':2' and
+                   call.kwargs['env']['XAUTHORITY'] == '/tmp/player-auth' for call in run.call_args_list)
 
     with patch.object(bo2, 'join_window', return_value=True) as join:
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0)
@@ -235,5 +249,13 @@ with TemporaryDirectory() as folder:
         assert not observer.poll(39)
         assert observer.poll(57)
         assert join.call_count == 3
+
+    with patch.object(bo2, 'join_window', return_value=False) as join:
+        observer = bo2.AutoJoin([host, guest], token, 'plutonium-mp', ':0', 0)
+        log.write_bytes(b"client 'Player 1' connected\n")
+        assert not observer.poll(1)
+        assert not observer.poll(3)
+        assert observer.poll(93)
+        join.assert_called_once_with(display, ':0')
 
 print('BO2: profile migration, absolute Plutonium paths, Bink diagnostics, original autorun, private identities and automatic join verified.')

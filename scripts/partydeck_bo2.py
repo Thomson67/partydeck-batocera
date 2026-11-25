@@ -28,9 +28,11 @@ EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
-JOIN_KEY = 'F9'
 AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
-GAME_WINDOW = r'[Bb]lack [Oo]ps (II|2).*(Multiplayer|Multijoueur|Zombies)'
+GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
+               r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)')
+# Xwayland's evdev keycode for the physical key under Escape (grave or ²).
+CONSOLE_KEYCODE = '49'
 DEFAULT_RENDER_SIZE = (1280, 720)
 MIN_DISPLAY_SIZE = (800, 600)
 DESKTOP_MODE = 'PARTYDECK_BO2_DESKTOP_MODE'
@@ -258,8 +260,6 @@ def prepare_plutonium(player, game, root, source, mode):
         if count in ('1', '2', '3', '4'):
             args += ['+set', 'sp_minplayers', count]
     if player.name != 'j1':
-        if os.environ.get(AUTO_JOIN) == '1':
-            args += ['+bind', JOIN_KEY, JOIN_HOST]
         print(tr('Black Ops II {p0} : rejoindre J1 avec {p1}.', p0=player.name.upper(),
                  p1=JOIN_HOST), file=sys.stderr, flush=True)
     print(tr('Black Ops II {p0} : Plutonium LAN ({p1}, port {p2}).',
@@ -325,17 +325,23 @@ def join_window(display_file, outer_display):
         ids = windows.stdout.split()
         if windows.returncode or len(ids) != 1 or not ids[0].isdecimal():
             return False
-        # Use native XTEST input on the private X server, which Wine accepts
-        # even when a synthetic XSendEvent to the game window is ignored.
-        result = subprocess.run(['xdotool', 'windowfocus', ids[0], 'key', JOIN_KEY],
-                                env=env, timeout=2, capture_output=True)
-        return result.returncode == 0
+        # Gameplay binds are ignored in the main menu. Use the console with
+        # XTEST on this guest's display. Passing --window to key/type would
+        # make xdotool send synthetic XSendEvent events instead.
+        for command in (
+            ['windowfocus', '--sync', ids[0], 'sleep', '0.2',
+             'key', '--clearmodifiers', CONSOLE_KEYCODE, 'sleep', '0.3'],
+            ['type', '--clearmodifiers', '--delay', '20', JOIN_HOST],
+            ['key', '--clearmodifiers', '--delay', '50', 'Return', CONSOLE_KEYCODE],
+        ):
+            subprocess.run(['xdotool', *command], env=env, timeout=2, capture_output=True, check=True)
+        return True
     except (OSError, subprocess.SubprocessError):
         return False
 
 
 class AutoJoin:
-    """Wait for a real host match and dispatch the guest's private LAN bind."""
+    """Wait for a real host match and send the guest's private LAN command."""
 
     def __init__(self, players, token, mode, outer_display, started):
         self.host, *self.guests = players
@@ -382,27 +388,35 @@ class AutoJoin:
         for line in self.host_output():
             connected = re.search(rb"client 'Player ([1-4])' connected", line)
             if connected:
-                self.connected.add('j' + connected[1].decode('ascii'))
+                player = 'j' + connected[1].decode('ascii')
+                if player != 'j1' and player not in self.connected:
+                    print(tr('Black Ops II {p0} : connexion confirmée par J1.', p0=player.upper()), flush=True)
+                self.connected.add(player)
             if self.host_ready is None and (
                     'j1' in self.connected or
                     (self.mode == 'plutonium-zm' and
                      (b'Game Initialization' in line or b'Initializing game at' in line))):
                 # Zombies can wait for guests before the host is fully in-game.
                 self.host_ready = now + 2
+                print(tr('Black Ops II : partie de J1 détectée.'), flush=True)
         if self.host_ready is None or now < self.host_ready:
             return False
 
         for player in self.guests:
             if self.stop.is_set():
                 return True
-            if player.name in self.connected or now < self.retry_at[player]:
+            attempts = self.attempts[player]
+            if player.name in self.connected or now < self.retry_at[player] or attempts > 3:
                 continue
-            if self.attempts[player] == 3:
-                print(tr('Black Ops II {p0} : connexion automatique non confirmée. Utilisez {p1}.',
-                         p0=player.name.upper(), p1=JOIN_HOST), flush=True)
-                self.attempts[player] += 1
-            elif self.attempts[player] < 3 and join_window(
-                    automatic_path(player, self.token, 'display'), self.outer_display):
+            if attempts == 3 or now >= self.host_ready + 90:
+                if attempts:
+                    print(tr('Black Ops II {p0} : connexion automatique non confirmée. Utilisez {p1}.',
+                             p0=player.name.upper(), p1=JOIN_HOST), flush=True)
+                else:
+                    print(tr('Black Ops II {p0} : impossible d’envoyer la commande de connexion à la console.',
+                             p0=player.name.upper()), flush=True)
+                self.attempts[player] = 4
+            elif join_window(automatic_path(player, self.token, 'display'), self.outer_display):
                 self.attempts[player] += 1
                 self.retry_at[player] = now + 18
                 print(tr('Black Ops II {p0} : connexion à la partie de J1 demandée.',

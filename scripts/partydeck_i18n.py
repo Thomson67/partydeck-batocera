@@ -129,7 +129,11 @@ EN = {
     'Option de connexion automatique Black Ops II invalide.': 'Invalid Black Ops II automatic join setting.',
     'Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.': 'Start the custom game on P1. The other players join automatically.',
     'Black Ops II : les invités attendent le lancement de la partie de J1.': 'Black Ops II: guests are waiting for P1 to start the match.',
+    'Black Ops II : partie de J1 détectée.': 'Black Ops II: P1’s match detected.',
     'Black Ops II {p0} : connexion à la partie de J1 demandée.': 'Black Ops II {p0}: requested to join P1’s match.',
+    'Black Ops II {p0} : connexion confirmée par J1.': 'Black Ops II {p0}: P1 confirmed the connection.',
+    'Black Ops II {p0} : impossible d’envoyer la commande de connexion à la console.':
+        'Black Ops II {p0}: could not send the join command to the console.',
     'Black Ops II {p0} : connexion automatique non confirmée. Utilisez {p1}.': 'Black Ops II {p0}: automatic join could not be confirmed. Use {p1}.',
     'Plutonium : adresse de téléchargement invalide.': 'Plutonium: invalid download address.',
     'Plutonium : manifeste du client T6 invalide.': 'Plutonium: invalid T6 client manifest.',
