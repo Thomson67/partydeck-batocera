@@ -277,6 +277,10 @@ canonique. Les scripts personnalisés ne sont pas réécrits arbitrairement.
 
 Le journal principal de chaque lancement est créé dans
 `/userdata/system/windows-party/logs/partydeck-<date>-<identifiant>`.
+PartyDeck vérifie chaque compositeur Gamescope avant de lancer Wine. Si
+la chaîne d’affichage Vulkan est recréée en boucle, seul le compositeur du
+joueur concerné est relancé une fois. Les journaux Gamescope se trouvent
+dans `runtime/<jeu>/jN/logs/gamescope.log`.
 Les journaux UMU sont séparés par joueur dans
 `runtime/<jeu>/jN/umu-logs/runner-*.log` ; les journaux Proton, lorsqu’activés,
 sont dans le dossier voisin `proton-logs/`.

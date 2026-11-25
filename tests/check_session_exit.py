@@ -68,11 +68,19 @@ with tempfile.TemporaryDirectory() as folder,contextlib.redirect_stdout(io.Strin
         try:coop.run_wine(root/'game',root/'game',player);raise AssertionError('external state accepted')
         except ValueError:pass
         assert not (root/('session-'+'b'*32+'.json')).exists()
-    with patch.dict(os.environ,PARTYDECK_EXIT_STATE=str(report)),patch.object(coop,'sandbox_arguments',return_value=[]),patch.object(coop.subprocess,'Popen') as launch:
+    with patch.dict(os.environ,PARTYDECK_EXIT_STATE=str(report)), \
+         patch.object(coop, 'sandbox_arguments', return_value=[]), \
+         patch.object(coop, 'UMU_HOME', root/'no-umu'), \
+         patch.object(coop, 'compositor_ready', return_value=True), \
+         patch.object(coop.subprocess,'Popen') as launch:
         coop.start_player(root,player,root/'game',root/'game',[],(0,0,960,540),'test')
         assert 'PARTYDECK_EXIT_STATE' not in launch.call_args.kwargs['env']
         coop.start_player(root,player,root/'game',root/'game',[],(0,0,960,540),'test',exit_state=report)
         assert launch.call_args.kwargs['env']['PARTYDECK_EXIT_STATE']==str(report)
+        assert '_publish-display' in launch.call_args.args[0]
+        assert '_sandbox' in launch.call_args.args[0]
+        assert report.with_suffix('.launch').is_file()
+        report.with_suffix('.launch').unlink()
         assert 'PARTYDECK_TRACE_WINDOWS' not in launch.call_args.kwargs['env']
         log = player / 'logs' / 'window-trace.log'
         assert not log.exists()
@@ -86,6 +94,54 @@ with tempfile.TemporaryDirectory() as folder,contextlib.redirect_stdout(io.Strin
             assert gamescope.kwargs['stdout'] is sandbox.kwargs['stdout']
             assert gamescope.kwargs['stdout'].name == str(log)
             assert log.is_file()
+
+    with patch.dict(os.environ, PARTYDECK_EXIT_STATE=str(report)), \
+         patch.object(coop, 'sandbox_arguments', return_value=[]), \
+         patch.object(coop, 'UMU_HOME', root), \
+         patch.object(coop, 'compositor_ready', side_effect=[False, True]) as ready, \
+         patch.object(coop, 'stop_players') as stop, \
+         patch.object(coop.subprocess, 'Popen', side_effect=[Mock(), Mock(), Mock()]) as launch:
+        process = coop.start_player(root, player, root/'game', root/'game', [], (0,0,960,540), 'test',
+                                    exit_state=report)
+        first, second, sandbox = launch.call_args_list
+        assert '_gamescope' in first.args[0] and '_gamescope' in second.args[0]
+        assert '_await-display' in sandbox.args[0]
+        assert 'stdout' not in sandbox.kwargs
+        assert ready.call_args.args == (process, report, player / 'logs' / 'gamescope.log')
+        stop.assert_called_once_with([ready.call_args_list[0].args[0]])
+
+    report.with_suffix('.display').touch()
+    log = player / 'logs' / 'gamescope.log'
+    swapchain_line = b'[gamescope] Creating Gamescope nested swapchain with format 44 and colorspace 0\n'
+    log.write_bytes(swapchain_line * 50)  # Earlier attempts must not affect this sample.
+    for count, expected in ((2, True), (40, False)):
+        def append_swapchains(_seconds):
+            with log.open('ab') as stream:
+                stream.write(swapchain_line * count)
+        with patch.object(coop.time, 'sleep', side_effect=append_swapchains):
+            assert coop.compositor_ready(Mock(poll=Mock(return_value=None)), report, log) is expected
+    report.with_suffix('.display').unlink()
+
+    # A native launch with no separate UMU/Wine supervisor must also wait for
+    # the parent to approve the display before executing its existing command.
+    direct = root / 'native.json'
+    marker = root / 'wine-launched'
+    command = [sys.executable, '-c', 'from pathlib import Path; import sys; Path(sys.argv[1]).touch()', str(marker)]
+    worker = subprocess.Popen([sys.executable, str(path), '_publish-display', str(direct), *command])
+    try:
+        deadline = time.monotonic() + 3
+        while not direct.with_suffix('.display').is_file() and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert direct.with_suffix('.display').is_file()
+        assert worker.poll() is None and not marker.exists()
+        direct.with_suffix('.launch').touch()
+        assert worker.wait(timeout=3) == 0 and marker.is_file()
+        coop.clear_player_state(direct)
+        assert not direct.with_suffix('.launch').exists()
+    finally:
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait()
     # Real lingering compositors: one Wine completion closes the two owned
     # groups without requiring either window's close button. An unrelated
     # process must survive (no global Gamescope/Wine process-name killing).

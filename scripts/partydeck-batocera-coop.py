@@ -470,10 +470,16 @@ NESTED_DISPLAY_ENV = ('DISPLAY', 'WAYLAND_DISPLAY', 'GAMESCOPE_WAYLAND_DISPLAY',
                       'XAUTHORITY', 'XDG_RUNTIME_DIR')
 
 
-def publish_nested_display(state):
+def publish_nested_display(state, command=()):
     from partydeck_profiles import atomic_write
     environment = {key: os.environ[key] for key in NESTED_DISPLAY_ENV if key in os.environ}
     atomic_write(state.with_suffix('.display'), json.dumps(environment))
+    if command:
+        # In direct mode Wine stays attached to Gamescope. Wait until the
+        # parent has checked the compositor's outer Vulkan swapchain.
+        while not state.with_suffix('.launch').is_file():
+            time.sleep(.1)
+        os.execvp(command[0], command)
     while (code := read_wine_exit(state)) is None:
         time.sleep(.1)
     return code
@@ -577,7 +583,7 @@ class StoryStartup:
 
 
 def clear_player_state(state):
-    for suffix in ('.json', '.umu-ready', '.stop', '.display', '.runner', '.native'):
+    for suffix in ('.json', '.umu-ready', '.stop', '.display', '.launch', '.runner', '.native'):
         state.with_suffix(suffix).unlink(missing_ok=True)
 
 
@@ -834,6 +840,49 @@ def run_compositor(command):
     os.execv(command[0], command)
 
 
+def compositor_ready(process, state, log):
+    display = state.with_suffix('.display')
+    name = state.parent.name.upper()
+    deadline = time.monotonic() + 120
+    while not display.is_file():
+        if process.poll() is not None or time.monotonic() >= deadline:
+            raise RuntimeError(tr('{p0} : écran Gamescope indisponible. Journal {p1}.', p0=name, p1=log))
+        time.sleep(.1)
+    # While Wine is still stopped, a normal compositor may recreate the
+    # swapchain a few times when its window appears. Sustained recreation,
+    # as seen on NVIDIA/Xorg, makes it impossible to display the game.
+    with log.open('rb') as stream:
+        stream.seek(0, os.SEEK_END)
+        time.sleep(2)
+        if process.poll() is not None:
+            raise RuntimeError(tr('{p0} : écran Gamescope indisponible. Journal {p1}.', p0=name, p1=log))
+        return stream.read(64 * 1024).count(b'Creating Gamescope nested swapchain') < 16
+
+
+def start_compositor(command, environment, output, check_state):
+    options = dict(stdout=output, stderr=subprocess.STDOUT) if output is not None else {}
+    for attempt in range(2):
+        process = subprocess.Popen(command, env=environment, start_new_session=True,
+                                   stdin=subprocess.DEVNULL, **options)
+        if check_state is None:
+            return process
+        ready = False
+        log = Path(output.name)
+        name = check_state.parent.name.upper()
+        try:
+            ready = compositor_ready(process, check_state, log)
+            if ready:
+                return process
+        finally:
+            if not ready:
+                stop_players([process])
+                check_state.with_suffix('.display').unlink(missing_ok=True)
+        if attempt == 0:
+            print(tr('{p0} : Gamescope recrée son affichage en boucle. Relance avant Wine.',
+                     p0=name), flush=True)
+    raise RuntimeError(tr('{p0} : affichage Gamescope toujours en boucle. Journal {p1}.', p0=name, p1=log))
+
+
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
@@ -944,31 +993,41 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
     supervise_wine = exit_state is not None and (UMU_HOME.is_dir() or story_coop)
-    nested_command = ([sys.executable, helper, "_publish-display", str(exit_state)]
-                      if supervise_wine else wine_command)
+    check_state = exit_state if not trace_windows else None
+    nested_command = wine_command
+    if supervise_wine or check_state is not None:
+        nested_command = [sys.executable, helper, "_publish-display", str(exit_state)]
+        if not supervise_wine:
+            nested_command.extend(wine_command)
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"',
                  "sh", *nested_command])
-    trace = player / 'logs' / 'window-trace.log'
-    if trace_windows:
-        trace.parent.mkdir(parents=True, exist_ok=True)
-    with trace.open('wb') if trace_windows else nullcontext() as output:
-        output_options = dict(stdout=output, stderr=subprocess.STDOUT) if output is not None else {}
-        process = subprocess.Popen([sys.executable, helper, "_gamescope", *args], env=environment,
-                                   start_new_session=True, stdin=subprocess.DEVNULL, **output_options)
+    log = player / 'logs' / ('window-trace.log' if trace_windows else 'gamescope.log')
+    if trace_windows or check_state is not None:
+        log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open('wb') if trace_windows or check_state is not None else nullcontext() as output:
+        process = start_compositor([sys.executable, helper, "_gamescope", *args], environment, output, check_state)
         if supervise_wine:
             sandbox_environment = environment.copy()
             sandbox_environment.pop('LD_LIBRARY_PATH', None)
             sandbox_environment.pop('LD_PRELOAD', None)
             try:
+                trace_options = dict(stdout=output, stderr=subprocess.STDOUT) if trace_windows else {}
                 process.wine_sandbox = subprocess.Popen(
                     [sys.executable, helper, "_await-display", str(exit_state), *wine_command],
-                    env=sandbox_environment, start_new_session=True, stdin=subprocess.DEVNULL, **output_options)
+                    env=sandbox_environment, start_new_session=True, stdin=subprocess.DEVNULL, **trace_options)
             except BaseException:
                 stop_players([process])
                 exit_state.with_suffix('.display').unlink(missing_ok=True)
                 raise
+        elif check_state is not None:
+            try:
+                check_state.with_suffix('.launch').touch(exist_ok=False)
+            except BaseException:
+                stop_players([process])
+                check_state.with_suffix('.display').unlink(missing_ok=True)
+                raise
     if trace_windows:
-        print(tr('J{p0} : diagnostic des fenêtres dans {p1}.', p0=player.name.removeprefix('j'), p1=trace), flush=True)
+        print(tr('J{p0} : diagnostic des fenêtres dans {p1}.', p0=player.name.removeprefix('j'), p1=log), flush=True)
     return process
 
 
@@ -1605,8 +1664,8 @@ def main():
         return 0
     if len(sys.argv) > 3 and sys.argv[1] == "_sandbox":
         enter_sandbox(sys.argv[2], sys.argv[3:])
-    if len(sys.argv) == 3 and sys.argv[1] == "_publish-display":
-        return publish_nested_display(Path(sys.argv[2]))
+    if len(sys.argv) >= 3 and sys.argv[1] == "_publish-display":
+        return publish_nested_display(Path(sys.argv[2]), sys.argv[3:])
     if len(sys.argv) > 3 and sys.argv[1] == "_await-display":
         return await_nested_display(Path(sys.argv[2]), sys.argv[3:])
     if len(sys.argv) in {5, 6} and sys.argv[1] == "_wine":

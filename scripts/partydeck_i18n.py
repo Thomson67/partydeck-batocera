@@ -228,6 +228,11 @@ EN = {
         'Story Co-op {p0}: game window not confirmed after {p1} s.',
     'Story Co-op {p0} : fenêtre replacée après relance.': 'Story Co-op {p0}: window repositioned after restart.',
     'J{p0} : diagnostic des fenêtres dans {p1}.': 'P{p0}: window trace at {p1}.',
+    '{p0} : écran Gamescope indisponible. Journal {p1}.': '{p0}: Gamescope display unavailable. Log at {p1}.',
+    '{p0} : Gamescope recrée son affichage en boucle. Relance avant Wine.':
+        '{p0}: Gamescope is repeatedly recreating its display. Restarting before Wine.',
+    '{p0} : affichage Gamescope toujours en boucle. Journal {p1}.':
+        '{p0}: Gamescope is still stuck recreating its display. Log at {p1}.',
     'Story Co-op · noms et skins des joueurs': 'Story Co-op · player names and skins',
     'Story Co-op · réglages communs aux joueurs de cette session': 'Story Co-op · shared settings for this session',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',
