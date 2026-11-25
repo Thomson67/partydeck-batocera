@@ -49,6 +49,7 @@ DESKTOP_MODE = 'PARTYDECK_BO2_DESKTOP_MODE'
 HORIZONTAL_RENDER = {'native': 'Résolution de chaque moitié',
                      '720p': 'Ultrawide · hauteur minimale 720p',
                      'standard': 'Format 16:9'}
+VERTICAL_RENDER = {'stretch': 'Remplir la moitié (étiré)', 'fit': 'Conserver le format 16:9'}
 
 
 def render_size(width, height, *, horizontal_render='standard'):
@@ -94,7 +95,8 @@ def matches(rom):
 
 def defaults(rom=None):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
-    return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False}
+    return {'mode': mode, 'horizontal_render': 'native', 'vertical_render': 'stretch',
+            'automatic_join': True, 'open_custom_lobby': False}
 
 
 def validate(data):
@@ -106,13 +108,17 @@ def validate(data):
     horizontal_render = data.get('horizontal_render', 'standard' if data.get('fill_horizontal') is False else 'native')
     if horizontal_render not in tuple(HORIZONTAL_RENDER):
         raise ValueError(tr('Option de partage horizontal Black Ops II invalide.'))
+    vertical_render = data.get('vertical_render', 'stretch')
+    if vertical_render not in tuple(VERTICAL_RENDER):
+        raise ValueError(tr('Option de partage vertical Black Ops II invalide.'))
     automatic_join = data.get('automatic_join', True)
     if type(automatic_join) is not bool:
         raise ValueError(tr('Option de connexion automatique Black Ops II invalide.'))
     open_custom_lobby = data.get('open_custom_lobby', False)
     if type(open_custom_lobby) is not bool:
         raise ValueError(tr('Option d’ouverture du salon Black Ops II invalide.'))
-    return {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join,
+    return {'mode': mode, 'horizontal_render': horizontal_render, 'vertical_render': vertical_render,
+            'automatic_join': automatic_join,
             'open_custom_lobby': open_custom_lobby}
 
 

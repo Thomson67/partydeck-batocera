@@ -57,7 +57,13 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
         ('bo2.open_custom_lobby', 'Ouvrir Parties personnalisées au démarrage' if language == 'fr'
          else 'Open Custom Games at startup', [False, True]),
         ('bo2.automatic_join', automatic, [True, False]),
-        ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
+        ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard']),
+        ('bo2.vertical_render', 'Affichage en partage vertical' if language == 'fr'
+         else 'Vertical split-screen display', ['stretch', 'fit'])]
+    assert label_value('bo2.vertical_render', 'stretch') == (
+        'Remplir la moitié (étiré)' if language == 'fr' else 'Fill each half (stretched)')
+    assert label_value('bo2.vertical_render', 'fit') == (
+        'Conserver le format 16:9' if language == 'fr' else 'Keep the 16:9 aspect ratio')
     assert lang.tr(BO2_MODES['original']) == original
     assert lang.tr('Choisir le mode de jeu') == ('Choisir le mode de jeu' if language == 'fr' else 'Choose the game mode')
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
