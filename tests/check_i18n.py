@@ -110,10 +110,20 @@ for language, automatic, skin, default_skin in (
     gameplay = fields(4, 'ocarina-story-coop')
     assert gameplay[0][:2] == ('ocarina-story-coop.freecam',
         'Caméra libre au stick droit' if language == 'fr' else 'Free camera on right stick')
-    assert [row[0].split('.')[-1] for row in gameplay[1:]] == ['third_x', 'third_y', 'first_x', 'first_y']
+    distance_mode, distance = gameplay[1:3]
+    assert distance_mode == ('ocarina-story-coop.camera_distance_mode',
+                             'Distance de la caméra libre' if language == 'fr' else 'Free camera distance',
+                             ['keep', 'game', 'fixed'])
+    assert distance == ('ocarina-story-coop.camera_distance',
+                        'Distance fixe de la caméra libre' if language == 'fr' else 'Fixed free camera distance',
+                        None)
+    assert label_value(distance_mode[0], 'game') == (
+        'Suivre la distance du jeu' if language == 'fr' else 'Follow the game’s camera distance')
+    assert label_value(distance_mode[0], 'fixed') == ('Distance fixe' if language == 'fr' else 'Fixed distance')
+    assert [row[0].split('.')[-1] for row in gameplay[3:]] == ['third_x', 'third_y', 'first_x', 'first_y']
     assert gameplay[-1][1] == ('Vue 1re personne et visée · inverser l’axe vertical' if language == 'fr'
                                 else 'First person and aiming · invert vertical axis')
-    for key, _, choices in gameplay[1:]:
+    for key, _, choices in gameplay[3:]:
         assert choices == ['keep', 'on', 'off']
         assert label_value(key, 'keep') == ('Conserver' if language == 'fr' else 'Keep current')
     assert [field[1:] for field in fields(3, 'ocarina-story-coop')] == [

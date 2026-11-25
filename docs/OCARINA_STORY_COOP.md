@@ -113,6 +113,11 @@ et en première personne. Les réglages de première personne s’appliquent
 aussi à la visée. **Conserver** reprend les réglages propres à chaque
 joueur.
 
+**Distance de la caméra libre** permet de reprendre le réglage de chaque
+joueur, de suivre la distance du jeu ou de choisir une distance fixe
+entre 100 et 900. En mode **Distance fixe**, les flèches gauche et droite
+ajustent la distance par pas de 5. Validez la ligne pour saisir une valeur.
+
 L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,
 le filtre des textures, les volumes et la musique sur J1 uniquement.
 

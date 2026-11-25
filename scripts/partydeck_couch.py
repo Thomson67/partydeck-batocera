@@ -26,7 +26,7 @@ from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CO
                                  defaults as story_defaults,
                                  matches as matches_story_coop, skin_choices as story_skin_choices)
 from partydeck_story_skins import CATALOGUE as STORY_SKINS
-from partydeck_soh_camera import CAMERA_AXES as STORY_CAMERA_AXES
+from partydeck_soh_camera import CAMERA_AXES as STORY_CAMERA_AXES, DISTANCE_MODES, MAX_DISTANCE, MIN_DISTANCE
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -147,6 +147,8 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                                                 ('skins', 'Skin', ['', *dict.fromkeys((*STORY_SKINS, *story_skins))])]]
         if tab == 4:
             return [(f'{adapter}.freecam', tr('Caméra libre au stick droit'), [True, False]),
+                    (f'{adapter}.camera_distance_mode', tr('Distance de la caméra libre'), list(DISTANCE_MODES)),
+                    (f'{adapter}.camera_distance', tr('Distance fixe de la caméra libre'), None),
                     *[(f'{adapter}.camera_axes.{key}', tr(label), list(STORY_SHARING_CHOICES))
                       for key, (_, _, label) in STORY_CAMERA_AXES.items()]]
         return soh_graphics_fields(adapter)
@@ -326,6 +328,8 @@ def label_value(key, value):
         return STORY_SKINS.get(reference, (reference, None))[0]
     if key.startswith((f'{STORY_COOP}.consumables.', f'{STORY_COOP}.camera_axes.')):
         return tr(STORY_SHARING_CHOICES[value])
+    if key == f'{STORY_COOP}.camera_distance_mode':
+        return tr(DISTANCE_MODES[value])
     if key == f'{STORY_COOP}.time_mode':
         return tr(STORY_TIME_MODES[value])
     if key == f'{STORY_COOP}.room' and not value:
@@ -881,8 +885,12 @@ class App:
                     self.model.celeste_skins, self.model.story_skins)
         if self.model.data and self.model.data.get('adapter') == BO2 and self.model.data['bo2']['mode'] == 'original':
             rows = [row for row in rows if row[0] == 'bo2.mode'] if self.tab == 1 else rows
-        if self.model.data and self.model.data.get('adapter') == STORY_COOP and not self.model.data[STORY_COOP]['sync']:
-            rows = [row for row in rows if not row[0].startswith(f'{STORY_COOP}.consumables.')]
+        if self.model.data and self.model.data.get('adapter') == STORY_COOP:
+            story = self.model.data[STORY_COOP]
+            if not story['sync']:
+                rows = [row for row in rows if not row[0].startswith(f'{STORY_COOP}.consumables.')]
+            if story['camera_distance_mode'] != 'fixed':
+                rows = [row for row in rows if row[0] != f'{STORY_COOP}.camera_distance']
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows
@@ -1796,6 +1804,18 @@ class App:
                         self.toast(tr('Volume repris depuis la configuration commune') if key.startswith('sm64coopdx.') else tr('Volume repris depuis le JSON commun'))
                     else:
                         put(self.model.data, key, max(0, min(100, self.volume(key) + (-5 if action == 'left' else 5))))
+                elif key == f'{STORY_COOP}.camera_distance':
+                    if action == 'ok':
+                        def update_distance(text):
+                            distance = text.strip().lstrip('0')
+                            if (len(distance) != 3 or not distance.isascii() or not distance.isdecimal()
+                                    or not MIN_DISTANCE <= int(distance) <= MAX_DISTANCE):
+                                raise ValueError(tr('Distance de la caméra : de {p0} à {p1}.', p0=MIN_DISTANCE, p1=MAX_DISTANCE))
+                            put(self.model.data, key, int(distance))
+                        self.edit(title, value, update_distance)
+                    else:
+                        step = -5 if action == 'left' else 5
+                        put(self.model.data, key, max(MIN_DISTANCE, min(MAX_DISTANCE, value + step)))
                 elif key.startswith(f'{STORY_COOP}.skins.') and action == 'ok':
                     self.edit(title, value, lambda text: put(self.model.data, key, text.strip()))
                 elif choices:

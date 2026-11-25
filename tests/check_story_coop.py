@@ -75,6 +75,18 @@ with TemporaryDirectory() as folder:
         assert story.validate({'consumables': previous})['consumables'] == dict.fromkeys(story.CONSUMABLES, previous)
     assert story.validate({'camera_axes': {'first_y': 'off'}})['camera_axes'] == {
         'third_x': 'keep', 'third_y': 'keep', 'first_x': 'keep', 'first_y': 'off'}
+    assert story.validate({})['camera_distance_mode'] == 'keep'
+    assert story.validate({'camera_distance_mode': 'fixed'})['camera_distance'] == 185
+    for distance in (100, 140, 900):
+        assert story.validate({'camera_distance': distance})['camera_distance'] == distance
+    for invalid in ({'camera_distance': 99}, {'camera_distance': 901}, {'camera_distance': '140'},
+                    {'camera_distance': True}, {'camera_distance_mode': []}):
+        try:
+            story.validate(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f'Invalid camera settings accepted: {invalid}')
     legacy = defaults(archive)
     del legacy[story.ADAPTER]
     from partydeck_profiles import profile_path
@@ -193,19 +205,26 @@ with TemporaryDirectory() as folder:
             with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)), \
                  patch.object(story, 'patch_client', return_value=False):
                 configured = options | {'camera_axes': {'third_x': 'on', 'third_y': 'off',
-                                                        'first_x': 'off', 'first_y': 'on'}}
-                expected = {'FreeLook': {'InvertXAxis': 1, 'InvertYAxis': 0},
+                                                        'first_x': 'off', 'first_y': 'on'},
+                                        'camera_distance_mode': 'fixed', 'camera_distance': 140}
+                expected = {'FreeLook': {'InvertXAxis': 1, 'InvertYAxis': 0, 'UseGameDistance': 0,
+                                         'MaxCameraDistance': 140},
                             'Controls': {'InvertAimingXAxis': 0, 'InvertAimingYAxis': 1}}
                 before = json.loads(path.read_text())
-                before['CVars']['gSettings']['FreeLook'] = {'InvertYAxis': 1}
+                original_camera = {'InvertYAxis': 1, 'UseGameDistance': 0, 'MaxCameraDistance': 215}
+                before['CVars']['gSettings']['FreeLook'] = original_camera
                 path.write_text(json.dumps(before))
                 for _ in range(2):
                     story.configure_client(player, archive, private, player, configured, base / 'skins')
                     current = json.loads(path.read_text())['CVars']['gSettings']
                     assert {section: current[section] for section in expected} == expected
+                story.configure_client(player, archive, private, player,
+                                       options | {'camera_distance_mode': 'game'}, base / 'skins')
+                adaptive = json.loads(path.read_text())['CVars']['gSettings']['FreeLook']
+                assert adaptive == original_camera | {'UseGameDistance': 1}
                 story.configure_client(player, archive, private, player, options, base / 'skins')
                 restored = json.loads(path.read_text())['CVars']['gSettings']
-                assert restored['FreeLook'] == {'InvertYAxis': 1}
+                assert restored['FreeLook'] == original_camera
                 assert restored['Controls'] == {}
                 assert not (private / 'partydeck-camera-axes-original.json').exists()
             player_mods = private / 'mods'

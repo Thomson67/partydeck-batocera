@@ -15,7 +15,8 @@ import zipfile
 
 from partydeck_anchor import apply_graphics, config_path, graphics_defaults, validate_config, validate_graphics, VOLUME_FIELDS
 from partydeck_i18n import tr
-from partydeck_soh_camera import CAMERA_AXES, configure_axes, configure_freecam
+from partydeck_soh_camera import (CAMERA_AXES, DEFAULT_DISTANCE, DISTANCE_MODES, MAX_DISTANCE, MIN_DISTANCE,
+                                  configure_camera_settings, configure_freecam)
 import partydeck_story_skins as skins
 
 ADAPTER = 'ocarina-story-coop'
@@ -77,6 +78,7 @@ def defaults():
     return dict(automatic=True, port=PORT, room='', config=CONFIG,
                 sync=True, locations=True, teleport=True, consumables=dict.fromkeys(CONSUMABLES, 'keep'),
                 freecam=False, camera_axes=dict.fromkeys(CAMERA_AXES, 'keep'), time_mode='shared',
+                camera_distance_mode='keep', camera_distance=DEFAULT_DISTANCE,
                 names=[f'J{i}' for i in range(1, 5)], skins=[''] * 4, graphics=graphics_defaults())
 
 
@@ -88,6 +90,7 @@ def validate(options):
     options = defaults() | options
     sharing = options['consumables']
     camera_axes = options['camera_axes']
+    distance_mode, distance = options['camera_distance_mode'], options['camera_distance']
     if isinstance(sharing, str) and sharing in SHARING_CHOICES:
         sharing = dict.fromkeys(CONSUMABLES, sharing)
     if (type(options['port']) is not int or not 1024 < options['port'] < 65535
@@ -97,6 +100,8 @@ def validate(options):
             or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in sharing.values())
             or not isinstance(camera_axes, dict) or not camera_axes.keys() <= CAMERA_AXES.keys()
             or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in camera_axes.values())
+            or not isinstance(distance_mode, str) or distance_mode not in DISTANCE_MODES
+            or type(distance) is not int or not MIN_DISTANCE <= distance <= MAX_DISTANCE
             or not isinstance(options['config'], str)
             or not valid_text(options['room'], 32, optional=True)):
         raise ValueError(tr('Profil Story Co-op invalide.'))
@@ -454,8 +459,12 @@ def configure_client(player, rom, directory, root, options, skin_cache, controll
     apply_graphics(data, options['graphics'], index - 1)
     camera_backup = config_path(directory, 'partydeck-freecam-original.json')
     restored_camera = configure_freecam(graphics, camera_backup, options.get('freecam', False), controller_template)
-    axes_backup = config_path(directory, 'partydeck-camera-axes-original.json')
-    saved_axes = configure_axes(graphics, axes_backup, options.get('camera_axes', {}), persistent=source == path)
+    # Keep using the same backup so profiles with active axis overrides migrate.
+    settings_backup = config_path(directory, 'partydeck-camera-axes-original.json')
+    saved_camera = configure_camera_settings(graphics, settings_backup, options.get('camera_axes', {}),
+                                              options.get('camera_distance_mode', 'keep'),
+                                              options.get('camera_distance', DEFAULT_DISTANCE),
+                                              persistent=source == path)
     online = cvars.setdefault('gZeldaOnline', {})
     host, port = client_host(index), options['port']
     online.update(Enabled=1, AutoConnect=1, Host=host, Port=port, Nickname=options['names'][index - 1])
@@ -512,10 +521,10 @@ def configure_client(player, rom, directory, root, options, skin_cache, controll
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
     if restored_camera:
         camera_backup.unlink(missing_ok=True)
-    if saved_axes == {}:
-        axes_backup.unlink(missing_ok=True)
-    elif saved_axes is not None:
-        atomic_write(axes_backup, json.dumps(saved_axes))
+    if saved_camera == {}:
+        settings_backup.unlink(missing_ok=True)
+    elif saved_camera is not None:
+        atomic_write(settings_backup, json.dumps(saved_camera))
     print(tr('Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.',
              p0=player.name.upper(), p1=f'{host}:{port}'), flush=True)
 

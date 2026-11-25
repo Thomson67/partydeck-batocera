@@ -14,16 +14,28 @@ CAMERA_AXES = {
     'first_x': ('Controls', 'InvertAimingXAxis', 'Vue 1re personne et visée · inverser l’axe horizontal'),
     'first_y': ('Controls', 'InvertAimingYAxis', 'Vue 1re personne et visée · inverser l’axe vertical'),
 }
+DISTANCE_MODES = {'keep': 'Conserver', 'game': 'Suivre la distance du jeu', 'fixed': 'Distance fixe'}
+MIN_DISTANCE, DEFAULT_DISTANCE, MAX_DISTANCE = 100, 185, 900
+CAMERA_SETTINGS = {
+    **{name: (group, key) for name, (group, key, _) in CAMERA_AXES.items()},
+    'use_game_distance': ('FreeLook', 'UseGameDistance'),
+    'max_camera_distance': ('FreeLook', 'MaxCameraDistance'),
+}
 
 
-def configure_axes(settings, backup, modes, *, persistent):
+def configure_camera_settings(settings, backup, modes, distance_mode, distance, *, persistent):
     from partydeck_profiles import atomic_write
+
+    overrides = {name: int(mode == 'on') for name, mode in modes.items() if mode != 'keep'}
+    if distance_mode != 'keep':
+        overrides['use_game_distance'] = int(distance_mode == 'game')
+    if distance_mode == 'fixed':
+        overrides['max_camera_distance'] = distance
 
     original = json.loads(backup.read_text()) if backup.is_file() else {}
     active = {}
-    for name, (group, key, _) in CAMERA_AXES.items():
-        mode = modes.get(name, 'keep')
-        if mode == 'keep':
+    for name, (group, key) in CAMERA_SETTINGS.items():
+        if name not in overrides:
             if persistent and name in original:
                 if original[name] is None:
                     settings.get(group, {}).pop(key, None)
@@ -32,7 +44,7 @@ def configure_axes(settings, backup, modes, *, persistent):
         else:
             section = settings.setdefault(group, {})
             active[name] = original.get(name, section.get(key)) if persistent else section.get(key)
-            section[key] = int(mode == 'on')
+            section[key] = overrides[name]
     saved = original | active
     if original != saved:
         atomic_write(backup, json.dumps(saved))
