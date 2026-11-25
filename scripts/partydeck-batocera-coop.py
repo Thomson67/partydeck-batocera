@@ -1129,7 +1129,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     from partydeck_celestenet import ADAPTER as CELESTENET
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1
-    from partydeck_story_coop import ADAPTER as STORY_COOP, start_server as start_story_server, stop_server as stop_story_server
+    from partydeck_story_coop import (ADAPTER as STORY_COOP, VERSION as STORY_VERSION,
+                                     start_server as start_story_server, stop_server as stop_story_server)
     story_coop = len(players) > 1 and (profile or {}).get('adapter') == STORY_COOP
     shared_lan = celestenet or story_coop
     from partydeck_dst import ADAPTER as DST
@@ -1232,7 +1233,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
         if story_coop:
-            story_server = start_story_server(target, PARTY_SAVES / save_name / 'story-coop', network)
+            cache = base / 'dependencies' / STORY_COOP / STORY_VERSION
+            story_server = start_story_server(target, PARTY_SAVES / save_name / 'story-coop', network, cache)
         if dst:
             from partydeck_dst import readiness_dir
             dst_ready = readiness_dir(base/'runtime'/game_id/'j1', session_token)

@@ -56,6 +56,16 @@ def download(directory, name, checksum):
     return archive
 
 
+def release_server_files(archive):
+    with tarfile.open(archive) as package:
+        files = {}
+        for name in SERVER_FILES:
+            member = f'OcarinaStoryCoop-{VERSION}-linux/server/{name}'
+            with package.extractfile(member) as stream:
+                files[name] = stream.read()
+        return files
+
+
 def prepare(source, output):
     source = source.resolve(strict=True)
     asset = source.name.lower()
@@ -92,11 +102,8 @@ def prepare(source, output):
                     shutil.copyfileobj(stream, copied)
         server = game / SERVER_DIR
         server.mkdir()
-        with tarfile.open(linux) as package:
-            for name in SERVER_FILES:
-                member = f'OcarinaStoryCoop-{VERSION}-linux/server/{name}'
-                with package.extractfile(member) as stream, (server / name).open('wb') as copied:
-                    shutil.copyfileobj(stream, copied)
+        for name, data in release_server_files(linux).items():
+            (server / name).write_bytes(data)
         shutil.copyfile(source, game / (asset if asset in ASSETS else 'oot.z64'))
         (prefix / 'autorun.cmd').write_bytes(b'DIR=drive_c/game\nCMD=soh.exe\n')
         if output_format == '.wine':
@@ -109,22 +116,62 @@ def prepare(source, output):
     print(tr('Story Co-op prêt : {p0}', p0=output), flush=True)
 
 
-def bundled_server_files(rom):
-    relative = Path(SERVER_DIR) if rom.suffix.lower() == '.pc' else GAME_DIR / SERVER_DIR
+def read_member(rom, member):
+    if rom.suffix.lower() == '.wsquashfs':
+        result = subprocess.run(['unsquashfs', '-cat', str(rom), str(member)],
+                                capture_output=True, timeout=30, env=dict(os.environ, LC_ALL='C'))
+        if result.returncode == 2 and b'no matches for ' in result.stderr:
+            return None
+        result.check_returncode()
+        return result.stdout
+    try:
+        return (rom / member).read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def verify_server(files):
     for name, checksum in SERVER_FILES.items():
-        member = relative / name
-        try:
-            if rom.suffix.lower() == '.wsquashfs':
-                data = subprocess.run(['unsquashfs', '-cat', str(rom), str(member)], check=True,
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30).stdout
-            else:
-                data = (rom / member).read_bytes()
-        except (OSError, subprocess.SubprocessError) as error:
-            raise RuntimeError(tr('Serveur Story Co-op introuvable dans {p0} ({p1}).',
-                                  p0=rom.name, p1=member)) from error
-        if hashlib.sha256(data).hexdigest() != checksum:
+        if hashlib.sha256(files[name]).hexdigest() != checksum:
             raise ValueError(tr('Fichier serveur Story Co-op {p0} invalide : {p1}.', p0=VERSION, p1=name))
-        yield name, data
+    return files
+
+
+def bundled_server_files(rom):
+    autorun = read_member(rom, Path('autorun.cmd')) or b''
+    setting = re.search(r'^DIR=([^\r\n]*)', autorun.decode('utf-8-sig', errors='replace'), re.MULTILINE)
+    directory = Path(setting[1].strip().replace('\\', '/')) if setting else Path('.')
+    defaults = (Path('.'),) if rom.suffix.lower() == '.pc' else (GAME_DIR, Path('.'))
+    # Only probe relative paths inside the game or archive.
+    candidates = defaults if directory.is_absolute() or '..' in directory.parts else (directory, *defaults)
+    for candidate in dict.fromkeys(candidates):
+        relative = candidate / SERVER_DIR
+        program = read_member(rom, relative / 'OOTServer')
+        if program is None:
+            continue
+        config = read_member(rom, relative / 'config.json')
+        if config is not None:
+            return verify_server({'OOTServer': program, 'config.json': config})
+    return None
+
+
+def cached_server_files(cache):
+    from partydeck_borderlands2 import write_bytes
+
+    paths = {name: cache / name for name in SERVER_FILES}
+    if all(path.is_file() and not path.is_symlink() for path in paths.values()):
+        try:
+            return verify_server({name: path.read_bytes() for name, path in paths.items()})
+        except ValueError:
+            pass  # An incomplete or damaged cache can be rebuilt.
+    print(tr('Story Co-op : téléchargement du serveur Linux {p0}.', p0=VERSION), flush=True)
+    cache.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=cache, prefix='.download-') as folder:
+        archive = download(Path(folder), LINUX_ARCHIVE, LINUX_DIGEST)
+        files = verify_server(release_server_files(archive))
+        for name, data in files.items():
+            write_bytes(paths[name], data)
+    return files
 
 
 def stop_server(process):
@@ -137,11 +184,17 @@ def stop_server(process):
             process.wait()
 
 
-def start_server(rom, work, lan):
+def start_server(rom, work, lan, cache):
     from partydeck_borderlands2 import write_bytes
+    files = bundled_server_files(rom)
+    if files is None:
+        try:
+            files = cached_server_files(cache)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            raise RuntimeError(tr('Story Co-op : serveur Linux indisponible ({p0}).', p0=error)) from error
     work.mkdir(parents=True, exist_ok=True)
     program = work / 'OOTServer'
-    for name, data in bundled_server_files(rom):
+    for name, data in files.items():
         path = work / name
         if path.is_symlink():
             raise ValueError(tr('Le fichier est un lien symbolique : {p0}', p0=path))

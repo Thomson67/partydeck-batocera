@@ -274,8 +274,12 @@ def seed_windows(original, target):
                                  str(target), 'drive_c/windows'],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         extracted = staging/'extract/drive_c/windows'
-        if result.returncode or not extracted.is_dir() or extracted.is_symlink():
+        if result.returncode or extracted.is_symlink() or (extracted.exists() and not extracted.is_dir()):
             raise RuntimeError(tr('Extraction de la base Windows impossible : {p0}', p0=target))
+        # A valid archive may contain only the game's files. Wine boots the
+        # Windows tree into each player's writable prefix on the first run.
+        if not extracted.exists():
+            return None
         # A seed is a complete original tree. Keep links/empty files/directories
         # in it, while deduplicating its regular files through the same objects.
         # Build directory metadata first; do not duplicate the full seed on a

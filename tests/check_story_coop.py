@@ -71,20 +71,41 @@ with TemporaryDirectory() as folder:
     expected = {'OOTServer': server, 'config.json': config}
     checksums = {name: hashlib.sha256(data).hexdigest() for name, data in expected.items()}
     with patch.object(story, 'SERVER_FILES', checksums):
-        assert dict(story.bundled_server_files(prefix)) == expected
+        assert story.bundled_server_files(prefix) == expected
+        custom_dir = Path('drive_c/SoH-Blair-Charlie-Win64')
+        (prefix / 'autorun.cmd').write_bytes(f'DIR={custom_dir}\r\nCMD=soh.exe\r\n'.encode())
+        game.rename(prefix / custom_dir)
+        assert story.bundled_server_files(prefix) == expected
         def extract(command, **options):
             assert command[:3] == ['unsquashfs', '-cat', str(archive)]
-            assert Path(command[3]).parent == story.GAME_DIR / story.SERVER_DIR
-            return subprocess.CompletedProcess(command, 0, expected[Path(command[3]).name])
+            member = Path(command[3])
+            if member.name == 'autorun.cmd':
+                return subprocess.CompletedProcess(command, 0, (prefix / 'autorun.cmd').read_bytes())
+            assert member.parent == custom_dir / story.SERVER_DIR
+            return subprocess.CompletedProcess(command, 0, expected[member.name])
         with patch.object(story.subprocess, 'run', side_effect=extract):
-            assert dict(story.bundled_server_files(archive)) == expected
+            assert story.bundled_server_files(archive) == expected
+        with patch.object(story.subprocess, 'run', side_effect=lambda command, **kw:
+                          subprocess.CompletedProcess(command, 2, b'', b'cat: no matches for /member')):
+            assert story.bundled_server_files(archive) is None
+        game = prefix / custom_dir
         (game/story.SERVER_DIR/'OOTServer').write_bytes(b'unrecognized executable')
         try:
-            tuple(story.bundled_server_files(prefix))
+            story.bundled_server_files(prefix)
         except ValueError:
             pass
         else:
             raise AssertionError('Unrecognized server executable was accepted')
+        (game/story.SERVER_DIR/'OOTServer').unlink()
+        assert story.bundled_server_files(prefix) is None
+        cache = base / 'dependencies' / story.VERSION
+        with patch.object(story, 'download', return_value=linux) as download:
+            assert story.cached_server_files(cache) == expected
+            assert story.cached_server_files(cache) == expected
+            assert download.call_count == 1
+            (cache/'OOTServer').write_bytes(b'damaged cache')
+            assert story.cached_server_files(cache) == expected
+            assert download.call_count == 2
 
     for index in (1, 2):
         player = base / f'j{index}'

@@ -115,6 +115,20 @@ def run():
             assert b.seed_windows(archive,archive)==seed and len(extractions)==1
             archive.write_bytes(b'archive generation 2 changed')
             assert b.seed_windows(archive,archive)!=seed and len(extractions)==2
+        # A small game-only WSquashFS is valid, and a failed extraction still
+        # stops instead of being treated as an empty Windows tree.
+        bare = root/'Game only.wsquashfs'
+        bare.write_bytes(b'no Windows directory')
+        with patch.object(b, 'ROOT', root/'bottles'), patch.object(b.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            assert b.seed_windows(bare, bare) is None
+            run.return_value.returncode = 2
+            try:
+                b.seed_windows(bare, bare)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('Failed extraction was ignored')
     print('Bottles: private saves/registries, shared Windows inodes, migration recovery/conflicts, safe hardlink fallback and accounting verified.')
 
 

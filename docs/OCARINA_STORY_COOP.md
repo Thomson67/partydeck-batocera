@@ -6,6 +6,12 @@ le serveur Linux du mod avec votre fichier de jeu local.
 
 ## Préparer le jeu
 
+Si Story Co-op 1.0.5 démarre déjà en solo, ajoutez votre `.wine` ou
+votre `.wsquashfs` existant et sélectionnez le profil **Ocarina of Time ·
+Story Co-op**. PartyDeck lit le dossier indiqué par `DIR` dans `autorun.cmd`.
+Si le serveur Linux manque, PartyDeck le télécharge et le vérifie au premier
+lancement, puis le conserve pour les prochaines sessions.
+
 Avec un `oot.o2r` généré par cette version du client, créez directement
 l’archive. Le même outil accepte aussi `oot-mq.o2r`.
 
@@ -27,8 +33,8 @@ Dans le système **Windows** d’EmulationStation, ouvrez le dossier de jeu en
 solo et laissez Ship of Harkinian générer le fichier `.o2r`. Fermez le jeu,
 puis convertissez le dossier `.wine` en `.wsquashfs` avec Ultimate Wine
 Toolbox en conservant la commande `soh.exe` et le dossier `drive_c/game`.
-Le dossier `PartyDeck-Story-Coop` doit rester à côté de `soh.exe` dans
-l’archive. Ajoutez ensuite le `.wsquashfs` à Windows Party.
+Conservez le dossier `PartyDeck-Story-Coop` à côté de `soh.exe` pour embarquer
+le serveur dans l’archive. Ajoutez ensuite le `.wsquashfs` à Windows Party.
 
 ## Jouer
 
@@ -37,7 +43,7 @@ dans **Windows Party**. Le profil **Ocarina of Time · Story Co-op** détecte
 ce nom. Il est aussi sélectionnable dans **Session → Profil du jeu**.
 Choisissez de deux à quatre joueurs.
 
-Windows Party lance le serveur local inclus dans l’archive, puis connecte
+Windows Party lance le serveur local, puis connecte
 chaque joueur automatiquement. Dans la fenêtre **Zelda Online**, J1 crée un
 groupe avec **Story Co-op** activé et invite J2. J2 accepte. Aux sessions
 suivantes, recréez le groupe avec le même code d’équipe pour retrouver la
