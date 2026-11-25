@@ -95,4 +95,7 @@ for mode, navigation, expected in (
     with patch('partydeck_couch.Pads', return_value=pads):
         assert choose_bo2_mode({'mode': mode}, 2) == expected
     assert not app.pg.display.get_init()
+with patch('partydeck_couch.Pads', return_value=Mock(devices=[object()], family='xbox',
+                                                    **{'poll.side_effect': [[], [], ['down', 'ok']]})):
+    assert choose_bo2_mode({'mode': 't5mp'}, 2, 'black-ops-1') == 't5sp'
 print('UI: unique linked sources/aliases, saved adapter preserved, full-screen aspect ratios, French/English and two-line titles verified.')

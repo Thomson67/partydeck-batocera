@@ -404,3 +404,17 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
         environment = popen.call_args.kwargs['env']
         assert environment[SESSION_MODE] == 'plutonium-zm'
         assert (environment.get(PUBLISH_DISPLAY) == '1') is publish
+
+from partydeck_bo2 import BO1, defaults as black_ops_defaults
+settings = black_ops_defaults(adapter=BO1) | {'mode': 't5sp', 'open_custom_lobby': True}
+with (patch.object(coop.subprocess, 'Popen') as popen,
+      patch.object(coop, 'sandbox_arguments', return_value=[]),
+      patch('partydeck_profiles.profile_path', return_value=Path(__file__)),
+      patch('partydeck_profiles.read_profile', return_value={'adapter': BO1, 'bo1': settings})):
+    for native, resolution in ((False, '1280x720'), (True, '960x1080')):
+        settings['vertical_native'] = native
+        coop.start_player(base, base/'j1', game, game, [], (0, 0, 960, 1080), 'bo1-j1',
+                          saves=base/'saves', player_count=2, split='vertical', network=network)
+        env = popen.call_args.kwargs['env']
+        assert env['PARTYDECK_BO2_RESOLUTION'] == resolution and env[SESSION_MODE] == 't5sp'
+        assert env[PUBLISH_DISPLAY] == '1'

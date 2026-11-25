@@ -1,5 +1,5 @@
 """Community configuration recipes, independent of the user's game files."""
-from partydeck_bo2 import ADAPTER as BO2, matches as matches_bo2
+from partydeck_bo2 import ADAPTER as BO2, BO1, matches_bo1, matches as matches_bo2
 from partydeck_i18n import tr
 from partydeck_story_coop import ADAPTER as STORY_COOP, LABEL as STORY_LABEL, matches as matches_story_coop
 from dataclasses import dataclass
@@ -30,6 +30,7 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('hkmultiplayer','Hollow Knight · HKMultiplayer 0.36.2','hollowknight-hkmultiplayer'),
           CommonGame('celestenet', 'Celeste · CelesteNet en LAN', 'celestenet'),
           CommonGame('dst', "Don't Starve Together · LAN", 'dont-starve-together'),
+          CommonGame('bo1', 'Black Ops · Plutonium LAN', BO1),
           CommonGame('bo2', 'Black Ops II · LAN expérimental', BO2),
           CommonGame('ocarina-story-coop', STORY_LABEL, STORY_COOP))
 
@@ -57,6 +58,8 @@ def recipe_for(rom, adapter=None):
     from partydeck_dst import ADAPTER as DST, matches as matches_dst
     if adapter is None and matches_story_coop(rom):
         adapter = STORY_COOP
+    if adapter is None and matches_bo1(rom):
+        adapter = BO1
     if adapter is None and matches_bo2(rom):
         adapter = BO2
     if adapter is None and matches_dst(rom):

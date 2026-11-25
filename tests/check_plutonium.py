@@ -17,6 +17,8 @@ payloads = {
     'games/t6zm.exe': b'zombies',
     'storage/t6/zone/plutonium_mp.ff': b'client asset',
     'games/t5mp.exe': b'excluded',
+    'games/t5sp.exe': b'black ops zombies',
+    'storage/t5/zone/plutonium_ui.ff': b't5 asset',
 }
 files = [dict(name=name, size=len(value), hash=hashlib.sha1(value).hexdigest())
          for name, value in payloads.items()]
@@ -56,8 +58,12 @@ with TemporaryDirectory() as root:
         client = pluto.prepare(base, 't6mp')
         assert client == pluto.client_path(base, 't6zm')
         assert set(path.relative_to(client).as_posix() for path in client.rglob('*') if path.is_file()) == (
-            set(payloads) - {'games/t5mp.exe'})
+            {name for name in payloads if not name.startswith(('games/t5', 'storage/t5/'))})
         assert (client / 'games/t6mp.exe').read_bytes() == original
+        t5 = pluto.prepare(base, 't5sp')
+        assert t5 == pluto.client_path(base, 't5mp') and t5 != client
+        assert (t5 / 'storage/t5/zone/plutonium_ui.ff').is_file()
+        assert not (t5 / 'games/t6mp.exe').exists()
 
     with patch.object(pluto, 'urlopen', side_effect=AssertionError('unexpected download')):
         assert pluto.prepare(base, 't6zm') == client

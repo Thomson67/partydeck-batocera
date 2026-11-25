@@ -19,28 +19,45 @@ from partydeck_l4d2 import ACCOUNT_MAX, STEAM64_BASE
 from partydeck_plutonium import BOOTSTRAPPER, client_path
 
 ADAPTER = 'black-ops-2'
+BO1 = 'black-ops-1'
+PROFILE_KEYS = {BO1: 'bo1', ADAPTER: 'bo2'}
+TITLES = {BO1: 'Black Ops', ADAPTER: 'Black Ops II'}
 MODES = {
     'plutonium-mp': 'Multijoueur · Plutonium LAN',
     'plutonium-zm': 'Zombies · Plutonium LAN',
     'original': 'Lancement d’origine',
+    't5mp': 'Multijoueur · Plutonium LAN',
+    't5sp': 'Zombies · Plutonium LAN',
 }
 EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
-PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
+PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm', 't5mp': 't5mp', 't5sp': 't5sp'}
+SELECTABLE_MODES = {BO1: ('t5mp', 't5sp'), ADAPTER: ('plutonium-mp', 'plutonium-zm')}
+T5_EXECUTABLES = {'t5sp': 'BlackOps.exe', 't5mp': 'BlackOpsMP.exe'}
 LANGUAGES = {'keep': 'Conserver', 'french': 'Français', 'english': 'Anglais'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
 SESSION_MODE = 'PARTYDECK_BO2_MODE'
-GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
-               r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)')
+GAME_WINDOW = (r'^Plutonium T[56][ :_]+(MP|SP|ZM|Singleplayer|Single Player|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
+               r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)'
+               r'|^Call of Duty(\(R\))?[: ]+Black Ops( - (Multiplayer|Zombies))?$')
 # Positions of the two native buttons in the verified 1920x540 layout.
 MENU_SIZE = (1920, 540)
 ONLINE_BUTTON = (668, 326)
 CUSTOM_GAMES_BUTTONS = {'plutonium-mp': (700, 99), 'plutonium-zm': (700, 135)}
-STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?common_" + mode[2:].encode() + rb"\b")
-                   for mode in PLUTONIUM_MODES.values()}
+STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?" + asset + rb"(?![a-zA-Z0-9_])")
+                   for mode, asset in (('t6mp', b'common_mp'), ('t6zm', b'common_zm'),
+                                       ('t5mp', b'common_mp'), ('t5sp', rb'(?:common|plutonium_ui)'))}
 # Plutonium r5369 issues this command as it enters the online menu.
 ONLINE_MENU_MARKER = re.compile(rb'Unknown command:? "session_rejoinsession"')
+T5_LOBBY_COMMANDS = {
+    't5mp': ('setclientbeingusedandprimary; onlinegame 1; xblive_privatematch 1; '
+             'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
+             'closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),
+    't5sp': ('setclientbeingusedandprimary; set zombiemode 1; set spmode 0; onlinegame 1; '
+             'xblive_privatematch 1; xblive_rankedmatch 0; xstartpartyhost; '
+             'closemenu main_text; closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),
+}
 ZOMBIES_DLC_LOAD = re.compile(rb"Loading fastfile '?\w+_load_zm\b")
 # Xwayland's evdev keycode for the physical key under Escape (grave or ²).
 CONSOLE_KEYCODE = '49'
@@ -73,7 +90,7 @@ def desktop_size(width, height):
     return width, height
 
 
-def display_arguments():
+def display_arguments(*, t5=False):
     width, height = DEFAULT_RENDER_SIZE
     resolution = os.environ.get('PARTYDECK_BO2_RESOLUTION', f'{width}x{height}')
     width, height = map(int, resolution.split('x'))
@@ -81,10 +98,12 @@ def display_arguments():
     custom_mode = resolution != desktop_mode or width * 9 != height * 16
     # T6 computes the aspect ratio from the active resolution. Use a window
     # for custom modes inside Gamescope's borderless player viewport.
-    args = ['+set', 'r_fullscreen', '0' if custom_mode else '2',
+    args = ['+set', 'r_fullscreen', '0' if t5 or custom_mode else '2',
             '+set', 'r_mode', desktop_mode, '+set', 'r_customMode', resolution,
             '+set', 'r_aspectRatio', 'auto']
-    if custom_mode:
+    if t5:
+        args.extend(['+set', 'r_noborder', '1'])
+    if t5 or custom_mode:
         args.extend(['+set', 'vid_xpos', '0', '+set', 'vid_ypos', '0'])
     return args
 
@@ -93,17 +112,26 @@ def matches(rom):
     return bool(re.search(r'\bblack[\s_-]*ops[\s_-]*(?:ii|2)\b|\bbo2\b', rom.stem.casefold()))
 
 
-def defaults(rom=None):
+def matches_bo1(rom):
+    name = rom.stem.casefold()
+    return bool(re.search(r'\bbo1\b|\bblack[\s_-]*ops\b(?![\s_-]*(?:[2-9]|ii|iii|iv|v|vi|vii|cold[\s_-]*war)\b)', name))
+
+
+def defaults(rom=None, adapter=ADAPTER):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
+    if adapter == BO1:
+        mode = 't5sp' if mode == 'plutonium-zm' else 't5mp'
+        return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True,
+                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False}
     return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False,
             'language': 'keep'}
 
 
-def validate(data):
+def validate(data, adapter=ADAPTER):
     mode = data.get('mode') if isinstance(data, dict) else None
     if mode in ('mp', 'zm'):
         mode = f'plutonium-{mode}'
-    if mode not in tuple(MODES):
+    if mode not in (*SELECTABLE_MODES[adapter], 'original'):
         raise ValueError(tr('Mode Black Ops II invalide.'))
     horizontal_render = data.get('horizontal_render', 'standard' if data.get('fill_horizontal') is False else 'native')
     if horizontal_render not in tuple(HORIZONTAL_RENDER):
@@ -117,8 +145,14 @@ def validate(data):
     language = data.get('language', 'keep')
     if language not in tuple(LANGUAGES):
         raise ValueError(tr('Langue Black Ops II invalide.'))
-    return {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join,
-            'open_custom_lobby': open_custom_lobby, 'language': language}
+    settings = {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join,
+                'open_custom_lobby': open_custom_lobby, 'language': language}
+    if adapter == BO1:
+        vertical_native = data.get('vertical_native', False)
+        if type(vertical_native) is not bool:
+            raise ValueError(tr('Format vertical Black Ops invalide.'))
+        settings['vertical_native'] = vertical_native
+    return settings
 
 
 def private_child(directory, name):
@@ -129,7 +163,8 @@ def private_child(directory, name):
 
 
 def find_game(directory, root, mode, allowed):
-    names = (EXECUTABLES[mode],) if mode in EXECUTABLES else tuple(EXECUTABLES.values())
+    exe_name = (EXECUTABLES | T5_EXECUTABLES).get(mode)
+    names = (exe_name,) if exe_name else tuple(EXECUTABLES.values())
 
     def search(folder):
         for name in names:
@@ -204,7 +239,7 @@ def prepare(player, mode, directory, root, plutonium_source, language='keep'):
     if not any(directory.is_relative_to(path) for path in allowed):
         raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=directory))
     plutonium_mode = PLUTONIUM_MODES.get(mode)
-    game_mode = plutonium_mode[2:] if plutonium_mode else mode
+    game_mode = plutonium_mode[2:] if plutonium_mode and plutonium_mode.startswith('t6') else mode
     exe = find_game(directory, root, game_mode, allowed)
     if plutonium_mode:
         return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode, language)
@@ -252,7 +287,10 @@ def apply_language(game, mode, language):
                             p0=tr(LANGUAGES[language]), p1=zone))
     # T6 has a mode-specific file. Keep the generic file in sync for clients
     # that use it as a fallback, preserving each file's existing byte encoding.
-    paths = [private_child(game, name) for name in ('localization.txt', f'localization_{mode[2:]}.txt')]
+    names = ['localization.txt']
+    if mode.startswith('t6'):
+        names.append(f'localization_{mode[2:]}.txt')
+    paths = [private_child(game, name) for name in names]
     changes = []
     for path in paths:
         previous = path.read_bytes() if path.is_file() else b''
@@ -275,10 +313,12 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
     bootstrapper = private_child(binaries, BOOTSTRAPPER)
     if not (bootstrapper.is_file() and private_child(games, f'{mode}.exe').is_file()):
         raise ValueError(tr('Black Ops II : copiez bin et games de Plutonium dans {p0}.', p0=source))
+    t5 = mode.startswith('t5')
+    title = TITLES[BO1 if t5 else ADAPTER]
     bink = private_child(game, 'binkw32.dll')
     if not bink.is_file():
         raise ValueError(tr('Black Ops II : binkw32.dll introuvable dans {p0}.', p0=game))
-    if b'_BinkWaitStopAsyncThread@4\0' not in bink.read_bytes():
+    if not t5 and b'_BinkWaitStopAsyncThread@4\0' not in bink.read_bytes():
         print(tr('Black Ops II : symbole Bink attendu absent de {p0}. Vérifiez les fichiers du jeu.',
                  p0=bink), file=sys.stderr, flush=True)
     game_path = windows_game_path(game, root)
@@ -297,18 +337,23 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
 
     _, _, name = identity(player)
     port = HOST_PORT + int(player.name[1:]) - 1
+    name_option = '-name' if t5 else '+name'
     args = [f'./{binaries.name}/{bootstrapper.name}',
-            mode, game_path, '+name', name, '-lan', *display_arguments(),
+            mode, game_path, name_option, name, '-lan', *display_arguments(t5=t5),
             '+set', 'net_port', str(port)]
-    if mode == 't6zm' and player.name == 'j1':
+    if t5:
+        args += ['+set', 'gpad_enabled', '1']
+        if language != 'keep':
+            args += ['+set', 'loc_language', '1' if language == 'french' else '0']
+    if mode in ('t6zm', 't5sp') and player.name == 'j1':
         count = os.environ.get('PARTYDECK_SESSION_PLAYERS', '1')
         if count in ('1', '2', '3', '4'):
             args += ['+set', 'sp_minplayers', count]
     if player.name != 'j1':
         print(tr('Black Ops II {p0} : rejoindre J1 avec {p1}.', p0=player.name.upper(),
                  p1=JOIN_HOST), file=sys.stderr, flush=True)
-    print(tr('Black Ops II {p0} : Plutonium LAN ({p1}, port {p2}).',
-             p0=player.name.upper(), p1=mode, p2=port), file=sys.stderr, flush=True)
+    print(tr('{p0} {p1} · Plutonium LAN ({p2}, port {p3}).',
+             p0=title, p1=player.name.upper(), p2=mode, p3=port), file=sys.stderr, flush=True)
     print(tr('Black Ops II : dossier transmis à Plutonium {p0}.', p0=game_path), file=sys.stderr, flush=True)
     return runtime, shlex.join(args)
 
@@ -400,6 +445,10 @@ def game_window(env):
 
 
 def join_window(display_file, outer_display):
+    return send_console_command(display_file, outer_display, JOIN_HOST)
+
+
+def send_console_command(display_file, outer_display, text):
     env = game_display(display_file, outer_display)
     if env is None:
         return False
@@ -413,10 +462,11 @@ def join_window(display_file, outer_display):
         for command in (
             ['windowfocus', '--sync', window, 'sleep', '0.2',
              'key', '--clearmodifiers', CONSOLE_KEYCODE, 'sleep', '0.3'],
-            ['type', '--clearmodifiers', '--delay', '20', JOIN_HOST],
+            ['type', '--clearmodifiers', '--delay', '20', text],
             ['key', '--clearmodifiers', '--delay', '50', 'Return', CONSOLE_KEYCODE],
         ):
-            subprocess.run(['xdotool', *command], env=env, timeout=2, capture_output=True, check=True)
+            timeout = max(2, len(text) * .02 + 1) if command[0] == 'type' else 2
+            subprocess.run(['xdotool', *command], env=env, timeout=timeout, capture_output=True, check=True)
         return True
     except (OSError, subprocess.SubprocessError):
         return False
@@ -504,7 +554,7 @@ class AutoJoin:
                 return
 
     def observe_host(self, line, now):
-        if b'SV_Shutdown:' in line:
+        if b'SV_Shutdown:' in line or (self.mode in T5_LOBBY_COMMANDS and b'Server Shutdown' in line):
             self.connected.clear()
             self.host_ready = None
             return True
@@ -514,7 +564,7 @@ class AutoJoin:
             return True
         if b'------- Game Initialization -------' in line:
             # Zombies can wait for guests before the host is fully in-game.
-            ready = self.mode == 'plutonium-zm' or 'j1' in self.connected
+            ready = self.mode in ('plutonium-zm', 't5sp', 't5mp') or 'j1' in self.connected
             self.host_ready = None
         else:
             event = re.search(rb"client 'Player ([1-4])' (connected|disconnected)\b", line)
@@ -571,8 +621,13 @@ class AutoJoin:
             return
         if self.lobby_click_at is None or now < self.lobby_click_at:
             return
-        if not click_menu_button(automatic_path(self.host, self.token, 'display'),
-                                 self.outer_display, self.lobby_button):
+        display = automatic_path(self.host, self.token, 'display')
+        if self.mode in T5_LOBBY_COMMANDS:
+            if send_console_command(display, self.outer_display, T5_LOBBY_COMMANDS[self.mode]):
+                print(tr('Black Ops J1 : ouverture du salon demandée.'), flush=True)
+                self.lobby_button = None
+            return
+        if not click_menu_button(display, self.outer_display, self.lobby_button):
             return
         if self.lobby_button == ONLINE_BUTTON:
             print(tr('Black Ops II J1 : clic sur En ligne envoyé.'), flush=True)
@@ -627,15 +682,17 @@ def install_hook(base, rom, player):
     if not profile_path(base, rom).exists():
         return
     profile = read_profile(base, rom)
-    if profile.get('adapter') != ADAPTER:
+    adapter = profile.get('adapter')
+    if adapter not in PROFILE_KEYS:
         return
+    settings = profile[PROFILE_KEYS[adapter]]
     binary = shutil.which('batocera-wine')
     if binary is None:
         raise RuntimeError(tr('batocera-wine introuvable.'))
     binary = Path(binary).resolve()
-    mode = validate({'mode': os.environ.get(SESSION_MODE, profile['bo2']['mode'])})['mode']
+    mode = validate({'mode': os.environ.get(SESSION_MODE, settings['mode'])}, adapter)['mode']
     source = client_path(base, PLUTONIUM_MODES.get(mode)) or base / 'plutonium'
-    hook = [sys.executable, str(base / 'partydeck_bo2.py'), '--language', profile['bo2']['language'],
+    hook = [sys.executable, str(base / 'partydeck_bo2.py'), '--language', settings['language'],
             str(player), str(source)]
     replacement = player / 'batocera-wine-bo2'
     log = None
@@ -656,7 +713,7 @@ if __name__ == '__main__':
         parser.add_argument(field)
     args = parser.parse_args()
     try:
-        mode = validate({'mode': args.mode})['mode']
+        mode = validate({'mode': args.mode}, BO1 if args.mode in T5_EXECUTABLES else ADAPTER)['mode']
         cwd, command = prepare(Path(args.player), mode, Path(args.directory), Path(args.root), Path(args.source),
                                args.language)
         if cwd is not None:

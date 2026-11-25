@@ -18,8 +18,9 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
-                           defaults as bo2_defaults, matches as matches_bo2)
+from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
+                           MODES as BO2_MODES, SELECTABLE_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
+                           defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
                                  TIME_MODES as STORY_TIME_MODES,
@@ -115,7 +116,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO2, STORY_COOP])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO1, BO2, STORY_COOP])]
     if adapter == DST:
         if tab == 1:
             return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
@@ -124,11 +125,17 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('dst.hud_scale', tr('Taille de l’interface en jeu'), list(DST_HUD_SIZES)),
                 ('dst.text_scale', tr('Taille des textes des menus'), list(DST_TEXT_SIZES)),
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
-    if adapter == BO2:
-        return [('bo2.open_custom_lobby', tr('Ouvrir Parties personnalisées au démarrage'), [False, True]),
-                ('bo2.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
-                ('bo2.language', tr('Langue du jeu'), list(BO2_LANGUAGES)),
-                ('bo2.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))] if tab == 1 else []
+    if adapter in BLACK_OPS_PROFILES:
+        if tab != 1:
+            return []
+        section = BLACK_OPS_PROFILES[adapter]
+        rows = [(f'{section}.open_custom_lobby', tr('Ouvrir Parties personnalisées au démarrage'), [False, True]),
+                (f'{section}.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
+                (f'{section}.language', tr('Langue du jeu'), list(BO2_LANGUAGES)),
+                (f'{section}.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))]
+        if adapter == BO1:
+            rows.append(('bo1.vertical_native', tr('Résolution native en vertical (test)'), [False, True]))
+        return rows
     if adapter == STORY_COOP:
         if tab == 1:
             return [(f'{adapter}.automatic', tr('Créer et rejoindre le groupe automatiquement'), [True, False]),
@@ -299,15 +306,15 @@ def label_value(key, value):
         return tr('Clavier/souris · J1') if value == 'clavier-j1' else tr('Clavier/souris · J2')
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
-    if key == 'bo2.horizontal_render':
+    if key in ('bo1.horizontal_render', 'bo2.horizontal_render'):
         return tr(HORIZONTAL_RENDER[value])
-    if key == 'bo2.language':
+    if key in ('bo1.language', 'bo2.language'):
         return tr(BO2_LANGUAGES[value])
     if key == 'adapter':
         if value == STORY_COOP:
             return tr(STORY_LABEL)
-        if value == BO2:
-            return 'Black Ops II'
+        if value in BLACK_OPS_TITLES:
+            return BLACK_OPS_TITLES[value]
         if value == 'dont-starve-together':
             return "Don't Starve Together · LAN"
         if value == 'celestenet':
@@ -411,7 +418,7 @@ class Model:
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
                          'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi),
                          'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst),
-                         'bo2':discover(windows,matches_bo2), STORY_COOP:discover(windows,matches_story_coop)}
+                         'bo1':discover(windows,matches_bo1), 'bo2':discover(windows,matches_bo2), STORY_COOP:discover(windows,matches_story_coop)}
         return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
                 for recipe in COMMON]
 
@@ -445,6 +452,7 @@ class Model:
         self.data.setdefault('hkmultiplayer',multi_defaults())
         self.data.setdefault('celestenet',celeste_defaults())
         self.data.setdefault('dst', dst_defaults())
+        self.data.setdefault('bo1', bo2_defaults(rom, BO1))
         self.data.setdefault('bo2', bo2_defaults(rom))
         self.data.setdefault(STORY_COOP, story_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
@@ -479,6 +487,7 @@ class Model:
         if stored.get('adapter') != 'hollowknight-hkmultiplayer':stored.pop('hkmultiplayer',None)
         if stored.get('adapter') != 'celestenet':stored.pop('celestenet', None)
         if stored.get('adapter') != DST:stored.pop('dst', None)
+        if stored.get('adapter') != BO1:stored.pop('bo1', None)
         if stored.get('adapter') != BO2:stored.pop('bo2', None)
         if stored.get('adapter') != STORY_COOP:stored.pop(STORY_COOP, None)
         save_profile(self.base, self.rom, stored)
@@ -679,10 +688,12 @@ def choose_l4d2_session(settings, count):
                                  tr('Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.'))
 
 
-def choose_bo2_mode(settings, count):
-    mode = settings['mode'] if settings['mode'] in PLUTONIUM_MODES else 'plutonium-mp'
-    return choose_session_screen(bo2_session_screen, settings | {'mode': mode}, count, mode,
-                                 tr('Sélecteur Black Ops II indisponible. Mode du profil utilisé.'))
+def choose_bo2_mode(settings, count, adapter=BO2):
+    modes = SELECTABLE_MODES[adapter]
+    mode = settings['mode'] if settings['mode'] in modes else modes[0]
+    title = BLACK_OPS_TITLES[adapter]
+    return choose_session_screen(bo2_session_screen, {'mode': mode, 'adapter': adapter}, count, mode,
+                                 tr('Sélecteur {p0} indisponible. Mode du profil utilisé.', p0=title))
 
 
 def draw_session_frame(pg, canvas, title, subtitle, text, orange, white, muted):
@@ -694,7 +705,9 @@ def draw_session_frame(pg, canvas, title, subtitle, text, orange, white, muted):
 
 
 def bo2_session_screen(pg, screen, settings, _count):
-    pg.display.set_caption('Black Ops II · Windows Party')
+    adapter = settings.get('adapter', BO2)
+    title = BLACK_OPS_TITLES[adapter]
+    pg.display.set_caption(f'{title} · Windows Party')
     pg.mouse.set_visible(False)
     canvas = pg.Surface((1080, 660))
     area = canvas.get_rect().fit(screen.get_rect())
@@ -707,7 +720,7 @@ def bo2_session_screen(pg, screen, settings, _count):
     family = pads.family if pads.devices else 'keyboard'
     fonts = {size: pg.font.SysFont('DejaVu Sans', size, bold=size >= 28) for size in (20, 23, 28, 52)}
     orange, white, muted = (255, 177, 97), (239, 243, 246), (179, 194, 206)
-    modes = tuple(PLUTONIUM_MODES)
+    modes = SELECTABLE_MODES[adapter]
     row = modes.index(settings['mode'])
     keymap = {pg.K_UP: 'up', pg.K_DOWN: 'down', pg.K_RETURN: 'ok', pg.K_ESCAPE: 'back', pg.K_F5: 'launch'}
     subtitle = tr('Choisir le mode de jeu')
@@ -738,7 +751,7 @@ def bo2_session_screen(pg, screen, settings, _count):
             if action in ('up', 'down'):
                 row = (row + (-1 if action == 'up' else 1)) % len(modes)
 
-        draw_session_frame(pg, canvas, 'Black Ops II', subtitle, text, orange, white, muted)
+        draw_session_frame(pg, canvas, title, subtitle, text, orange, white, muted)
         for index, mode in enumerate(modes):
             y = 215 + index * 92
             rect = (76, y, 928, 71)
@@ -949,7 +962,7 @@ class App:
         if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
-        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2):return (0,1)
+        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO1, BO2):return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
@@ -1976,7 +1989,7 @@ class App:
                     title=tr(('Session','Réseau','Coop')[i])
                 elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
-                elif self.model.data.get('adapter') == BO2:
+                elif self.model.data.get('adapter') in BLACK_OPS_PROFILES:
                     title=tr(('Session', 'Options')[i])
                 elif self.model.data.get('adapter') == 'celestenet':
                     title = tr(('Session','Options','Joueurs')[i])
@@ -2005,7 +2018,7 @@ class App:
                 if self.model.data['adapter'] == STORY_COOP:
                     subtitle = (tr('Story Co-op · noms et skins des joueurs') if self.tab == 2
                                 else tr('Story Co-op · réglages communs aux joueurs de cette session'))
-                if self.model.data['adapter'] == BO2:
+                if self.model.data['adapter'] in BLACK_OPS_PROFILES:
                     subtitle = tr('Réglages Plutonium LAN · choisissez le mode au lancement')
                 if self.model.data['adapter'] == DST:
                     subtitle = tr('Résolution adaptée au partage')

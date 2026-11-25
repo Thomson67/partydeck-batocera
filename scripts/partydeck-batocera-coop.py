@@ -911,7 +911,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     bo2_resolution = None
     bo2_desktop = None
     bo2_publish_display = False
-    from partydeck_bo2 import (ADAPTER as BO2, PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
+    from partydeck_bo2 import (BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
+                               PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
                                desktop_size, render_size)
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
@@ -923,19 +924,21 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         if profile_path(base,original).exists():
             profile = read_profile(base,original)
             adapter = profile.get('adapter')
-            if adapter == BO2:
-                bo2_settings = bo2_settings if bo2_settings is not None else profile['bo2']
+            if adapter in BLACK_OPS_PROFILES:
+                bo2_settings = bo2_settings if bo2_settings is not None else profile[BLACK_OPS_PROFILES[adapter]]
                 settings = bo2_settings
                 bo2_publish_display = (
-                    network is not None and settings['mode'] in PLUTONIUM_MODES
-                    and (settings['automatic_join'] or (
-                        player.name == 'j1' and settings['open_custom_lobby']
-                    ))
+                    settings['mode'] in PLUTONIUM_MODES
+                    and ((network is not None and settings['automatic_join'])
+                         or (player.name == 'j1' and settings['open_custom_lobby']
+                             and (network is not None or adapter == BO1)))
                 )
                 render = 'standard'
                 # T6 crops its menus when the render target is portrait.
                 if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
                     render = settings['horizontal_render']
+                if adapter == BO1 and player_count == 2 and split == 'vertical' and settings['vertical_native']:
+                    render = 'native'
                 render_width, render_height = render_size(width, height, horizontal_render=render)
                 desktop_width, desktop_height = desktop_size(render_width, render_height)
                 args.extend(['-w', str(desktop_width), '-h', str(desktop_height)])
@@ -943,7 +946,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 bo2_desktop = f'{desktop_width}x{desktop_height}'
                 print(tr('Black Ops II {p0} : rendu demandé {p1}, écran virtuel {p2}, fenêtre {p3}.',
                          p0=player.name.upper(), p1=bo2_resolution, p2=bo2_desktop,
-                         p3=f'{width}x{height}'), flush=True)
+                         p3=f'{width}x{height}').replace('Black Ops II', BLACK_OPS_TITLES[adapter]), flush=True)
             elif adapter in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if dst or story_coop:
@@ -1309,15 +1312,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     started = time.time_ns()
-    from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready
+    from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES,
+                               PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready)
     bo2_settings = None
     bo2_mode = None
-    if profile and profile.get('adapter') == BO2:
+    adapter = profile.get('adapter') if profile else None
+    if adapter in BLACK_OPS_PROFILES:
         from partydeck_couch import choose_bo2_mode
-        selected_mode = choose_bo2_mode(profile['bo2'], len(players))
+        options = profile[BLACK_OPS_PROFILES[adapter]]
+        selected_mode = (choose_bo2_mode(options, len(players)) if adapter == BO2
+                         else choose_bo2_mode(options, len(players), adapter))
         if selected_mode is None:
             return 0
-        bo2_settings = profile['bo2'] | {'mode': selected_mode}
+        bo2_settings = options | {'mode': selected_mode}
         bo2_mode = PLUTONIUM_MODES.get(selected_mode)
     if bo2_mode:
         from partydeck_plutonium import prepare as prepare_plutonium
@@ -1436,9 +1443,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             from partydeck_private_lan import PrivateLAN
             network=PrivateLAN(len(players),shared=True) if shared_lan else PrivateLAN(len(players))
             network.start()
-        if network is not None and bo2_mode:
-            bo2_automatic = bo2_settings['automatic_join']
-            bo2_custom_lobby = bo2_settings['open_custom_lobby']
+        if bo2_mode:
+            bo2_automatic = network is not None and bo2_settings['automatic_join']
+            bo2_custom_lobby = (network is not None or adapter == BO1) and bo2_settings['open_custom_lobby']
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1744,11 +1751,12 @@ def main():
                           args.count, args.split, args.input_mode,
                           mode="party" if party else "coop", profile=party)
         if party:
-            from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES
+            from partydeck_bo2 import PROFILE_KEYS as BLACK_OPS_PROFILES, PLUTONIUM_MODES
             from partydeck_profiles import read_profile
             profile = read_profile(args.base, original)
-            if profile.get('adapter') == BO2:
-                mode = PLUTONIUM_MODES.get(profile['bo2']['mode'])
+            section = BLACK_OPS_PROFILES.get(profile.get('adapter'))
+            if section is not None:
+                mode = PLUTONIUM_MODES.get(profile[section]['mode'])
                 if mode:
                     from partydeck_plutonium import prefetch
                     prefetch(args.base, mode)

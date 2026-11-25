@@ -62,6 +62,9 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
     assert lang.tr(BO2_MODES['original']) == original
     assert label_value('bo2.language', 'french') == ('Français' if language == 'fr' else 'French')
     assert label_value('bo2.language', 'english') == ('Anglais' if language == 'fr' else 'English')
+    assert fields(1, 'black-ops-1')[-1] == ('bo1.vertical_native',
+        'Résolution native en vertical (test)' if language == 'fr'
+        else 'Native vertical resolution (experimental)', [False, True])
     assert lang.tr('Choisir le mode de jeu') == ('Choisir le mode de jeu' if language == 'fr' else 'Choose the game mode')
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
     assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']

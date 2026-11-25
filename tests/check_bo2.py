@@ -61,6 +61,15 @@ with TemporaryDirectory() as folder:
         assert read_profile(base, rom)['bo2'] == migrated['bo2']
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
     assert not bo2.matches(base / 'Black Ops III.wsquashfs')
+    for title in ('Call of Duty - Black Ops', 'Black Ops 1', 'BO1 [GE-Proton]'):
+        rom1 = base / f'{title}.wsquashfs'
+        assert recipe_for(rom1).adapter == bo2.BO1
+        profile = defaults(rom1)
+        assert profile['bo1']['mode'] == 't5mp' and not profile['bo1']['vertical_native']
+        assert private_lan_enabled(profile, 2) and not private_lan_enabled(profile, 1)
+    assert defaults(base / 'BO1 Zombies.wsquashfs')['bo1']['mode'] == 't5sp'
+    assert not bo2.matches_bo1(base / 'Black Ops Cold War.wsquashfs')
+    assert not bo2.matches_bo1(base / 'Black Ops II.wsquashfs')
 
     native = base / 'batocera-wine'
     native.write_text(source)
@@ -85,6 +94,26 @@ with TemporaryDirectory() as folder:
     (installed_client / 'games/t6zm.exe').write_text('zombies')
     (installed_client / 'storage/t6/players.cfg').write_text('seed')
     (installed_client / 'config.json').write_text('launcher config')
+
+    for mode, exe in bo2.T5_EXECUTABLES.items():
+        player = base / mode / 'j1'
+        prefix = player / 'prefix'
+        game = prefix / 'drive_c' / 'game'
+        (game / 'zone' / 'french').mkdir(parents=True)
+        (game / exe).touch()
+        (game / 'binkw32.dll').touch()
+        (game / 'localization.txt').write_bytes(b'english\r\n')
+        (installed_client / 'games' / f'{mode}.exe').touch()
+        with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player), PARTYDECK_SESSION_PLAYERS='2'):
+            cwd, command = bo2.prepare(player, mode, game, prefix, installed_client, 'french')
+        args = shlex.split(command)
+        assert cwd == game / '.partydeck-plutonium'
+        assert args[1:6] == [mode, r'C:\game', '-name', 'Player 1', '-lan']
+        assert args[args.index('r_fullscreen') + 1] == '0'
+        assert args[args.index('r_noborder') + 1] == '1'
+        assert ['+set', 'loc_language', '1'] == args[args.index('loc_language') - 1:args.index('loc_language') + 2]
+        assert ('sp_minplayers' in args) == (mode == 't5sp')
+        assert (game / 'localization.txt').read_bytes() == b'french\r\n'
 
     assert bo2.render_size(1920, 540) == (1280, 720)
     assert bo2.render_size(960, 1080) == (1280, 720)
@@ -240,6 +269,24 @@ with TemporaryDirectory() as folder:
                   'Plutonium T6 MP', 'Call of Duty(R): Black Ops II - Multiplayer'):
         assert re.search(bo2.GAME_WINDOW, title, re.I), title
     assert not re.search(bo2.GAME_WINDOW, 'Plutonium T6 Console (r5369)', re.I)
+    assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Singleplayer (r5369)', re.I)
+    assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Multiplayer (r5369)', re.I)
+    for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'common_mp')):
+        log.write_bytes(f"Loading fastfile '{asset}'\n".encode())
+        t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)
+        with patch.object(bo2, 'send_console_command', return_value=True) as send, \
+             patch.object(bo2, 'join_window', return_value=True) as join:
+            t5.poll(1)
+            t5.poll(6)
+            send.assert_called_once_with(bo2.automatic_path(host, token, 'display'), ':0',
+                                         bo2.T5_LOBBY_COMMANDS[mode])
+            join.assert_not_called()
+            with log.open('ab') as stream:
+                stream.write(initialization)
+            t5.poll(8)
+            t5.poll(10)
+            join.assert_called_once()
+    log.write_bytes(b"Loading fastfile 'common_mp'\n")
     display.write_text(json.dumps({'DISPLAY': ':0.0'}))
     with patch.object(bo2.subprocess, 'run') as run:
         assert not bo2.join_window(display, ':0')

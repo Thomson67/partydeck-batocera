@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
-from partydeck_bo2 import ADAPTER as BO2, defaults as bo2_defaults, matches as matches_bo2, validate as validate_bo2
+from partydeck_bo2 import ADAPTER as BO2, BO1, defaults as bo2_defaults, matches_bo1, matches as matches_bo2, validate as validate_bo2
 from partydeck_dst import ADAPTER as DST, defaults as dst_defaults, matches as matches_dst, validate as validate_dst
 from partydeck_story_coop import (ADAPTER as STORY_COOP, defaults as story_defaults,
                                  matches as matches_story_coop, validate as validate_story)
@@ -30,7 +30,7 @@ MARKER = "# Entrée gérée par PartyDeck Wine"
 
 # Capability opt-in belongs to game profiles, never to the generic namespace
 # implementation. Additional adapters can reuse PrivateLAN after validation.
-PRIVATE_LAN_PROFILES = {'nfsmw-lan': 'nfsmw', BO2: 'bo2'}
+PRIVATE_LAN_PROFILES = {'nfsmw-lan': 'nfsmw', BO2: 'bo2', BO1: 'bo1'}
 
 
 def private_lan_enabled(profile,count):
@@ -71,6 +71,8 @@ def defaults(rom):
         data.update(adapter=celestenet, celestenet=celeste_defaults())
     if matches_dst(rom):
         data.update(adapter=DST, dst=dst_defaults())
+    if matches_bo1(rom):
+        data.update(adapter=BO1, bo1=bo2_defaults(rom, BO1))
     if matches_bo2(rom):
         data.update(adapter=BO2, bo2=bo2_defaults(rom))
     if matches_story_coop(rom):
@@ -92,7 +94,7 @@ def validate(data, rom):
     data.pop('keep_latest_runner', None)
     if data.get('gpu','auto') not in ('auto','system','nvidia'):
         raise ValueError(tr('Choix du GPU invalide.'))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet", DST, BO2, STORY_COOP):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet", DST, BO1, BO2, STORY_COOP):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor
@@ -120,6 +122,8 @@ def validate(data, rom):
         data['celestenet'] = validate_celeste(data.get('celestenet'))
     if data.get('adapter') == DST:
         data['dst'] = validate_dst(data.get('dst'))
+    if data.get('adapter') == BO1:
+        data['bo1'] = validate_bo2(data.get('bo1', bo2_defaults(rom, BO1)), BO1)
     if data.get('adapter') == BO2:
         data['bo2'] = validate_bo2(data.get('bo2', bo2_defaults(rom)))
     if data.get('adapter') == STORY_COOP:

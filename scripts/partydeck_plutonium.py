@@ -1,4 +1,4 @@
-"""Install the Plutonium T6 client from its published update manifest."""
+"""Install the Plutonium T5/T6 client from its published update manifest."""
 
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
@@ -17,13 +17,12 @@ from partydeck_i18n import tr
 MANIFEST = 'https://cdn.plutoniummod.com/updater/prod/info.json'
 CDN_HOSTS = {'cdn.plutoniummod.com', 'cdn.plutonium.pw'}
 BOOTSTRAPPER = 'plutonium-bootstrapper-win32.exe'
-REQUIRED = {f'bin/{BOOTSTRAPPER}', 'games/t6mp.exe', 'games/t6zm.exe'}
-T6_FOLDERS = ('bin/', 'storage/t6/', 'storage/demonware/')
+GAMES = {'t5': ('t5mp', 't5sp'), 't6': ('t6mp', 't6zm')}
 
 
 def client_path(base, mode):
     manual = base / 'plutonium'
-    cached = base / 'dependencies' / 'plutonium-t6' / 'client'
+    cached = base / 'dependencies' / f'plutonium-{str(mode)[:2]}' / 'client'
     required = (f'bin/{BOOTSTRAPPER}', f'games/{mode}.exe')
     for root in (manual, cached):
         if all((root / path).is_file() for path in required):
@@ -38,7 +37,9 @@ def cdn_url(url):
     return url
 
 
-def manifest_files():
+def manifest_files(family='t6'):
+    required = {f'bin/{BOOTSTRAPPER}', *(f'games/{mode}.exe' for mode in GAMES[family])}
+    folders = ('bin/', f'storage/{family}/', 'storage/demonware/')
     with urlopen(MANIFEST, timeout=20) as response:
         cdn_url(response.geturl())
         manifest = json.loads(response.read(1024 * 1024))
@@ -51,7 +52,7 @@ def manifest_files():
         files = {}
         for entry in candidates:
             name = entry['name']
-            if name not in REQUIRED and not name.startswith(T6_FOLDERS):
+            if name not in required and not name.startswith(folders):
                 continue
             parts = name.split('/')
             size, digest = entry['size'], entry['hash']
@@ -60,10 +61,10 @@ def manifest_files():
                     or not re.fullmatch(r'[a-f0-9]{40}', digest)):
                 raise ValueError
             files[name.casefold()] = name, size, digest
-        if not REQUIRED.issubset(files) or sum(row[1] for row in files.values()) > 512 * 1024**2:
+        if not required.issubset(files) or sum(row[1] for row in files.values()) > 512 * 1024**2:
             raise ValueError
     except (KeyError, AttributeError, TypeError, ValueError):
-        raise ValueError(tr('Plutonium : manifeste du client T6 invalide.')) from None
+        raise ValueError(tr('Plutonium : manifeste du client {p0} invalide.', p0=family.upper())) from None
     return revision, base_url, tuple(files.values())
 
 
@@ -87,15 +88,16 @@ def prepare(base, mode):
     available = client_path(base, mode)
     if available is not None:
         return available
-    root = base / 'dependencies' / 'plutonium-t6'
+    family = mode[:2]
+    root = base / 'dependencies' / f'plutonium-{family}'
     root.mkdir(parents=True, exist_ok=True)
     with (root / 'install.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         available = client_path(base, mode)
         if available is not None:
             return available
-        print(tr('Plutonium : téléchargement du client T6 officiel.'), flush=True)
-        revision, cdn, files = manifest_files()
+        print(tr('Plutonium : téléchargement du client {p0} officiel.', p0=family.upper()), flush=True)
+        revision, cdn, files = manifest_files(family)
         with tempfile.TemporaryDirectory(dir=root, prefix='.download-') as temporary:
             staging = Path(temporary)
             client = staging / 'client'
@@ -115,14 +117,14 @@ def prepare(base, mode):
                 if previous.exists() or previous.is_symlink():
                     previous.rename(target)
                 raise
-        print(tr('Plutonium : client T6 r{p0} installé.', p0=revision), flush=True)
+        print(tr('Plutonium : client {p0} r{p1} installé.', p0=family.upper(), p1=revision), flush=True)
         return target
 
 
 def prefetch(base, mode):
     if client_path(base, mode) is not None:
         return
-    log_path = base / 'logs' / 'plutonium-t6.log'
+    log_path = base / 'logs' / f'plutonium-{mode[:2]}.log'
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open('a') as log:
