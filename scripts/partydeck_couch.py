@@ -22,6 +22,7 @@ from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, 
                            defaults as bo2_defaults, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, LABEL as STORY_LABEL, defaults as story_defaults,
                                  matches as matches_story_coop, skin_choices as story_skin_choices)
+from partydeck_story_skins import CATALOGUE as STORY_SKINS
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -131,11 +132,14 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     (f'{adapter}.config', tr('Chemin du JSON SoH'), None),
                     (f'{adapter}.locations', tr('Positions visibles'), [True, False]),
                     (f'{adapter}.teleport', tr('Téléportation'), [True, False]),
-                    (f'{adapter}.sync', tr('Objets et progression partagés'), [True, False])]
+                    (f'{adapter}.sync', tr('Objets et progression partagés'), [True, False]),
+                    (f'{adapter}.consumables', tr('Partager les rubis, les munitions et les PV'),
+                     ['keep', 'on', 'off'])]
         if tab == 2:
             return [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
                     for index in range(4)
-                    for key, label, choices in [('names', 'Nom', None), ('skins', 'Skin', ['', 'link', *story_skins])]]
+                    for key, label, choices in [('names', 'Nom', None),
+                                                ('skins', 'Skin', ['', *dict.fromkeys((*STORY_SKINS, *story_skins))])]]
         return soh_graphics_fields(adapter)
     if adapter == 'celestenet':
         if tab == 2:
@@ -307,7 +311,12 @@ def label_value(key, value):
     if key.startswith('celestenet.skins.'):
         return {'': tr('Conserver'), 'Original': tr('Madeline standard')}.get(value, value)
     if key.startswith(f'{STORY_COOP}.skins.'):
-        return {'': tr('Conserver'), 'link': tr('Link standard')}.get(value, value.split('|', 1)[0])
+        if not value or value == 'link':
+            return tr('Link standard' if value else 'Conserver')
+        reference = value.split('|', 1)[0]
+        return STORY_SKINS.get(reference, (reference, None))[0]
+    if key == f'{STORY_COOP}.consumables':
+        return tr({'keep': 'Conserver', 'on': 'Activé', 'off': 'Désactivé'}[value])
     if key == f'{STORY_COOP}.room' and not value:
         return tr('Conserver')
     if key == 'celestenet.language':
@@ -859,6 +868,8 @@ class App:
                     self.model.celeste_skins, self.model.story_skins)
         if self.model.data and self.model.data.get('adapter') == BO2 and self.model.data['bo2']['mode'] == 'original':
             rows = [row for row in rows if row[0] == 'bo2.mode'] if self.tab == 1 else rows
+        if self.model.data and self.model.data.get('adapter') == STORY_COOP and not self.model.data[STORY_COOP]['sync']:
+            rows = [row for row in rows if row[0] != f'{STORY_COOP}.consumables']
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows

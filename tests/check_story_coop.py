@@ -114,7 +114,7 @@ with TemporaryDirectory() as folder:
             assert download.call_count == 2
 
     options = story.defaults()
-    options.update(port=21053, names=['J1', 'Invité', 'J3', 'J4'], skins=['link', '', '', ''])
+    options.update(port=21053, names=['J1', 'Invité', 'J3', 'J4'], skins=['link', '', '', ''], consumables='on')
     options['graphics'].update(msaa=2, volumes={'MainMusic': 70, 'SFX': 55})
     token = 'a' * 32
     for index in (1, 2):
@@ -131,18 +131,24 @@ with TemporaryDirectory() as folder:
             cvars['gSettings'] = {'BootSequence': 1, 'Language': 2}
         path.write_text(json.dumps({'CVars': cvars, 'Window': {'Backend': {'Id': 1}}}))
         fixed = binary.replace(b'client', b'stable', 1)
+        hidden = fixed.replace(b'fixture', b'quieted', 1)
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
                         PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='540',
                         PARTYDECK_STORY_COOP=token), \
              patch.multiple(story, CLIENT_DIGEST=hashlib.sha256(binary).hexdigest(),
                             FIXED_CLIENT_DIGEST=hashlib.sha256(fixed).hexdigest(),
+                            HIDDEN_WINDOW_DIGEST=hashlib.sha256(hidden).hexdigest(),
                             AUDIO_GUARD_OFFSET=binary.index(b'client'),
-                            AUDIO_GUARD_ORIGINAL=b'client', AUDIO_GUARD_PATCH=b'stable'):
-            story.configure_client(player, archive, private, player, options)
-            assert client.read_bytes() == fixed
+                            AUDIO_GUARD_ORIGINAL=b'client', AUDIO_GUARD_PATCH=b'stable',
+                            HIDE_WINDOW_OFFSET=binary.index(b'fixture'),
+                            HIDE_WINDOW_ORIGINAL=b'fixture', HIDE_WINDOW_PATCH=b'quieted'):
+            story.configure_client(player, archive, private, player, options, base / 'skins')
+            assert client.read_bytes() == hidden
             inode = client.stat().st_ino
-            story.configure_client(player, archive, private, player, options)
+            story.configure_client(player, archive, private, player, options, base / 'skins')
             assert client.stat().st_ino == inode
+            assert story.patch_client(client, False) and client.read_bytes() == fixed
+            assert story.patch_client(client, True) and client.read_bytes() == hidden
         data = json.loads(path.read_text())
         graphics = data['CVars']['gSettings']
         assert graphics['BootSequence'] == 2 and graphics['MSAAValue'] == 2
@@ -151,10 +157,11 @@ with TemporaryDirectory() as folder:
         online = {
             'AutoConnect': 1, 'Enabled': 1, 'Host': story.client_host(index), 'Port': 21053,
             'Nickname': options['names'][index - 1],
-            'Party': {'StoryCoop': 1, 'StoryCode': 'existing-campaign'}}
+            'Party': {'StoryCoop': 1, 'StoryCode': 'existing-campaign', 'ShareAmmoRupeesHp': 1}}
         if index == 1:
             online['Skin'] = 'link'
-            assert json.loads(story.session_config(player, token).read_text())['storyCode'] == 'existing-campaign'
+            host_settings = json.loads(story.session_config(player, token).read_text())
+            assert host_settings['storyCode'] == 'existing-campaign' and host_settings['shareAmmoRupeesHp']
         else:
             assert not story.session_config(player, token).exists()
             assert graphics['Language'] == 2
@@ -176,7 +183,7 @@ with TemporaryDirectory() as folder:
     invalid = base / 'unknown-soh.exe'
     invalid.write_bytes(b'unsupported Windows build')
     try:
-        story.repair_client_audio(invalid)
+        story.patch_client(invalid, True)
     except ValueError:
         assert invalid.read_bytes() == b'unsupported Windows build'
     else:

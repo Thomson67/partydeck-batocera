@@ -176,9 +176,15 @@ EN = {
     'Story Co-op : espace privé du joueur requis.': 'Story Co-op: private player namespace required.',
     'Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.':
         'Story Co-op: soh.exe {p0} is required in the game folder.',
-    'Story Co-op : impossible de vérifier le correctif audio de soh.exe.':
-        'Story Co-op: could not verify the soh.exe audio fix.',
-    'Story Co-op {p0} : correctif du crash audio appliqué.': 'Story Co-op {p0}: audio crash fix applied.',
+    'Story Co-op : impossible de vérifier les correctifs de soh.exe.':
+        'Story Co-op: could not verify the soh.exe fixes.',
+    'Story Co-op {p0} : correctifs du client appliqués.': 'Story Co-op {p0}: client fixes applied.',
+    'Story Co-op : skin {p0} indisponible ({p1}).': 'Story Co-op: skin {p0} unavailable ({p1}).',
+    'Story Co-op {p0} : skin {p1} introuvable, apparence actuelle conservée.':
+        'Story Co-op {p0}: skin {p1} missing, keeping the current appearance.',
+    'Story Co-op {p0} : {p1} remplacement(s) de Link masqué(s).':
+        'Story Co-op {p0}: {p1} Link replacement(s) hidden.',
+    'Partager les rubis, les munitions et les PV': 'Share rupees, ammo and HP',
     'Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.':
         'Story Co-op: first run the game solo to generate oot.o2r.',
     'Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.':

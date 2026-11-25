@@ -49,8 +49,16 @@ sur le choix de la sauvegarde. Sélectionnez la sauvegarde à jouer dans
 chaque fenêtre. La démo de l’écran titre est sautée pour éviter que les
 personnages distants y apparaissent.
 
+Avec la création automatique du groupe, la fenêtre Zelda Online se masque
+après la connexion. Pour la rouvrir, appuyez sur **Échap** dans la fenêtre
+du joueur et ouvrez **Network → Zelda Online → Open Window**. La croix de
+la fenêtre ferme le panneau.
+
 Dans **Réseau**, vous pouvez régler le port local, le JSON SoH, les positions
-visibles, la téléportation et la progression partagée. Le code de campagne
+visibles, la téléportation et la progression partagée. Le réglage
+**Partager les rubis, les munitions et les PV** fonctionne avec la progression
+partagée. **Conserver** reprend le réglage enregistré dans le JSON de J1.
+Le code de campagne
 vide reprend celui du JSON de J1, ou `partydeck` si celui-ci est vide.
 Le serveur associe une campagne au nom de J1 et à ce code. Conservez les
 deux pour retrouver votre progression. Vous pouvez aussi désactiver la
@@ -58,13 +66,18 @@ création automatique du groupe pour gérer les invitations dans Zelda Online.
 Le PvP, les équipes d’Anchor et son serveur distant sont propres à l’autre
 profil.
 
-Dans **Joueurs**, choisissez le nom et le skin de chacun. Les skins
-convertis avec [skinconv](https://github.com/cranebeaker/ocarina-coop/tree/v1.0.5/tools/skinconv)
-sont détectés dans le dossier `mods`. Pour un `.wsquashfs`, la liste est
-mise en cache au premier lancement. Valider la ligne d’un skin permet
+Dans **Joueurs**, choisissez le nom et le skin de chacun dans le catalogue
+Zelda Online. Windows Party récupère au premier besoin les skins choisis
+depuis le serveur de ressources du mod, puis les charge chez tous les
+joueurs de la session. Les skins personnalisés convertis avec
+[skinconv](https://github.com/cranebeaker/ocarina-coop/tree/v1.0.5/tools/skinconv)
+sont détectés dans `mods` au premier lancement d’un `.wsquashfs`. Valider la ligne d’un skin permet
 aussi de saisir sa référence, par exemple `linkle` ou
 `linkle|linkle_1.o2r,linkle_2.o2r` si le skin utilise plusieurs archives.
-Les fichiers du skin doivent se trouver dans `mods`.
+Quand un joueur choisit explicitement un skin, Windows Party masque dans
+son instance le pack **Enhanced 3DS Link** et les archives O2R qui
+remplacent le squelette de Link. Choisissez **Conserver** pour garder
+les mods d’apparence actifs.
 
 L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,
 le filtre des textures, les volumes et la musique sur J1 uniquement.
