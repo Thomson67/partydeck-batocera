@@ -26,6 +26,7 @@ from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CO
                                  defaults as story_defaults,
                                  matches as matches_story_coop, skin_choices as story_skin_choices)
 from partydeck_story_skins import CATALOGUE as STORY_SKINS
+from partydeck_soh_camera import CAMERA_AXES as STORY_CAMERA_AXES
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -48,7 +49,7 @@ from partydeck_dst import (ADAPTER as DST, LANGUAGES as DST_LANGUAGES, HUD_SIZES
                            TEXT_SIZES as DST_TEXT_SIZES,
                            defaults as dst_defaults, matches as matches_dst)
 
-TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son']
+TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son', 'Gameplay']
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
 STORAGE_OPTIONS = (
     ('auto_clean', 'Entretien automatique'),
@@ -140,11 +141,14 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     *[(f'{adapter}.consumables.{key}', tr(label), list(STORY_SHARING_CHOICES))
                       for key, label in STORY_CONSUMABLES.items()]]
         if tab == 2:
-            rows = [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
+            return [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
                     for index in range(4)
                     for key, label, choices in [('names', 'Nom', None),
                                                 ('skins', 'Skin', ['', *dict.fromkeys((*STORY_SKINS, *story_skins))])]]
-            return [*rows, (f'{adapter}.freecam', tr('Caméra libre au stick droit'), [True, False])]
+        if tab == 4:
+            return [(f'{adapter}.freecam', tr('Caméra libre au stick droit'), [True, False]),
+                    *[(f'{adapter}.camera_axes.{key}', tr(label), list(STORY_SHARING_CHOICES))
+                      for key, (_, _, label) in STORY_CAMERA_AXES.items()]]
         return soh_graphics_fields(adapter)
     if adapter == 'celestenet':
         if tab == 2:
@@ -320,7 +324,7 @@ def label_value(key, value):
             return tr('Link standard' if value else 'Mods du jeu')
         reference = value.split('|', 1)[0]
         return STORY_SKINS.get(reference, (reference, None))[0]
-    if key.startswith(f'{STORY_COOP}.consumables.'):
+    if key.startswith((f'{STORY_COOP}.consumables.', f'{STORY_COOP}.camera_axes.')):
         return tr(STORY_SHARING_CHOICES[value])
     if key == f'{STORY_COOP}.time_mode':
         return tr(STORY_TIME_MODES[value])
@@ -868,7 +872,9 @@ class App:
             return (0,1,2,3,4)
         if self.model.data and self.model.data.get('adapter') == 'borderlands2':
             return (0,1,2)
-        return (0,1,2,3) if self.model.data and self.model.data.get('adapter') in ('soh-anchor', STORY_COOP) else (0,)
+        if self.model.data and self.model.data.get('adapter') == STORY_COOP:
+            return (0,1,2,4,3)
+        return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
 
     def current_fields(self):
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',

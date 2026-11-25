@@ -73,6 +73,19 @@ with tempfile.TemporaryDirectory() as folder,contextlib.redirect_stdout(io.Strin
         assert 'PARTYDECK_EXIT_STATE' not in launch.call_args.kwargs['env']
         coop.start_player(root,player,root/'game',root/'game',[],(0,0,960,540),'test',exit_state=report)
         assert launch.call_args.kwargs['env']['PARTYDECK_EXIT_STATE']==str(report)
+        assert 'PARTYDECK_TRACE_WINDOWS' not in launch.call_args.kwargs['env']
+        log = player / 'logs' / 'window-trace.log'
+        assert not log.exists()
+        with patch.object(coop, 'UMU_HOME', root):
+            launch.reset_mock()
+            coop.start_player(root, player, root/'game', root/'game', [], (0,0,960,540), 'test',
+                              exit_state=report, trace_windows=True)
+            gamescope, sandbox = launch.call_args_list
+            assert '--debug-focus' in gamescope.args[0] and '--debug-events' in gamescope.args[0]
+            assert sandbox.kwargs['env']['PARTYDECK_TRACE_WINDOWS'] == '1'
+            assert gamescope.kwargs['stdout'] is sandbox.kwargs['stdout']
+            assert gamescope.kwargs['stdout'].name == str(log)
+            assert log.is_file()
     # Real lingering compositors: one Wine completion closes the two owned
     # groups without requiring either window's close button. An unrelated
     # process must survive (no global Gamescope/Wine process-name killing).

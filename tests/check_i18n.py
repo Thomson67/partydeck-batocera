@@ -104,8 +104,18 @@ for language, automatic, skin, default_skin in (
         'fr': 'Story Co-op J1 : fenêtre du jeu absente, relance de ce joueur.',
         'en': 'Story Co-op J1: game window missing, restarting this player.',
     }[language]
-    assert player_fields[-1][:2] == ('ocarina-story-coop.freecam',
+    assert not any(row[0].endswith('.freecam') for row in player_fields)
+    assert App.available_tabs(SimpleNamespace(model=SimpleNamespace(data={'adapter': 'ocarina-story-coop'}))) == (
+        0, 1, 2, 4, 3)
+    gameplay = fields(4, 'ocarina-story-coop')
+    assert gameplay[0][:2] == ('ocarina-story-coop.freecam',
         'Caméra libre au stick droit' if language == 'fr' else 'Free camera on right stick')
+    assert [row[0].split('.')[-1] for row in gameplay[1:]] == ['third_x', 'third_y', 'first_x', 'first_y']
+    assert gameplay[-1][1] == ('Vue 1re personne et visée · inverser l’axe vertical' if language == 'fr'
+                                else 'First person and aiming · invert vertical axis')
+    for key, _, choices in gameplay[1:]:
+        assert choices == ['keep', 'on', 'off']
+        assert label_value(key, 'keep') == ('Conserver' if language == 'fr' else 'Keep current')
     assert [field[1:] for field in fields(3, 'ocarina-story-coop')] == [
         field[1:] for field in fields(3, 'soh-anchor')]
 lang.set_language('fr')

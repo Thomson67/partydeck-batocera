@@ -60,6 +60,12 @@ toujours après une minute, PartyDeck tente de la réafficher, puis relance
 une fois le joueur concerné si nécessaire. Le serveur et les autres
 joueurs continuent à tourner.
 
+Pour enregistrer un démarrage intermittent, créez le fichier
+`/userdata/system/windows-party/trace-windows-next` avant de relancer
+depuis EmulationStation. Pour ce lancement, PartyDeck laisse la fenêtre
+en défaut en place et enregistre les événements Wine et Gamescope dans
+`logs/window-trace.log` du dossier privé de chaque joueur.
+
 Dans **Réseau**, vous pouvez régler le port local, le JSON SoH, les positions
 visibles, la téléportation et la progression partagée. Avec la progression
 partagée, **Partager les rubis**, **Partager les munitions** et **Partager les PV**
@@ -97,11 +103,15 @@ personnalisé. Windows Party prépare aussi le pack **Enhanced 3DS Link**
 pour que les autres joueurs voient cette apparence. Si la préparation du skin échoue, le jeu
 se lance avec l’apparence précédente et l’erreur figure dans le journal.
 
-Dans **Joueurs**, **Caméra libre au stick droit** utilise la manette
+Dans **Gameplay**, **Caméra libre au stick droit** utilise la manette
 attribuée à chaque joueur au lancement. Les boutons C auparavant
 associés aux directions du stick passent sur la croix directionnelle
 lorsqu’ils n’ont pas déjà une autre commande à la manette. Désactiver
 l’option restaure les affectations précédentes.
+L’inversion horizontale et verticale se règle séparément en caméra libre
+et en première personne. Les réglages de première personne s’appliquent
+aussi à la visée. **Conserver** reprend les réglages propres à chaque
+joueur.
 
 L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,
 le filtre des textures, les volumes et la musique sur J1 uniquement.

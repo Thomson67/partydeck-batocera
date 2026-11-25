@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Launch concurrent native Batocera Wine sessions in nested Gamescope windows."""
 import argparse
+from contextlib import nullcontext
 import ctypes as C
 from dataclasses import dataclass
 from functools import partial
@@ -671,7 +672,8 @@ def _run_wine(original, target, player, saves=None):
     if saves is not None:
         from partydeck_profiles import install_party_runner_hook
         install_party_runner_hook(original, player, track_runner=os.environ.get('PARTYDECK_TRACK_RUNNER') == '1',
-                                  mono_cache=player.parents[2]/'mono-cache')
+                                  mono_cache=player.parents[2]/'mono-cache',
+                                  trace_windows=os.environ.get('PARTYDECK_TRACE_WINDOWS') == '1')
         from partydeck_mangohud import install_hook as install_mangohud
         install_mangohud(original,player)
         from partydeck_anchor import install_hook
@@ -835,7 +837,7 @@ def run_compositor(command):
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
-                 track_runner=False, dst=False, split=None, story_coop=None):
+                 track_runner=False, dst=False, split=None, story_coop=None, trace_windows=False):
     _, _, width, height = rectangle
     bo2_resolution = None
     bo2_desktop = None
@@ -843,6 +845,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     from partydeck_bo2 import ADAPTER as BO2, AUTO_JOIN, DESKTOP_MODE, PLUTONIUM_MODES, desktop_size, render_size
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
+    if trace_windows:
+        args.extend(['--debug-focus', '--debug-events'])
     if saves is not None:
         from partydeck_profiles import profile_path, read_profile
         base = Path(__file__).resolve().parent
@@ -934,6 +938,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_TRACK_RUNNER',None)
     if track_runner:
         environment['PARTYDECK_TRACK_RUNNER'] = '1'
+    environment.pop('PARTYDECK_TRACE_WINDOWS', None)
+    if trace_windows:
+        environment['PARTYDECK_TRACE_WINDOWS'] = '1'
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
     supervise_wine = exit_state is not None and (UMU_HOME.is_dir() or story_coop)
@@ -941,20 +948,27 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                       if supervise_wine else wine_command)
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"',
                  "sh", *nested_command])
-    process = subprocess.Popen([sys.executable, helper, "_gamescope", *args], env=environment,
-                               start_new_session=True, stdin=subprocess.DEVNULL)
-    if supervise_wine:
-        sandbox_environment = environment.copy()
-        sandbox_environment.pop('LD_LIBRARY_PATH', None)
-        sandbox_environment.pop('LD_PRELOAD', None)
-        try:
-            process.wine_sandbox = subprocess.Popen(
-                [sys.executable, helper, "_await-display", str(exit_state), *wine_command],
-                env=sandbox_environment, start_new_session=True, stdin=subprocess.DEVNULL)
-        except BaseException:
-            stop_players([process])
-            exit_state.with_suffix('.display').unlink(missing_ok=True)
-            raise
+    trace = player / 'logs' / 'window-trace.log'
+    if trace_windows:
+        trace.parent.mkdir(parents=True, exist_ok=True)
+    with trace.open('wb') if trace_windows else nullcontext() as output:
+        output_options = dict(stdout=output, stderr=subprocess.STDOUT) if output is not None else {}
+        process = subprocess.Popen([sys.executable, helper, "_gamescope", *args], env=environment,
+                                   start_new_session=True, stdin=subprocess.DEVNULL, **output_options)
+        if supervise_wine:
+            sandbox_environment = environment.copy()
+            sandbox_environment.pop('LD_LIBRARY_PATH', None)
+            sandbox_environment.pop('LD_PRELOAD', None)
+            try:
+                process.wine_sandbox = subprocess.Popen(
+                    [sys.executable, helper, "_await-display", str(exit_state), *wine_command],
+                    env=sandbox_environment, start_new_session=True, stdin=subprocess.DEVNULL, **output_options)
+            except BaseException:
+                stop_players([process])
+                exit_state.with_suffix('.display').unlink(missing_ok=True)
+                raise
+    if trace_windows:
+        print(tr('J{p0} : diagnostic des fenêtres dans {p1}.', p0=player.name.removeprefix('j'), p1=trace), flush=True)
     return process
 
 
@@ -1270,6 +1284,13 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     for index in range(1,len(players)+1):
         (base / ('runtime' if party else 'coop') / game_id / f'j{index}').mkdir(parents=True,exist_ok=True)
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
+    trace_windows = False
+    if party:
+        try:
+            (base / 'trace-windows-next').unlink()
+            trace_windows = True
+        except FileNotFoundError:
+            pass
     processes, states, launchers = [], [], []
     bottle_players=[]
     from partydeck_umu import clean_shared_steam_runtimes, prepare_shared_steam_runtimes
@@ -1367,7 +1388,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                              session_token=session_token, player_count=len(players),
                              l4d2_launch=l4d2_launch, celestenet=celestenet,
                              celeste_options=celeste_options, track_runner=track_runner, dst=dst,
-                             split=split, story_coop=story_coop)
+                             split=split, story_coop=story_coop, trace_windows=trace_windows)
             processes.append(launch())
             launchers.append(launch)
             if celestenet and celeste_options['automatic']:
@@ -1421,7 +1442,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 print(f"Fenêtre J{index + 1} non repérée : {window_classes[index]}", flush=True)
         if seen_windows:
             focus_window(seen_windows[min(seen_windows)])
-        story_startup = StoryStartup(states, time.monotonic()) if story_coop else None
+        # Preserve the failed window for inspection in a diagnostic session.
+        story_startup = StoryStartup(states, time.monotonic()) if story_coop and not trace_windows else None
         next_story_check = 0
         story_placement = {}
         next_output_check=time.monotonic()+2

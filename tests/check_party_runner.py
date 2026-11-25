@@ -74,4 +74,15 @@ for runner,hidraw in ((None,'0'),(None,'1'),('CustomRunner','0'),('CustomRunner'
     assert done.stdout.splitlines()==[runner or 'windows-wine-runner',runner or 'windows-core','windows-dxvk',hidraw]
 try:p.instrument_runner(native,None,'$(touch injected)');raise AssertionError('invalid HIDRAW accepted')
 except ValueError:pass
+
+trace_source = '''export WINEDEBUG="-all"
+printf '%s\n' "$WINEDEBUG"
+    if [[ -n "${WINE_LANG}" ]]; then
+        true
+    else
+        printf '%s\n' "$WINEDEBUG"
+    fi
+'''
+traced = subprocess.run(['bash', '-c', p.trace_wine_windows(trace_source)], text=True, capture_output=True, check=True)
+assert traced.stdout.splitlines() == ['-all', '+timestamp,+pid,+win,+x11drv']
 print('Options ES : sélecteur Wine FR/EN, Auto/héritage, priorités dédiées et override Wine privé vérifiés.')

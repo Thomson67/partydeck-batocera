@@ -208,6 +208,10 @@ EN = {
     'Horloge commune du serveur': 'Shared server clock',
     'Cycle d’origine par joueur': 'Original cycle per player',
     'Caméra libre au stick droit': 'Free camera on right stick',
+    'Vue 3e personne · inverser l’axe horizontal': 'Third person · invert horizontal axis',
+    'Vue 3e personne · inverser l’axe vertical': 'Third person · invert vertical axis',
+    'Vue 1re personne et visée · inverser l’axe horizontal': 'First person and aiming · invert horizontal axis',
+    'Vue 1re personne et visée · inverser l’axe vertical': 'First person and aiming · invert vertical axis',
     'Story Co-op : partage du mod de Link indisponible ({p0}).': 'Story Co-op: could not share Link mod ({p0}).',
     'Story Co-op : mod de Link préparé pour les autres joueurs.': 'Story Co-op: Link mod ready for the other players.',
     'Story Co-op {p0} : fenêtre du jeu visible.': 'Story Co-op {p0}: game window visible.',
@@ -218,6 +222,7 @@ EN = {
     'Story Co-op {p0} : fenêtre du jeu non confirmée après {p1} s.':
         'Story Co-op {p0}: game window not confirmed after {p1} s.',
     'Story Co-op {p0} : fenêtre replacée après relance.': 'Story Co-op {p0}: window repositioned after restart.',
+    'J{p0} : diagnostic des fenêtres dans {p1}.': 'P{p0}: window trace at {p1}.',
     'Story Co-op · noms et skins des joueurs': 'Story Co-op · player names and skins',
     'Story Co-op · réglages communs aux joueurs de cette session': 'Story Co-op · shared settings for this session',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',

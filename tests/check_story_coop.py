@@ -73,6 +73,8 @@ with TemporaryDirectory() as folder:
     assert read_profile(base, archive)[story.ADAPTER] == story.defaults()
     for previous in ('keep', 'on', 'off'):
         assert story.validate({'consumables': previous})['consumables'] == dict.fromkeys(story.CONSUMABLES, previous)
+    assert story.validate({'camera_axes': {'first_y': 'off'}})['camera_axes'] == {
+        'third_x': 'keep', 'third_y': 'keep', 'first_x': 'keep', 'first_y': 'off'}
     legacy = defaults(archive)
     del legacy[story.ADAPTER]
     from partydeck_profiles import profile_path
@@ -186,6 +188,24 @@ with TemporaryDirectory() as folder:
             assert failed_online['AutoConnect'] == 1 and failed_online['FileServer'] == ''
             assert failed_online.get('Skin') == online.get('Skin')
         if index == 2:
+            with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)), \
+                 patch.object(story, 'patch_client', return_value=False):
+                configured = options | {'camera_axes': {'third_x': 'on', 'third_y': 'off',
+                                                        'first_x': 'off', 'first_y': 'on'}}
+                expected = {'FreeLook': {'InvertXAxis': 1, 'InvertYAxis': 0},
+                            'Controls': {'InvertAimingXAxis': 0, 'InvertAimingYAxis': 1}}
+                before = json.loads(path.read_text())
+                before['CVars']['gSettings']['FreeLook'] = {'InvertYAxis': 1}
+                path.write_text(json.dumps(before))
+                for _ in range(2):
+                    story.configure_client(player, archive, private, player, configured, base / 'skins')
+                    current = json.loads(path.read_text())['CVars']['gSettings']
+                    assert {section: current[section] for section in expected} == expected
+                story.configure_client(player, archive, private, player, options, base / 'skins')
+                restored = json.loads(path.read_text())['CVars']['gSettings']
+                assert restored['FreeLook'] == {'InvertYAxis': 1}
+                assert restored['Controls'] == {}
+                assert not (private / 'partydeck-camera-axes-original.json').exists()
             player_mods = private / 'mods'
             player_mods.mkdir()
             pack = player_mods / '01 - Enhanced 3DS Link Reworked'

@@ -473,10 +473,17 @@ def track_squashfs_runner(source):
     return block.subn(replace, source)
 
 
-def install_party_runner_hook(rom, player, *, track_runner=False, mono_cache=None):
+def trace_wine_windows(source):
+    # Batocera sets WINEDEBUG during prefix setup. Trace only from game launch
+    # so Wine boot and installers do not drown out the window state changes.
+    marker = '    if [[ -n "${WINE_LANG}" ]]; then\n'
+    return source.replace(marker, '    export WINEDEBUG="+timestamp,+pid,+win,+x11drv"\n' + marker)
+
+
+def install_party_runner_hook(rom, player, *, track_runner=False, mono_cache=None, trace_windows=False):
     runner=selected_party_runner(rom)
     hidraw=selected_party_hidraw(rom)
-    if runner is None and hidraw is None and not track_runner and mono_cache is None:return
+    if runner is None and hidraw is None and not track_runner and mono_cache is None and not trace_windows:return
     binary=shutil.which('batocera-wine')
     if binary is None:raise RuntimeError(tr('batocera-wine introuvable.'))
     binary=Path(binary).resolve()
@@ -497,6 +504,8 @@ def install_party_runner_hook(rom, player, *, track_runner=False, mono_cache=Non
         if boot == source:
             print('Windows Party: Wine boot hook for Mono unavailable.', flush=True)
         source = boot
+    if trace_windows:
+        source = trace_wine_windows(source)
     if source == original_source:
         return
     atomic_write(replacement,source,0o755)

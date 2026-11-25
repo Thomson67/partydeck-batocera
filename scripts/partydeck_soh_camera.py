@@ -1,8 +1,6 @@
 """Configure SoH camera controls for the SDL gamepad on the player's port."""
 import json
 
-from partydeck_profiles import atomic_write
-
 # direction, SDL axis, sign, N64 C button, SDL D-pad button, N64 D-pad button
 CAMERA_DIRECTIONS = (
     ('Left', 2, -1, 2, 13, 512),
@@ -10,6 +8,35 @@ CAMERA_DIRECTIONS = (
     ('Up', 3, -1, 8, 11, 2048),
     ('Down', 3, 1, 4, 12, 1024),
 )
+CAMERA_AXES = {
+    'third_x': ('FreeLook', 'InvertXAxis', 'Vue 3e personne · inverser l’axe horizontal'),
+    'third_y': ('FreeLook', 'InvertYAxis', 'Vue 3e personne · inverser l’axe vertical'),
+    'first_x': ('Controls', 'InvertAimingXAxis', 'Vue 1re personne et visée · inverser l’axe horizontal'),
+    'first_y': ('Controls', 'InvertAimingYAxis', 'Vue 1re personne et visée · inverser l’axe vertical'),
+}
+
+
+def configure_axes(settings, backup, modes, *, persistent):
+    from partydeck_profiles import atomic_write
+
+    original = json.loads(backup.read_text()) if backup.is_file() else {}
+    active = {}
+    for name, (group, key, _) in CAMERA_AXES.items():
+        mode = modes.get(name, 'keep')
+        if mode == 'keep':
+            if persistent and name in original:
+                if original[name] is None:
+                    settings.get(group, {}).pop(key, None)
+                else:
+                    settings.setdefault(group, {})[key] = original[name]
+        else:
+            section = settings.setdefault(group, {})
+            active[name] = original.get(name, section.get(key)) if persistent else section.get(key)
+            section[key] = int(mode == 'on')
+    saved = original | active
+    if original != saved:
+        atomic_write(backup, json.dumps(saved))
+    return active if saved != active else None
 
 
 def mapping_ids(value):
@@ -24,6 +51,8 @@ def store_ids(target, key, ids):
 
 
 def configure_freecam(settings, backup, enabled, template):
+    from partydeck_profiles import atomic_write
+
     if not enabled:
         if not backup.is_file():
             return False

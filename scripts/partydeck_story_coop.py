@@ -15,6 +15,7 @@ import zipfile
 
 from partydeck_anchor import apply_graphics, config_path, graphics_defaults, validate_config, validate_graphics, VOLUME_FIELDS
 from partydeck_i18n import tr
+from partydeck_soh_camera import CAMERA_AXES, configure_axes, configure_freecam
 import partydeck_story_skins as skins
 
 ADAPTER = 'ocarina-story-coop'
@@ -69,7 +70,7 @@ def matches(rom):
 def defaults():
     return dict(automatic=True, port=PORT, room='', config=CONFIG,
                 sync=True, locations=True, teleport=True, consumables=dict.fromkeys(CONSUMABLES, 'keep'),
-                freecam=False, time_mode='shared',
+                freecam=False, camera_axes=dict.fromkeys(CAMERA_AXES, 'keep'), time_mode='shared',
                 names=[f'J{i}' for i in range(1, 5)], skins=[''] * 4, graphics=graphics_defaults())
 
 
@@ -80,6 +81,7 @@ def validate(options):
         raise ValueError(tr('Profil Story Co-op invalide.'))
     options = defaults() | options
     sharing = options['consumables']
+    camera_axes = options['camera_axes']
     if isinstance(sharing, str) and sharing in SHARING_CHOICES:
         sharing = dict.fromkeys(CONSUMABLES, sharing)
     if (type(options['port']) is not int or not 1024 < options['port'] < 65535
@@ -87,10 +89,13 @@ def validate(options):
             or not isinstance(options['time_mode'], str) or options['time_mode'] not in TIME_MODES
             or not isinstance(sharing, dict) or sharing.keys() != CONSUMABLES.keys()
             or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in sharing.values())
+            or not isinstance(camera_axes, dict) or not camera_axes.keys() <= CAMERA_AXES.keys()
+            or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in camera_axes.values())
             or not isinstance(options['config'], str)
             or not valid_text(options['room'], 32, optional=True)):
         raise ValueError(tr('Profil Story Co-op invalide.'))
     options['consumables'] = sharing
+    options['camera_axes'] = dict.fromkeys(CAMERA_AXES, 'keep') | camera_axes
     validate_config(options['config'])
     names, skins = options['names'], options['skins']
     if (not isinstance(names, list) or len(names) != 4
@@ -435,9 +440,10 @@ def configure_client(player, rom, directory, root, options, skin_cache, controll
     # them before applying a new mix so toggling J1-only music is reversible.
     graphics.setdefault('Volume', {}).update({key: 100 for key, _ in VOLUME_FIELDS})
     apply_graphics(data, options['graphics'], index - 1)
-    from partydeck_soh_camera import configure_freecam
     camera_backup = config_path(directory, 'partydeck-freecam-original.json')
     restored_camera = configure_freecam(graphics, camera_backup, options.get('freecam', False), controller_template)
+    axes_backup = config_path(directory, 'partydeck-camera-axes-original.json')
+    saved_axes = configure_axes(graphics, axes_backup, options.get('camera_axes', {}), persistent=source == path)
     online = cvars.setdefault('gZeldaOnline', {})
     host, port = client_host(index), options['port']
     online.update(Enabled=1, AutoConnect=1, Host=host, Port=port, Nickname=options['names'][index - 1])
@@ -494,6 +500,10 @@ def configure_client(player, rom, directory, root, options, skin_cache, controll
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
     if restored_camera:
         camera_backup.unlink(missing_ok=True)
+    if saved_axes == {}:
+        axes_backup.unlink(missing_ok=True)
+    elif saved_axes is not None:
+        atomic_write(axes_backup, json.dumps(saved_axes))
     print(tr('Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.',
              p0=player.name.upper(), p1=f'{host}:{port}'), flush=True)
 
