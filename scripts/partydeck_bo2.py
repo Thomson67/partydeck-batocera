@@ -28,8 +28,11 @@ EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
-CUSTOM_LOBBY = ('setclientbeingusedandprimary; onlinegame 1; xstartprivateparty; '
-                'set party_solo 0; openmenu PrivateOnlineGameLobby')
+# Dispatch the actual menu button events rather than opening the final screen.
+CUSTOM_LOBBY_STEPS = (
+    'lui_notify open_main_lobby_requested',
+    'lui_notify open_custom_games_lobby',
+)
 MP_STARTUP_MARKER = re.compile(rb"Loading fastfile '?common_mp\b")
 AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
 GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
@@ -386,6 +389,8 @@ class AutoJoin:
         self.host_ready = None
         self.open_custom_lobby = open_custom_lobby and mode == 'plutonium-mp'
         self.lobby_open_at = None
+        self.lobby_deadline = None
+        self.lobby_step = 0
         self.connected = set()
         self.attempts = dict.fromkeys((guest.name for guest in self.guests), 0)
         self.retry_at = dict.fromkeys(self.attempts, 0)
@@ -467,16 +472,24 @@ class AutoJoin:
                     self.open_custom_lobby = False
                 elif self.lobby_open_at is None and MP_STARTUP_MARKER.search(line):
                     self.lobby_open_at = now + 5
+                    self.lobby_deadline = self.lobby_open_at + 45
             if self.observe_host(line, now):
                 self.host_log = path
         if self.open_custom_lobby and self.lobby_open_at is not None and not self.stop.is_set():
-            if now >= self.lobby_open_at + 45:
+            if now >= self.lobby_deadline:
                 self.open_custom_lobby = False
                 print(tr('Black Ops II J1 : raccourci Partie personnalisée indisponible.'), flush=True)
             elif now >= self.lobby_open_at and send_console_command(
-                    automatic_path(self.host, self.token, 'display'), self.outer_display, CUSTOM_LOBBY):
-                self.open_custom_lobby = False
-                print(tr('Black Ops II J1 : commande d’ouverture de Partie personnalisée envoyée.'), flush=True)
+                    automatic_path(self.host, self.token, 'display'), self.outer_display,
+                    CUSTOM_LOBBY_STEPS[self.lobby_step]):
+                self.lobby_step += 1
+                if self.lobby_step == len(CUSTOM_LOBBY_STEPS):
+                    self.open_custom_lobby = False
+                    print(tr('Black Ops II J1 : commande d’ouverture de Partie personnalisée envoyée.'), flush=True)
+                else:
+                    # Allow the multiplayer lobby transition to complete before
+                    # requesting the action handled by that lobby.
+                    self.lobby_open_at = now + 5
         if self.host_ready is None or now < self.host_ready:
             return
 

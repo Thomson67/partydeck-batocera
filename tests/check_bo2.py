@@ -228,22 +228,28 @@ with TemporaryDirectory() as folder:
         assert all(call.kwargs['env']['DISPLAY'] == ':2' and
                    call.kwargs['env']['XAUTHORITY'] == '/tmp/player-auth' for call in run.call_args_list)
 
-    with patch.object(bo2, 'send_console_command', side_effect=[False, True]) as send:
+    with patch.object(bo2, 'send_console_command', side_effect=[False, True, True]) as send:
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
         observer.poll(1)
         observer.poll(5)
         send.assert_not_called()
         observer.poll(6)
         observer.poll(7)
-        observer.poll(8)
-        command = call(bo2.automatic_path(host, token, 'display'), ':0', bo2.CUSTOM_LOBBY)
-        assert send.call_args_list == [command, command]
+        observer.poll(11)
+        main_menu, custom_games = (
+            call(bo2.automatic_path(host, token, 'display'), ':0', command)
+            for command in bo2.CUSTOM_LOBBY_STEPS
+        )
+        assert send.call_args_list == [main_menu, main_menu]
+        observer.poll(12)
+        observer.poll(13)
+        assert send.call_args_list == [main_menu, main_menu, custom_games]
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
         with log.open('ab') as stream:
             stream.write(initialization)
         observer.poll(10)
         observer.poll(17)
-        assert send.call_count == 2
+        assert send.call_count == 3
         observer = bo2.AutoJoin(players, token, 'plutonium-zm', ':0', 0, open_custom_lobby=True)
         assert not observer.open_custom_lobby
 
