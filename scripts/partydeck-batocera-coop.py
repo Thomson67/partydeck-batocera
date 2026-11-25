@@ -1435,6 +1435,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             dst_ready = readiness_dir(base/'runtime'/game_id/'j1', session_token)
             dst_ready.mkdir(parents=True, exist_ok=False)
         hotkey.start()
+        bo2_startup_deadline = 0
         for index, (devices, rectangle) in enumerate(zip(players, boxes), 1):
             player = base / ("runtime" if party else "coop") / game_id / f"j{index}"
             saves = PARTY_SAVES / save_name / f"j{index}" if party else None
@@ -1447,18 +1448,18 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
             if bo2_mode and processes:
                 previous = states[-1].parent
-                deadline = time.monotonic() + 30
                 print(tr('Black Ops II {p0} : attente de l’initialisation de {p1}.',
                          p0=player.name.upper(), p1=previous.name.upper()), flush=True)
                 while not startup_ready(previous, session_token, started, bo2_mode):
                     result = session_result(processes, states, wayland)
                     if result is not None:
                         return result
-                    if time.monotonic() >= deadline:
-                        print(tr('Black Ops II {p0} : initialisation de {p1} non confirmée après 30 s.',
+                    remaining = bo2_startup_deadline - time.monotonic()
+                    if remaining <= 0:
+                        print(tr('Black Ops II {p0} : initialisation de {p1} non confirmée après 10 s.',
                                  p0=player.name.upper(), p1=previous.name.upper()), flush=True)
                         break
-                    time.sleep(.25)
+                    time.sleep(min(.25, remaining))
             state = player/f'session-{uuid.uuid4().hex}.json'
             launch = partial(start_player, app, player, original, target, devices, rectangle,
                              window_classes[index - 1],
@@ -1469,6 +1470,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                              celeste_options=celeste_options, track_runner=track_runner, dst=dst,
                              split=split, story_coop=story_coop, trace_windows=trace_windows)
             processes.append(launch())
+            if bo2_mode:
+                bo2_startup_deadline = time.monotonic() + 10
             launchers.append(launch)
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))

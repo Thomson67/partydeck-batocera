@@ -130,8 +130,8 @@ EN = {
     'Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.': 'Start the custom game on P1. The other players join automatically.',
     'Black Ops II : les invités attendent le lancement de la partie de J1.': 'Black Ops II: guests are waiting for P1 to start the match.',
     'Black Ops II {p0} : attente de l’initialisation de {p1}.': 'Black Ops II {p0}: waiting for {p1} to initialize.',
-    'Black Ops II {p0} : initialisation de {p1} non confirmée après 30 s.':
-        'Black Ops II {p0}: {p1} initialization not confirmed after 30 s.',
+    'Black Ops II {p0} : initialisation de {p1} non confirmée après 10 s.':
+        'Black Ops II {p0}: {p1} initialization not confirmed after 10 s.',
     'Black Ops II : partie de J1 détectée.': 'Black Ops II: P1’s match detected.',
     'Black Ops II {p0} : connexion à la partie de J1 demandée.': 'Black Ops II {p0}: requested to join P1’s match.',
     'Black Ops II {p0} : connexion confirmée par J1.': 'Black Ops II {p0}: P1 confirmed the connection.',
