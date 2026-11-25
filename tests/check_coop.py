@@ -149,21 +149,24 @@ with tempfile.TemporaryDirectory() as temp, \
     assert 'pass_fds' not in popen.call_args.kwargs
     assert command[command.index('PARTYDECK_PRIVATE_LAN_IP')+1]=='192.168.247.11'
 
-for split, second_position, inputs, shared, party, virtual, bo2 in [
-    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, False, False, False),
-    ("vertical", (960, 0, 960, 1080), [pad, keyboard, mouse], False, False, False, False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another], True, False, False, False),
-    ("vertical", (960, 0, 960, 1080), [pad, another], True, False, False, False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True, False, False),
-    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, True, True, False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, True),
+for split, second_position, inputs, shared, party, virtual, title in [
+    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, False, False, "Game"),
+    ("vertical", (960, 0, 960, 1080), [pad, keyboard, mouse], False, False, False, "Game"),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, False, False, "Game"),
+    ("vertical", (960, 0, 960, 1080), [pad, another], True, False, False, "Game"),
+    ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True, False, "Game"),
+    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, True, True, "Game"),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, "Black Ops II"),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, "Ocarina Story Co-op"),
 ]:
     with tempfile.TemporaryDirectory() as temp, contextlib.ExitStack() as stack:
         def mock(obj, attr, **kwargs):
             return stack.enter_context(patch.object(obj, attr, **kwargs))
         base = Path(temp)
         stack.enter_context(patch("partydeck_bottles.ROOT",base/"bottles"))
-        game = base / ("Black Ops II.wsquashfs" if bo2 else "Game.wsquashfs")
+        game = base / f"{title}.wsquashfs"
+        bo2 = title == "Black Ops II"
+        story = title == "Ocarina Story Co-op"
         if party:
             profile = defaults(game)
             profile['keyboard_player'] = virtual
@@ -195,6 +198,16 @@ for split, second_position, inputs, shared, party, virtual, bo2 in [
                 assert player.name == 'j1' and token and started and mode == 't6mp'
                 return ready.call_count == 2
             ready = stack.enter_context(patch('partydeck_bo2.startup_ready', side_effect=read_boot))
+        if story:
+            network = stack.enter_context(patch('partydeck_private_lan.PrivateLAN'))
+            def start_story(archive, work, lan):
+                starts.assert_not_called()
+                assert archive == game and lan is network.return_value
+                assert work.is_relative_to(base / 'party-saves') and work.name == 'story-coop'
+                return server
+            server = Mock()
+            boot_story = stack.enter_context(patch('partydeck_story_coop.start_server', side_effect=start_story))
+            stop_story = stack.enter_context(patch('partydeck_story_coop.stop_server'))
         classes = [f"partydeck-coop-{os.getpid()}-j1", f"partydeck-coop-{os.getpid()}-j2"]
         windows = mock(coop, "top_window", side_effect={classes[0]:"810", classes[1]:"811"}.get)
         place = mock(coop, "place_window", return_value=True)
@@ -218,6 +231,12 @@ for split, second_position, inputs, shared, party, virtual, bo2 in [
         if bo2:
             assert ready.call_count == 2
             assert 'attente de l’initialisation de J1' in output.getvalue()
+        if story:
+            network.assert_called_once_with(2, shared=True)
+            assert all(call.kwargs['story_coop'] and call.kwargs['network_index'] == 0
+                       for call in starts.call_args_list)
+            assert boot_story.call_count == 1
+            stop_story.assert_called_once_with(server)
         assert place.call_args_list[1].args == ("811", second_position)
         assert "Joueurs : 2" in output.getvalue() and "Fenêtre J2 placée : 811" in output.getvalue()
 with tempfile.TemporaryDirectory() as temp:

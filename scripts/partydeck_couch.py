@@ -20,6 +20,7 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER, JOIN_HOST,
                            defaults as bo2_defaults, matches as matches_bo2)
+from partydeck_story_coop import ADAPTER as STORY_COOP, LABEL as STORY_LABEL, matches as matches_story_coop
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -108,7 +109,7 @@ def fields(tab, adapter='standard', celeste_skins=()):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO2])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO2, STORY_COOP])]
     if adapter == DST:
         if tab == 1:
             return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
@@ -265,6 +266,8 @@ def label_value(key, value):
     if key == 'bo2.horizontal_render':
         return tr(HORIZONTAL_RENDER[value])
     if key == 'adapter':
+        if value == STORY_COOP:
+            return tr(STORY_LABEL)
         if value == BO2:
             return 'Black Ops II'
         if value == 'dont-starve-together':
@@ -354,7 +357,8 @@ class Model:
         windows = self.windows
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
                          'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi),
-                         'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst), 'bo2':discover(windows,matches_bo2)}
+                         'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst),
+                         'bo2':discover(windows,matches_bo2), STORY_COOP:discover(windows,matches_story_coop)}
         return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
                 for recipe in COMMON]
 

@@ -1,6 +1,7 @@
 """Community configuration recipes, independent of the user's game files."""
 from partydeck_bo2 import ADAPTER as BO2, matches as matches_bo2
 from partydeck_i18n import tr
+from partydeck_story_coop import ADAPTER as STORY_COOP, LABEL as STORY_LABEL, matches as matches_story_coop
 from dataclasses import dataclass
 import json
 import os
@@ -29,7 +30,8 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('hkmultiplayer','Hollow Knight · HKMultiplayer 0.36.2','hollowknight-hkmultiplayer'),
           CommonGame('celestenet', 'Celeste · CelesteNet en LAN', 'celestenet'),
           CommonGame('dst', "Don't Starve Together · LAN", 'dont-starve-together'),
-          CommonGame('bo2', 'Black Ops II · LAN expérimental', BO2))
+          CommonGame('bo2', 'Black Ops II · LAN expérimental', BO2),
+          CommonGame('ocarina-story-coop', STORY_LABEL, STORY_COOP))
 
 
 def is_rom(path):
@@ -40,7 +42,8 @@ def is_rom(path):
 
 def matches_soh(path):
     name = path.stem.casefold()
-    return bool(re.search(r'ship[\s_-]*of[\s_-]*harkinian|(?<![a-z0-9])soh(?![a-z0-9])', name))
+    return not matches_story_coop(path) and bool(
+        re.search(r'ship[\s_-]*of[\s_-]*harkinian|(?<![a-z0-9])soh(?![a-z0-9])', name))
 
 
 def recipe_for(rom, adapter=None):
@@ -52,6 +55,8 @@ def recipe_for(rom, adapter=None):
     from partydeck_hkmp import matches as matches_hkmp
     from partydeck_hkmultiplayer import matches as matches_multi
     from partydeck_dst import ADAPTER as DST, matches as matches_dst
+    if adapter is None and matches_story_coop(rom):
+        adapter = STORY_COOP
     if adapter is None and matches_bo2(rom):
         adapter = BO2
     if adapter is None and matches_dst(rom):

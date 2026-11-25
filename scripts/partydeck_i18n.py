@@ -159,6 +159,25 @@ EN = {
     'Black Ops II : aucun client LAN reconnu dans le dossier du jeu.': 'Black Ops II: no recognized LAN client in the game directory.',
     'Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.': 'Create a custom game on P1, then join from the other instances.',
     'Mode de jeu': 'Game mode',
+    'Ocarina of Time · Story Co-op': 'Ocarina of Time · Story Co-op',
+    'Archive Story Co-op invalide ({p0}).': 'Invalid Story Co-op archive ({p0}).',
+    'Fournissez une ROM .z64 compatible ou un fichier oot.o2r / oot-mq.o2r.':
+        'Provide a supported .z64 ROM or an oot.o2r / oot-mq.o2r file.',
+    'Utilisez une sortie .wine pour une ROM .z64, ou .wsquashfs avec un fichier .o2r.':
+        'Use a .wine output for a .z64 ROM, or .wsquashfs with an .o2r file.',
+    'La destination existe déjà : {p0}': 'Destination already exists: {p0}',
+    'Téléchargement de Story Co-op {p0}.': 'Downloading Story Co-op {p0}.',
+    'Story Co-op prêt : {p0}': 'Story Co-op is ready: {p0}',
+    'Serveur Story Co-op introuvable dans {p0} ({p1}).': 'Story Co-op server missing from {p0} ({p1}).',
+    'Fichier serveur Story Co-op {p0} invalide : {p1}.': 'Invalid Story Co-op {p0} server file: {p1}.',
+    'Story Co-op : serveur local prêt sur {p0}:{p1}.': 'Story Co-op: local server ready on {p0}:{p1}.',
+    'Story Co-op : le serveur ne démarre pas. Consultez {p0}.': 'Story Co-op: the server failed to start. See {p0}.',
+    'Story Co-op : espace privé du joueur requis.': 'Story Co-op: private player namespace required.',
+    'Story Co-op : soh.exe {p0} est requis dans le dossier du jeu.':
+        'Story Co-op: soh.exe {p0} is required in the game folder.',
+    'Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.':
+        'Story Co-op: first run the game solo to generate oot.o2r.',
+    'Story Co-op {p0} : connexion automatique à {p1}.': 'Story Co-op {p0}: automatic connection to {p1}.',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',
     'Manettes détectées : {p0}. Manettes nécessaires : {p1}.': 'Controllers detected: {p0}. Controllers required: {p1}.',
     'Le clavier et la souris sont réservés aux menus pour ce jeu.': 'The keyboard and mouse are reserved for menus in this game.',

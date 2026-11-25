@@ -20,6 +20,7 @@ from urllib.error import URLError
 
 from partydeck_bo2 import ADAPTER as BO2, defaults as bo2_defaults, matches as matches_bo2, validate as validate_bo2
 from partydeck_dst import ADAPTER as DST, defaults as dst_defaults, matches as matches_dst, validate as validate_dst
+from partydeck_story_coop import ADAPTER as STORY_COOP, matches as matches_story_coop
 from partydeck_migrate import MEDIA_FIELDS, PARTY_ROMS
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
@@ -71,6 +72,8 @@ def defaults(rom):
         data.update(adapter=DST, dst=dst_defaults())
     if matches_bo2(rom):
         data.update(adapter=BO2, bo2=bo2_defaults(rom))
+    if matches_story_coop(rom):
+        data['adapter'] = STORY_COOP
     return data
 
 
@@ -88,7 +91,7 @@ def validate(data, rom):
     data.pop('keep_latest_runner', None)
     if data.get('gpu','auto') not in ('auto','system','nvidia'):
         raise ValueError(tr('Choix du GPU invalide.'))
-    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet", DST, BO2):
+    if data.get("adapter", "standard") not in ("standard", "soh-anchor", "borderlands2", "sm64coopdx", "l4d2-goldberg", "nfsmw-lan", "hollowknight-hkmp", "hollowknight-hkmultiplayer", "celestenet", DST, BO2, STORY_COOP):
         raise ValueError(tr("Adaptateur Windows Party inconnu."))
     if data.get("adapter") == "soh-anchor":
         from partydeck_anchor import validate as validate_anchor

@@ -37,6 +37,7 @@ Windows Party — Batocera
   windows-party verifier
   windows-party configurer ["/chemin/Jeu.wsquashfs"]
   windows-party ajouter "/chemin/Jeu.wine" [auto|1|2|3|4] [horizontal|vertical] [auto|clavier-j1|clavier-j2]
+  windows-party preparer-ocarina "/chemin/oot.o2r" "/chemin/Ocarina Story Co-op.wsquashfs"
   windows-party profil "/chemin/Jeu.wsquashfs"
   windows-party stockage [bilan|nettoyer|purger-caches|reglages]
 Formats : .wine, .pc, .wsquashfs
@@ -171,6 +172,7 @@ case "${1:-verifier}" in
     -h|--help) usage; exit 0 ;;
     configurer) [[ $# -le 2 ]] || { usage; exit 2; } ;;
     profil) [[ $# -eq 2 ]] || { usage; exit 2; } ;;
+    preparer-ocarina) [[ $# -eq 3 ]] || { usage; exit 2; } ;;
     installer|verifier) [[ $# -le 1 ]] || die 'Argument inattendu.' ;;
     stockage) [[ $# -le 2 ]] || { usage; exit 2; } ;;
     coop|preparer-coop|party|ajouter) [[ $# -ge 2 && $# -le 5 ]] || { usage; exit 2; } ;;
@@ -204,6 +206,11 @@ fi
 exec 9>"$base/session.lock"
 flock -n 9 || die 'Une session Windows Party est déjà en cours.'
 
+if [[ ${1:-verifier} == preparer-ocarina ]]; then
+    python3 "$base/partydeck_story_coop.py" "$2" "$3" 9>&-
+    exit 0
+fi
+
 if [[ ${1:-verifier} == preparer-coop || ${1:-verifier} == ajouter ]]; then
     [[ -x $launcher && -f $coop_helper ]] || die 'Installez cette version de PartyDeck avant de préparer un port coop.'
     mode=prepare
@@ -236,6 +243,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_bo2.py && -f $source_dir/partydeck_plutonium.py ]] || die 'Module Black Ops II absent / Black Ops II module missing.'
     [[ -f $source_dir/partydeck_l4d2.py ]] || die 'Module Left 4 Dead 2 absent du paquet.'
     [[ -f $source_dir/partydeck_celestenet.py ]] || die 'Module CelesteNet absent / CelesteNet module missing.'
+    [[ -f $source_dir/partydeck_story_coop.py ]] || die 'Module Story Co-op absent / Story Co-op module missing.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_dir/partydeck_virtual_input.py ]] || die 'Module contrôles virtuels absent du paquet.'
@@ -314,6 +322,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
     cp -- "$source_dir/partydeck_celestenet.py" "$staging/partydeck_celestenet.py"
     mv -fT -- "$staging/partydeck_celestenet.py" "$base/partydeck_celestenet.py"
+    cp -- "$source_dir/partydeck_story_coop.py" "$staging/partydeck_story_coop.py"
+    mv -fT -- "$staging/partydeck_story_coop.py" "$base/partydeck_story_coop.py"
     cp -- "$source_dir/partydeck_bo2.py" "$staging/partydeck_bo2.py"
     mv -fT -- "$staging/partydeck_bo2.py" "$base/partydeck_bo2.py"
     cp -- "$source_dir/partydeck_plutonium.py" "$staging/partydeck_plutonium.py"

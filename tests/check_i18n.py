@@ -56,6 +56,8 @@ for language, mode, multiplayer, original, catalog, horizontal, automatic in (
         ('bo2.automatic_join', automatic, [True, False]),
         ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
     assert label_value('bo2.mode', 'original') == original
+    assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
+    assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']
     assert label_value('bo2.horizontal_render', 'native') == {
         'fr': 'Résolution de chaque moitié', 'en': 'Match each half of the screen'}[language]
     assert label_value('bo2.horizontal_render', '720p') == {
