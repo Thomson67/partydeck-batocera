@@ -306,6 +306,30 @@ def automatic_path(player, token, kind):
     return player / f'bo2-{token}.{kind}'
 
 
+def session_logs(player, token, started):
+    yield automatic_path(player, token, 'log')
+    # UMU can capture Wine's stdout in the runner's per-player log.
+    for path in (player / 'umu-logs').glob('runner-*.log'):
+        try:
+            if path.stat().st_mtime_ns >= started:
+                yield path
+        except OSError:
+            continue
+
+
+def startup_ready(player, token, started, mode):
+    asset = mode[2:].encode()
+    marker = re.compile(rb"Loading fastfile '?common_" + asset + rb"\b")
+    for path in session_logs(player, token, started):
+        try:
+            with path.open('rb') as stream:
+                if any(marker.search(line) for line in stream):
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 def join_window(display_file, outer_display):
     try:
         display = json.loads(display_file.read_text())
@@ -369,14 +393,10 @@ class AutoJoin:
     def host_output(self):
         # Wine normally writes to our tee. UMU captures Proton output in
         # separate per-player runner logs, so include only logs of this run.
-        session_log = automatic_path(self.host, self.token, 'log')
         logs = ([self.host_log] if self.host_log is not None else
-                [session_log, *(self.host / 'umu-logs').glob('runner-*.log')])
+                session_logs(self.host, self.token, self.started))
         for path in logs:
             try:
-                info = path.stat()
-                if path != session_log and info.st_mtime_ns < self.started:
-                    continue
                 with path.open('rb') as stream:
                     stream.seek(self.offsets.get(path, 0))
                     data = stream.read(262144)
@@ -482,7 +502,7 @@ def install_hook(base, rom, player):
     replacement = player / 'batocera-wine-bo2'
     log = None
     token = os.environ.get('PARTYDECK_SESSION_TOKEN', '')
-    if os.environ.get(AUTO_JOIN) == '1' and re.fullmatch(r'[a-f0-9]{32}', token):
+    if mode in PLUTONIUM_MODES and re.fullmatch(r'[a-f0-9]{32}', token):
         log = automatic_path(player, token, 'log')
     atomic_write(replacement, instrument_native(binary.read_text(), hook, mode, log=log), 0o755)
     subprocess.run(['bash', '-n', str(replacement)], check=True)

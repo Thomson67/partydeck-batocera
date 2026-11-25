@@ -62,12 +62,39 @@ assert coop.assign_players([pad, keyboard, mouse], "2", "clavier-j1") == [[keybo
 assert coop.assign_players([pad, keyboard, mouse], "auto", "auto", False) == [[pad]]
 assert coop.assign_players([pad, another, keyboard, mouse], "auto", "auto", False) == [[pad], [another]]
 assert coop.assign_players([pad, another, keyboard, mouse], "2", "clavier-j2", False) == [[pad], [another]]
-for devices, count in (([keyboard, mouse], "auto"), ([pad, keyboard, mouse], "2")):
+for devices, count, detected, required in (([keyboard, mouse], "auto", 0, 1),
+                                           ([pad, keyboard, mouse], "2", 1, 2)):
     try:
         coop.assign_players(devices, count, "auto", False)
         raise AssertionError("Keyboard assigned despite disabled option")
-    except ValueError:
-        pass
+    except ValueError as error:
+        assert str(error).splitlines()[0] == (
+            f'Manettes détectées : {detected}. Manettes nécessaires : {required}.')
+        assert 'réservés aux menus' in str(error)
+
+# The graphical launch entry point displays the cause and preserves the error
+# in the session journal, including on systems where the dialog cannot open.
+with tempfile.TemporaryDirectory() as folder:
+    game = Path(folder) / 'Game.wine'
+    game.mkdir()
+    args = [str(path), 'play-party', folder, folder, folder, str(game), '2']
+    problem = ValueError('Manettes détectées : 1. Manettes nécessaires : 2.')
+    with patch.object(coop.sys, 'argv', args), \
+         patch.object(coop, 'run_session', side_effect=problem), \
+         patch.dict(os.environ, DISPLAY=':0'), \
+         patch.object(coop.C, 'CDLL') as library, contextlib.redirect_stderr(io.StringIO()) as err:
+        assert coop.main() == 1
+        library.assert_called_once_with('libSDL2-2.0.so.0')
+        library.return_value.SDL_ShowSimpleMessageBox.assert_called_once_with(
+            0x10, 'Windows Party · Lancement interrompu'.encode(), str(problem).encode(), None)
+        assert str(problem) in err.getvalue()
+    with patch.object(coop.sys, 'argv', args), \
+         patch.object(coop, 'run_session', side_effect=problem), \
+         patch.dict(os.environ, DISPLAY=':0'), \
+         patch.object(coop.C, 'CDLL', side_effect=OSError('SDL unavailable')), \
+         contextlib.redirect_stderr(io.StringIO()) as err:
+        assert coop.main() == 1
+        assert str(problem) in err.getvalue()
 
 with patch.object(coop.subprocess, "run") as run:
     run.return_value.stdout = "321\n"
@@ -122,23 +149,26 @@ with tempfile.TemporaryDirectory() as temp, \
     assert 'pass_fds' not in popen.call_args.kwargs
     assert command[command.index('PARTYDECK_PRIVATE_LAN_IP')+1]=='192.168.247.11'
 
-for split, second_position, inputs, shared, party, virtual in [
-    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, False,False),
-    ("vertical", (960, 0, 960, 1080), [pad, keyboard, mouse], False, False,False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another], True, False,False),
-    ("vertical", (960, 0, 960, 1080), [pad, another], True, False,False),
-    ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True,False),
-    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, True,True),
+for split, second_position, inputs, shared, party, virtual, bo2 in [
+    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, False, False, False),
+    ("vertical", (960, 0, 960, 1080), [pad, keyboard, mouse], False, False, False, False),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, False, False, False),
+    ("vertical", (960, 0, 960, 1080), [pad, another], True, False, False, False),
+    ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True, False, False),
+    ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, True, True, False),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, True),
 ]:
     with tempfile.TemporaryDirectory() as temp, contextlib.ExitStack() as stack:
         def mock(obj, attr, **kwargs):
             return stack.enter_context(patch.object(obj, attr, **kwargs))
         base = Path(temp)
         stack.enter_context(patch("partydeck_bottles.ROOT",base/"bottles"))
-        game = base / "Game.wsquashfs"
+        game = base / ("Black Ops II.wsquashfs" if bo2 else "Game.wsquashfs")
         if party:
             profile = defaults(game)
             profile['keyboard_player'] = virtual
+            if bo2:
+                profile['bo2']['automatic_join'] = False
             save_profile(base, game, profile)
             mock(coop, "PARTY_SAVES", new=base / "party-saves")
         mock(coop.shutil, "which", return_value="/path")
@@ -157,6 +187,14 @@ for split, second_position, inputs, shared, party, virtual in [
         processes = [Mock(pid=123, **{"poll.return_value": None, "wait.return_value": 0}),
                      Mock(pid=456, **{"poll.return_value": None, "wait.return_value": 0})]
         starts = mock(coop, "start_player", side_effect=processes)
+        if bo2:
+            stack.enter_context(patch('partydeck_plutonium.prepare'))
+            stack.enter_context(patch('partydeck_private_lan.PrivateLAN'))
+            def read_boot(player, token, started, mode):
+                assert starts.call_count == 1
+                assert player.name == 'j1' and token and started and mode == 't6mp'
+                return ready.call_count == 2
+            ready = stack.enter_context(patch('partydeck_bo2.startup_ready', side_effect=read_boot))
         classes = [f"partydeck-coop-{os.getpid()}-j1", f"partydeck-coop-{os.getpid()}-j2"]
         windows = mock(coop, "top_window", side_effect={classes[0]:"810", classes[1]:"811"}.get)
         place = mock(coop, "place_window", return_value=True)
@@ -177,6 +215,9 @@ for split, second_position, inputs, shared, party, virtual in [
             watcher.return_value.start.assert_called_once()
             watcher.return_value.close.assert_called_once()
             assert starts.call_args_list[1].args[4]==[keyboard,mouse]
+        if bo2:
+            assert ready.call_count == 2
+            assert 'attente de l’initialisation de J1' in output.getvalue()
         assert place.call_args_list[1].args == ("811", second_position)
         assert "Joueurs : 2" in output.getvalue() and "Fenêtre J2 placée : 811" in output.getvalue()
 with tempfile.TemporaryDirectory() as temp:

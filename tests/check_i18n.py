@@ -69,9 +69,21 @@ for language, mode, multiplayer, original, catalog, horizontal, automatic in (
         'fr': 'Black Ops II J2 : connexion confirmée par J1.',
         'en': 'Black Ops II J2: P1 confirmed the connection.',
     }[language]
+    assert lang.tr('Black Ops II {p0} : attente de l’initialisation de {p1}.', p0='J2', p1='J1') == {
+        'fr': 'Black Ops II J2 : attente de l’initialisation de J1.',
+        'en': 'Black Ops II J2: waiting for J1 to initialize.',
+    }[language]
     assert label_value('bo2.mode', 'plutonium-mp') == f'{multiplayer} · Plutonium LAN'
     assert label_value('bo2.mode', 'plutonium-zm') == 'Zombies · Plutonium LAN'
     assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'
+lang.set_language('fr')
+
+for language, title, message in (
+        ('fr', 'Windows Party · Lancement interrompu', 'Manettes détectées : 1. Manettes nécessaires : 2.'),
+        ('en', 'Windows Party · Launch stopped', 'Controllers detected: 1. Controllers required: 2.')):
+    lang.set_language(language)
+    assert lang.tr('Windows Party · Lancement interrompu') == title
+    assert lang.tr('Manettes détectées : {p0}. Manettes nécessaires : {p1}.', p0=1, p1=2) == message
 lang.set_language('fr')
 
 # Surface the launcher's reason rather than its long argv, in either UI locale.

@@ -129,6 +129,9 @@ EN = {
     'Option de connexion automatique Black Ops II invalide.': 'Invalid Black Ops II automatic join setting.',
     'Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.': 'Start the custom game on P1. The other players join automatically.',
     'Black Ops II : les invités attendent le lancement de la partie de J1.': 'Black Ops II: guests are waiting for P1 to start the match.',
+    'Black Ops II {p0} : attente de l’initialisation de {p1}.': 'Black Ops II {p0}: waiting for {p1} to initialize.',
+    'Black Ops II {p0} : initialisation de {p1} non confirmée après 30 s.':
+        'Black Ops II {p0}: {p1} initialization not confirmed after 30 s.',
     'Black Ops II : partie de J1 détectée.': 'Black Ops II: P1’s match detected.',
     'Black Ops II {p0} : connexion à la partie de J1 demandée.': 'Black Ops II {p0}: requested to join P1’s match.',
     'Black Ops II {p0} : connexion confirmée par J1.': 'Black Ops II {p0}: P1 confirmed the connection.',
@@ -156,6 +159,14 @@ EN = {
     'Black Ops II : aucun client LAN reconnu dans le dossier du jeu.': 'Black Ops II: no recognized LAN client in the game directory.',
     'Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.': 'Create a custom game on P1, then join from the other instances.',
     'Mode de jeu': 'Game mode',
+    'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',
+    'Manettes détectées : {p0}. Manettes nécessaires : {p1}.': 'Controllers detected: {p0}. Controllers required: {p1}.',
+    'Le clavier et la souris sont réservés aux menus pour ce jeu.': 'The keyboard and mouse are reserved for menus in this game.',
+    'Reconnectez les manettes ou vérifiez les réglages de l’onglet Session.': 'Reconnect the controllers or check the settings in the Session tab.',
+    'Périphériques insuffisants. Joueurs demandés : {p0}. Manettes détectées : {p1}.':
+        'Not enough input devices. Players requested: {p0}. Controllers detected: {p1}.',
+    'Vérifiez les manettes, le clavier et la souris dans les réglages de l’onglet Session.':
+        'Check controller, keyboard and mouse settings in the Session tab.',
     'Versus Réalisme': 'Realism Versus',
     'Survie': 'Survival',
     'Survie versus': 'Versus Survival',

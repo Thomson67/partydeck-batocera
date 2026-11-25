@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -44,6 +45,7 @@ UMU_SESSION_STATE = Path("/run/umu-batocera")
 UMU_PRIVATE = ("compatdata", "materialized-prefixes", "merged-prefixes",
                "gameviews", "exports")
 SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+SDL_MESSAGEBOX_ERROR = 0x10
 MOUNT_CAPS = ["--cap-add", "CAP_SYS_ADMIN", "--cap-add", "CAP_MKNOD"]
 # AppRun and sharun set these for the bundled compositor. The native Wine
 # runner must resolve its utilities and graphics libraries as on Batocera.
@@ -120,9 +122,13 @@ def read_input_devices(dev=Path("/dev/input"), sys_input=Path("/sys/class/input"
 def assign_players(devices, count, input_mode, allow_keyboard_player=True):
     pads = [d for d in devices if d.category == GAMEPADS]
     if not allow_keyboard_player:
-        wanted = min(4, len(pads)) if count == "auto" else int(count)
-        if wanted < 1 or len(pads) < wanted:
-            raise ValueError("Manettes insuffisantes : le clavier/souris est réservé aux menus pour ce jeu.")
+        wanted = max(1, min(4, len(pads))) if count == "auto" else int(count)
+        if len(pads) < wanted:
+            raise ValueError('\n'.join((
+                tr('Manettes détectées : {p0}. Manettes nécessaires : {p1}.', p0=len(pads), p1=wanted),
+                tr('Le clavier et la souris sont réservés aux menus pour ce jeu.'),
+                tr('Reconnectez les manettes ou vérifiez les réglages de l’onglet Session.'),
+            )))
         return [[pad] for pad in pads[:wanted]]
     keyboard_mouse = [next((d for d in devices if d.category == kind), None)
                       for kind in (KEYBOARDS, MICE)]
@@ -137,7 +143,11 @@ def assign_players(devices, count, input_mode, allow_keyboard_player=True):
     keyboard_index = 0 if input_mode == "clavier-j1" else (
         1 if input_mode == "clavier-j2" else count - 1)
     if use_keyboard and (not available or keyboard_index >= count or len(pads) < count - 1):
-        raise ValueError("Périphériques insuffisants pour la configuration demandée.")
+        raise ValueError('\n'.join((
+            tr('Périphériques insuffisants. Joueurs demandés : {p0}. Manettes détectées : {p1}.',
+               p0=count, p1=len(pads)),
+            tr('Vérifiez les manettes, le clavier et la souris dans les réglages de l’onglet Session.'),
+        )))
     return [keyboard_mouse if use_keyboard and i == keyboard_index else [pads.pop(0)]
             for i in range(count)]
 
@@ -1103,7 +1113,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     boxes = layout(monitor, len(players), split)
     session_token=uuid.uuid4().hex
     started = time.time_ns()
-    from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path
+    from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready
     bo2_mode = PLUTONIUM_MODES.get(profile['bo2']['mode']) if profile and profile.get('adapter') == BO2 else None
     if bo2_mode:
         from partydeck_plutonium import prepare as prepare_plutonium
@@ -1226,6 +1236,20 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 prepare(player,saves,original,target)
                 bottle_players.append((player,saves))
             print(f"J{index} : {', '.join(str(d.node) for d in devices)} → {rectangle}", flush=True)
+            if bo2_mode and processes:
+                previous = states[-1].parent
+                deadline = time.monotonic() + 30
+                print(tr('Black Ops II {p0} : attente de l’initialisation de {p1}.',
+                         p0=player.name.upper(), p1=previous.name.upper()), flush=True)
+                while not startup_ready(previous, session_token, started, bo2_mode):
+                    result = session_result(processes, states, wayland)
+                    if result is not None:
+                        return result
+                    if time.monotonic() >= deadline:
+                        print(tr('Black Ops II {p0} : initialisation de {p1} non confirmée après 30 s.',
+                                 p0=player.name.upper(), p1=previous.name.upper()), flush=True)
+                        break
+                    time.sleep(.25)
             state = player/f'session-{uuid.uuid4().hex}.json'
             processes.append(start_player(app, player, original, target, devices, rectangle,
                                           window_classes[index - 1],
@@ -1375,7 +1399,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 path.with_suffix('.display').unlink(missing_ok=True)
                 path.with_suffix('.runner').unlink(missing_ok=True)
                 path.with_suffix('.native').unlink(missing_ok=True)
-                if bo2_automatic:
+                if bo2_mode:
                     for kind in ('log', 'display'):
                         automatic_path(path.parent, session_token, kind).unlink(missing_ok=True)
                 if dst:
@@ -1388,6 +1412,21 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     print(f'PartyDeck DST: readiness cleanup: {error}', flush=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
+
+
+def show_launch_error(message):
+    if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+        return
+    try:
+        sdl = C.CDLL('libSDL2-2.0.so.0')
+        show = sdl.SDL_ShowSimpleMessageBox
+        show.argtypes = (C.c_uint32, C.c_char_p, C.c_char_p, C.c_void_p)
+        show.restype = C.c_int
+        body = '\n'.join(textwrap.fill(line, width=75) for line in message.splitlines())
+        show(SDL_MESSAGEBOX_ERROR, tr('Windows Party · Lancement interrompu').encode(), body.encode(), None)
+    except (OSError, AttributeError):
+        # The original error is already in the session journal.
+        pass
 
 
 def main():
@@ -1442,8 +1481,13 @@ def main():
         print("Actualise les listes de jeux dans EmulationStation, puis ouvre "
               + ("Windows Party." if party else "Ports."))
         return 0
-    return run_session(args.app, args.base, original, target, args.count,
-                       args.split, args.input_mode, party=args.mode == "play-party")
+    try:
+        return run_session(args.app, args.base, original, target, args.count,
+                           args.split, args.input_mode, party=args.mode == "play-party")
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"PartyDeck Wine : {error}", file=sys.stderr, flush=True)
+        show_launch_error(str(error))
+        return 1
 
 
 if __name__ == "__main__":

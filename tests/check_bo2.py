@@ -198,6 +198,12 @@ with TemporaryDirectory() as folder:
     log = bo2.automatic_path(host, token, 'log')
     display = bo2.automatic_path(guest, token, 'display')
     initialization = b'------- Game Initialization -------\n'
+    log.write_bytes(b'Loading fastfile code_post_gfx_mp\nCould not load image "$lineargray".\n')
+    assert not bo2.startup_ready(host, token, 0, 't6mp')
+    with log.open('ab') as stream:
+        stream.write(b"Loading fastfile 'common_mp'\n")
+    assert bo2.startup_ready(host, token, 0, 't6mp')
+    assert not bo2.startup_ready(host, token, 0, 't6zm')
     for title in ('Plutonium T6 Multiplayer (r5369 LAN)', 'Plutonium T6: Zombies',
                   'Plutonium T6 MP', 'Call of Duty(R): Black Ops II - Multiplayer'):
         assert re.search(bo2.GAME_WINDOW, title, re.I), title
@@ -298,6 +304,10 @@ with TemporaryDirectory() as folder:
         observer = bo2.AutoJoin([host, guest], token, 'plutonium-mp', ':0', 0)
         log.write_bytes(b'Preparing UMU\n')
         runner_log.write_bytes(initialization + b"client 'Player 1' connected\n")
+        with runner_log.open('ab') as stream:
+            stream.write(b'Loading fastfile common_zm\n')
+        assert bo2.startup_ready(host, token, runner_log.stat().st_mtime_ns, 't6zm')
+        assert not bo2.startup_ready(host, token, runner_log.stat().st_mtime_ns + 1, 't6zm')
         observer.poll(1)
         observer.poll(3)
         with runner_log.open('ab') as stream:
