@@ -906,12 +906,13 @@ def start_compositor(command, environment, output, check_state):
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
-                 track_runner=False, dst=False, split=None, story_coop=None, trace_windows=False):
+                 track_runner=False, dst=False, split=None, story_coop=None, trace_windows=False, bo2_settings=None):
     _, _, width, height = rectangle
     bo2_resolution = None
     bo2_desktop = None
     bo2_publish_display = False
-    from partydeck_bo2 import ADAPTER as BO2, PUBLISH_DISPLAY, DESKTOP_MODE, PLUTONIUM_MODES, desktop_size, render_size
+    from partydeck_bo2 import (ADAPTER as BO2, PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
+                               desktop_size, render_size)
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if trace_windows:
@@ -923,11 +924,12 @@ def start_player(app, player, original, target, devices, rectangle, window_class
             profile = read_profile(base,original)
             adapter = profile.get('adapter')
             if adapter == BO2:
-                settings = profile['bo2']
+                bo2_settings = bo2_settings if bo2_settings is not None else profile['bo2']
+                settings = bo2_settings
                 bo2_publish_display = (
                     network is not None and settings['mode'] in PLUTONIUM_MODES
                     and (settings['automatic_join'] or (
-                        player.name == 'j1' and settings['mode'] == 'plutonium-mp' and settings['open_custom_lobby']
+                        player.name == 'j1' and settings['open_custom_lobby']
                     ))
                 )
                 horizontal_render = 'standard'
@@ -980,9 +982,11 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_BO2_RESOLUTION', None)
     environment.pop(DESKTOP_MODE, None)
     environment.pop(PUBLISH_DISPLAY, None)
+    environment.pop(SESSION_MODE, None)
     if bo2_publish_display:
         environment[PUBLISH_DISPLAY] = '1'
     if bo2_resolution is not None:
+        environment[SESSION_MODE] = bo2_settings['mode']
         environment['PARTYDECK_BO2_RESOLUTION'] = bo2_resolution
         environment[DESKTOP_MODE] = bo2_desktop
     environment.pop('PARTYDECK_SESSION_TOKEN',None)
@@ -1305,7 +1309,15 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     session_token=uuid.uuid4().hex
     started = time.time_ns()
     from partydeck_bo2 import ADAPTER as BO2, PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready
-    bo2_mode = PLUTONIUM_MODES.get(profile['bo2']['mode']) if profile and profile.get('adapter') == BO2 else None
+    bo2_settings = None
+    bo2_mode = None
+    if profile and profile.get('adapter') == BO2:
+        from partydeck_couch import choose_bo2_mode
+        selected_mode = choose_bo2_mode(profile['bo2'], len(players))
+        if selected_mode is None:
+            return 0
+        bo2_settings = profile['bo2'] | {'mode': selected_mode}
+        bo2_mode = PLUTONIUM_MODES.get(selected_mode)
     if bo2_mode:
         from partydeck_plutonium import prepare as prepare_plutonium
         prepare_plutonium(base, bo2_mode)
@@ -1424,8 +1436,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             network=PrivateLAN(len(players),shared=True) if shared_lan else PrivateLAN(len(players))
             network.start()
         if network is not None and bo2_mode:
-            bo2_automatic = profile['bo2']['automatic_join']
-            bo2_custom_lobby = bo2_mode == 't6mp' and profile['bo2']['open_custom_lobby']
+            bo2_automatic = bo2_settings['automatic_join']
+            bo2_custom_lobby = bo2_settings['open_custom_lobby']
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1474,7 +1486,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                              session_token=session_token, player_count=len(players),
                              l4d2_launch=l4d2_launch, celestenet=celestenet,
                              celeste_options=celeste_options, track_runner=track_runner, dst=dst,
-                             split=split, story_coop=story_coop, trace_windows=trace_windows)
+                             split=split, story_coop=story_coop, trace_windows=trace_windows, bo2_settings=bo2_settings)
             processes.append(launch())
             if bo2_mode:
                 bo2_startup_deadline = time.monotonic() + 10
@@ -1485,7 +1497,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if bo2_automatic or bo2_custom_lobby:
             watched_players = states if bo2_automatic else states[:1]
             bo2_join = AutoJoin([state.parent for state in watched_players], session_token,
-                                profile['bo2']['mode'], os.environ.get('DISPLAY', ''), started,
+                                bo2_settings['mode'], os.environ.get('DISPLAY', ''), started,
                                 open_custom_lobby=bo2_custom_lobby)
             bo2_join.start()
         if virtual_input:

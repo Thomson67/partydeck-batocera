@@ -195,12 +195,15 @@ for split, second_position, inputs, shared, party, virtual, title in [
                      Mock(pid=456, **{"poll.return_value": None, "wait.return_value": 0})]
         starts = mock(coop, "start_player", side_effect=processes)
         if bo2:
-            stack.enter_context(patch('partydeck_plutonium.prepare'))
+            mode = 'plutonium-zm' if custom_lobby else 'plutonium-mp'
+            executable = 't6zm' if custom_lobby else 't6mp'
+            choose_bo2 = stack.enter_context(patch('partydeck_couch.choose_bo2_mode', return_value=mode))
+            prepare_plutonium = stack.enter_context(patch('partydeck_plutonium.prepare'))
             stack.enter_context(patch('partydeck_private_lan.PrivateLAN'))
             observer = stack.enter_context(patch('partydeck_bo2.AutoJoin'))
-            def read_boot(player, token, started, mode):
+            def read_boot(player, token, started, game):
                 assert starts.call_count == 1
-                assert player.name == 'j1' and token and started and mode == 't6mp'
+                assert player.name == 'j1' and token and started and game == executable
                 return ready.call_count == 2
             ready = stack.enter_context(patch('partydeck_bo2.startup_ready', side_effect=read_boot))
         if story:
@@ -267,10 +270,14 @@ for split, second_position, inputs, shared, party, virtual, title in [
             assert starts.call_args_list[1].args[4]==[keyboard,mouse]
         if bo2:
             assert ready.call_count == 2
+            choose_bo2.assert_called_once_with(profile['bo2'], 2)
+            prepare_plutonium.assert_called_once_with(base, executable)
+            assert all(call.kwargs['bo2_settings']['mode'] == mode for call in starts.call_args_list)
             assert 'attente de l’initialisation de J1' in output.getvalue()
             if custom_lobby:
                 observer.assert_called_once()
                 assert [player.name for player in observer.call_args.args[0]] == ['j1']
+                assert observer.call_args.args[2] == 'plutonium-zm'
                 assert observer.call_args.kwargs == {'open_custom_lobby': True}
                 observer.return_value.start.assert_called_once()
             else:
@@ -380,12 +387,16 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
                       'bo2-j2', saves=base/'saves', player_count=2, split='vertical')
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'
 
-    from partydeck_bo2 import PUBLISH_DISPLAY
+    from partydeck_bo2 import PUBLISH_DISPLAY, SESSION_MODE
     settings.update(automatic_join=False, open_custom_lobby=True)
+    session_settings = settings | {'mode': 'plutonium-zm'}
     network = Mock()
     network.child_prefix.return_value = []
     network.address.return_value = '127.0.0.1'
     for player, publish in (('j1', True), ('j2', False)):
         coop.start_player(base, base/player, game, game, [], (0, 0, 1920, 540),
-                          f'bo2-{player}', saves=base/'saves', player_count=2, split='horizontal', network=network)
-        assert (popen.call_args.kwargs['env'].get(PUBLISH_DISPLAY) == '1') is publish
+                          f'bo2-{player}', saves=base/'saves', player_count=2, split='horizontal', network=network,
+                          bo2_settings=session_settings)
+        environment = popen.call_args.kwargs['env']
+        assert environment[SESSION_MODE] == 'plutonium-zm'
+        assert (environment.get(PUBLISH_DISPLAY) == '1') is publish

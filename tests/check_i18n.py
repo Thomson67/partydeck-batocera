@@ -47,24 +47,19 @@ for language,host,automatic,campaign in (
     assert label_value('l4d2.campaign','c14m1_junkyard')=='14 · The Last Stand'
     l4d2_options={key for key,_,_ in fields(2,'l4d2-goldberg')}
     assert {'l4d2.campaign','l4d2.campaign_mode'}.isdisjoint(l4d2_options)
-for language, mode, multiplayer, original, catalog, horizontal, automatic in (
-        ('fr', 'Mode de jeu', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental', 'Rendu en partage horizontal', 'Rejoindre automatiquement la partie de J1'),
-        ('en', 'Game mode', 'Multiplayer', 'Original launch', 'Experimental LAN', 'Horizontal split-screen rendering', 'Automatically join P1’s match')):
+from partydeck_bo2 import MODES as BO2_MODES
+
+for language, multiplayer, original, catalog, horizontal, automatic in (
+        ('fr', 'Multijoueur', 'Lancement d’origine', 'LAN expérimental', 'Rendu en partage horizontal', 'Rejoindre automatiquement la partie de J1'),
+        ('en', 'Multiplayer', 'Original launch', 'Experimental LAN', 'Horizontal split-screen rendering', 'Automatically join P1’s match')):
     lang.set_language(language)
     assert fields(1, 'black-ops-2') == [
-        ('bo2.mode', mode, ['plutonium-mp', 'plutonium-zm', 'original']),
         ('bo2.open_custom_lobby', 'Ouvrir Parties personnalisées au démarrage' if language == 'fr'
          else 'Open Custom Games at startup', [False, True]),
         ('bo2.automatic_join', automatic, [True, False]),
         ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
-    model = SimpleNamespace(data={'adapter': 'black-ops-2', 'bo2': {'mode': 'plutonium-mp'}},
-                            celeste_skins=[], story_skins=[])
-    app = SimpleNamespace(tab=1, model=model)
-    for selected in ('plutonium-mp', 'plutonium-zm', 'original'):
-        model.data['bo2']['mode'] = selected
-        assert any(key == 'bo2.open_custom_lobby' for key, _, _ in App.current_fields(app)) == (
-            selected == 'plutonium-mp')
-    assert label_value('bo2.mode', 'original') == original
+    assert lang.tr(BO2_MODES['original']) == original
+    assert lang.tr('Choisir le mode de jeu') == ('Choisir le mode de jeu' if language == 'fr' else 'Choose the game mode')
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
     assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']
     assert label_value('bo2.horizontal_render', 'native') == {
@@ -84,8 +79,8 @@ for language, mode, multiplayer, original, catalog, horizontal, automatic in (
         'fr': 'Black Ops II J2 : attente de l’initialisation de J1.',
         'en': 'Black Ops II J2: waiting for J1 to initialize.',
     }[language]
-    assert label_value('bo2.mode', 'plutonium-mp') == f'{multiplayer} · Plutonium LAN'
-    assert label_value('bo2.mode', 'plutonium-zm') == 'Zombies · Plutonium LAN'
+    assert lang.tr(BO2_MODES['plutonium-mp']) == f'{multiplayer} · Plutonium LAN'
+    assert lang.tr(BO2_MODES['plutonium-zm']) == 'Zombies · Plutonium LAN'
     assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'
 lang.set_language('fr')
 

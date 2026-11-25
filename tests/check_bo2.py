@@ -62,6 +62,19 @@ with TemporaryDirectory() as folder:
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
     assert not bo2.matches(base / 'Black Ops III.wsquashfs')
 
+    native = base / 'batocera-wine'
+    native.write_text(source)
+    player = base / 'mode-hook' / 'j1'
+    player.mkdir(parents=True)
+    with patch.dict(os.environ, {bo2.SESSION_MODE: 'plutonium-zm'}), \
+         patch.object(bo2.shutil, 'which', return_value=str(native)), \
+         patch.object(bo2, 'client_path', return_value=None) as client, \
+         patch.object(bo2.subprocess, 'run'):
+        bo2.install_hook(base, rom, player)
+        client.assert_called_once_with(base, 't6zm')
+        assert "plutonium-zm" in (player / 'batocera-wine-bo2').read_text()
+        assert read_profile(base, rom)['bo2']['mode'] == 'plutonium-mp'
+
     installed_client = base / 'Plutonium from Windows'
     (installed_client / 'bin').mkdir(parents=True)
     (installed_client / 'games').mkdir()
@@ -102,8 +115,8 @@ with TemporaryDirectory() as folder:
         bink = game / 'BINKW32.DLL'
         bink.write_bytes(b'_BinkWaitStopAsyncThread@4\0')
         ini = settings / 'configs.user.ini'
-        ini.write_text('[user::general]\naccount_steamid=76561197960265729\nlanguage=french\n')
-        (settings / 'force_steamid.txt').write_text('76561197960265729\n')
+        ini.write_text('[user::general]\naccount_steamid=0\nlanguage=french\n')
+        (settings / 'force_steamid.txt').write_text('0\n')
         hook = [sys.executable, str(Path(bo2.__file__)), str(player), str(installed_client)]
         launcher = player / 'native.sh'
         launcher.write_text(bo2.instrument_native(source, hook, 'original'))
@@ -249,7 +262,7 @@ with TemporaryDirectory() as folder:
 
     with patch.object(bo2, 'click_menu_button', return_value=True) as click:
         online_click = call(host_display, ':0', bo2.ONLINE_BUTTON)
-        custom_click = call(host_display, ':0', bo2.CUSTOM_GAMES_BUTTON)
+        custom_click = call(host_display, ':0', bo2.CUSTOM_GAMES_BUTTONS['plutonium-mp'])
         startup = log.read_bytes()
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
         observer.poll(1)
@@ -275,6 +288,22 @@ with TemporaryDirectory() as folder:
         observer.poll(26)
         assert observer.lobby_button is None
         assert click.call_args_list == [online_click, custom_click, online_click]
+
+        click.reset_mock()
+        observer = bo2.AutoJoin([host], token, 'plutonium-zm', ':0', 0, open_custom_lobby=True)
+        observer.poll(1)
+        observer.poll(7)
+        click.assert_not_called()  # Multiplayer startup is not a Zombies signal.
+        with log.open('ab') as stream:
+            stream.write(b'Loading fastfile common_zm\n')
+        observer.poll(8)
+        observer.poll(13)
+        with log.open('ab') as stream:
+            stream.write(bo2.ONLINE_MENU_ENTERED + b'\n')
+        observer.poll(14)
+        observer.poll(15)
+        assert click.call_args_list == [online_click,
+            call(host_display, ':0', bo2.CUSTOM_GAMES_BUTTONS['plutonium-zm'])]
 
     with patch.object(bo2, 'join_window', return_value=True) as join:
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0)

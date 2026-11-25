@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 import sys
 import tempfile
-from unittest.mock import patch
+from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-from partydeck_couch import App,Model
+from partydeck_couch import App,Model,choose_bo2_mode
 from partydeck_profiles import defaults,save_profile,profile_path
 from partydeck_hkmultiplayer import defaults as multi_defaults
 from partydeck_i18n import set_language
@@ -84,4 +84,15 @@ with tempfile.TemporaryDirectory() as folder:
         app.action('up');assert app.library==len(app.model.rows)
         app.action('ok');assert desktop.call_count==2
     app.pg.quit()
+
+for mode, navigation, expected in (
+        ('plutonium-mp', ['down', 'ok'], 'plutonium-zm'),
+        ('plutonium-zm', ['down', 'ok'], 'original'),
+        ('original', ['up', 'ok'], 'plutonium-zm'),
+        ('plutonium-zm', ['back'], None)):
+    pads = Mock(devices=[object()], family='xbox')
+    pads.poll.side_effect = [[], [], navigation]
+    with patch('partydeck_couch.Pads', return_value=pads):
+        assert choose_bo2_mode({'mode': mode}, 2) == expected
+    assert not app.pg.display.get_init()
 print('UI: unique linked sources/aliases, saved adapter preserved, full-screen aspect ratios, French/English and two-line titles verified.')

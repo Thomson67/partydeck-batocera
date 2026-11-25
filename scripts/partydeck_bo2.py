@@ -29,13 +29,15 @@ PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
+SESSION_MODE = 'PARTYDECK_BO2_MODE'
 GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
                r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)')
 # Positions of the two native buttons in the verified 1920x540 layout.
 MENU_SIZE = (1920, 540)
 ONLINE_BUTTON = (668, 326)
-CUSTOM_GAMES_BUTTON = (700, 99)
-MP_STARTUP = re.compile(rb"Loading fastfile '?common_mp\b")
+CUSTOM_GAMES_BUTTONS = {'plutonium-mp': (700, 99), 'plutonium-zm': (700, 135)}
+STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?common_" + mode[2:].encode() + rb"\b")
+                   for mode in PLUTONIUM_MODES.values()}
 # Plutonium r5369 issues this command as it enters the online menu.
 ONLINE_MENU_ENTERED = b'Unknown command "session_rejoinsession"'
 # Xwayland's evdev keycode for the physical key under Escape (grave or ²).
@@ -329,8 +331,7 @@ def session_logs(player, token, started):
 
 
 def startup_ready(player, token, started, mode):
-    asset = mode[2:].encode()
-    marker = re.compile(rb"Loading fastfile '?common_" + asset + rb"\b")
+    marker = STARTUP_MARKERS[mode]
     for path in session_logs(player, token, started):
         try:
             with path.open('rb') as stream:
@@ -426,7 +427,7 @@ class AutoJoin:
         self.offsets = {}
         self.host_log = None
         self.host_ready = None
-        self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode == 'plutonium-mp' else None
+        self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in PLUTONIUM_MODES else None
         self.lobby_click_at = None
         self.lobby_deadline = None
         self.connected = set()
@@ -513,7 +514,8 @@ class AutoJoin:
                 self.lobby_button = None
             elif self.lobby_click_at is None:
                 self.lobby_click_at = now + 1
-        elif self.lobby_button == ONLINE_BUTTON and self.lobby_click_at is None and MP_STARTUP.search(line):
+        elif (self.lobby_button == ONLINE_BUTTON and self.lobby_click_at is None
+              and STARTUP_MARKERS[PLUTONIUM_MODES[self.mode]].search(line)):
             self.lobby_click_at = now + 5
             self.lobby_deadline = self.lobby_click_at + 20
 
@@ -531,7 +533,7 @@ class AutoJoin:
             return
         if self.lobby_button == ONLINE_BUTTON:
             print(tr('Black Ops II J1 : clic sur En ligne envoyé.'), flush=True)
-            self.lobby_button = CUSTOM_GAMES_BUTTON
+            self.lobby_button = CUSTOM_GAMES_BUTTONS[self.mode]
             self.lobby_click_at = None
             self.lobby_deadline = now + 20
         else:
@@ -588,7 +590,7 @@ def install_hook(base, rom, player):
     if binary is None:
         raise RuntimeError(tr('batocera-wine introuvable.'))
     binary = Path(binary).resolve()
-    mode = profile['bo2']['mode']
+    mode = validate({'mode': os.environ.get(SESSION_MODE, profile['bo2']['mode'])})['mode']
     source = client_path(base, PLUTONIUM_MODES.get(mode)) or base / 'plutonium'
     hook = [sys.executable, str(base / 'partydeck_bo2.py'), str(player), str(source)]
     replacement = player / 'batocera-wine-bo2'

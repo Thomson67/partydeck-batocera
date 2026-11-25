@@ -125,6 +125,10 @@ EN = {
     'Sur J1, démarrez la partie personnalisée. Dans la console de J2, entrez {p0}.': 'On P1, start the custom game. On P2, enter {p0} in the console.',
     'Lancement d’origine': 'Original launch',
     'Black Ops II · LAN expérimental': 'Black Ops II · Experimental LAN',
+    'Choisir le mode de jeu': 'Choose the game mode',
+    'Réglages Plutonium LAN · choisissez le mode au lancement': 'Plutonium LAN settings · choose the mode at launch',
+    'Sélecteur Black Ops II indisponible. Mode du profil utilisé.':
+        'Black Ops II mode selector unavailable. Using the profile’s mode.',
     'Rejoindre automatiquement la partie de J1': 'Automatically join P1’s match',
     'Ouvrir Parties personnalisées au démarrage': 'Open Custom Games at startup',
     'Option de connexion automatique Black Ops II invalide.': 'Invalid Black Ops II automatic join setting.',

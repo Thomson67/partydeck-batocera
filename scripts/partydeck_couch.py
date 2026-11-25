@@ -18,7 +18,7 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults, VOL
 from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom,
                               recipe_for, unlinked, set_unlinked)
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
-from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER, JOIN_HOST,
+from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, HORIZONTAL_RENDER,
                            defaults as bo2_defaults, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
@@ -125,8 +125,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('dst.text_scale', tr('Taille des textes des menus'), list(DST_TEXT_SIZES)),
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter == BO2:
-        return [('bo2.mode', tr('Mode de jeu'), list(BO2_MODES)),
-                ('bo2.open_custom_lobby', tr('Ouvrir Parties personnalisées au démarrage'), [False, True]),
+        return [('bo2.open_custom_lobby', tr('Ouvrir Parties personnalisées au démarrage'), [False, True]),
                 ('bo2.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
                 ('bo2.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))] if tab == 1 else []
     if adapter == STORY_COOP:
@@ -299,8 +298,6 @@ def label_value(key, value):
         return tr('Clavier/souris · J1') if value == 'clavier-j1' else tr('Clavier/souris · J2')
     if type(value) is bool:
         return tr('Activé') if value else tr('Désactivé')
-    if key == 'bo2.mode':
-        return tr(BO2_MODES[value])
     if key == 'bo2.horizontal_render':
         return tr(HORIZONTAL_RENDER[value])
     if key == 'adapter':
@@ -651,13 +648,13 @@ class Pads:
         return actions
 
 
-def choose_l4d2_session(settings, count):
-    """Collect one session's choices before any Wine instances are started."""
+def choose_session_screen(draw, settings, count, fallback, warning):
+    """Collect session choices before starting any Wine instances."""
     try:
         import pygame as pg
     except ImportError:
-        print(tr('Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.'),flush=True)
-        return l4d2_launch_options(settings)
+        print(warning, flush=True)
+        return fallback
     try:
         pg.display.init()
         pg.font.init()
@@ -665,13 +662,92 @@ def choose_l4d2_session(settings, count):
         screen=pg.display.set_mode((0,0),pg.FULLSCREEN)
     except pg.error:
         pg.quit()
-        print(tr('Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.'),flush=True)
-        return l4d2_launch_options(settings)
+        print(warning, flush=True)
+        return fallback
 
     try:
-        return l4d2_session_screen(pg,screen,settings,count)
+        return draw(pg, screen, settings, count)
     finally:
         pg.quit()
+
+
+def choose_l4d2_session(settings, count):
+    return choose_session_screen(l4d2_session_screen, settings, count, l4d2_launch_options(settings),
+                                 tr('Interface de partie Left 4 Dead 2 indisponible ; réglages du profil utilisés.'))
+
+
+def choose_bo2_mode(settings, count):
+    return choose_session_screen(bo2_session_screen, settings, count, settings['mode'],
+                                 tr('Sélecteur Black Ops II indisponible. Mode du profil utilisé.'))
+
+
+def draw_session_frame(pg, canvas, title, subtitle, text, orange, white, muted):
+    canvas.fill((15,22,32))
+    pg.draw.rect(canvas,(27,39,53),(36,26,1008,608),border_radius=26)
+    pg.draw.rect(canvas,orange,(76,70,42,5),border_radius=2)
+    text(title,52,white,76,88)
+    text(subtitle,23,muted,77,158)
+
+
+def bo2_session_screen(pg, screen, settings, _count):
+    pg.display.set_caption('Black Ops II · Windows Party')
+    pg.mouse.set_visible(False)
+    canvas = pg.Surface((1080, 660))
+    area = canvas.get_rect().fit(screen.get_rect())
+    area.center = screen.get_rect().center
+    clock = pg.time.Clock()
+    pads = Pads(pg)
+    pg.event.pump()
+    pg.event.clear(pg.KEYDOWN)
+    pads.poll()
+    family = pads.family if pads.devices else 'keyboard'
+    fonts = {size: pg.font.SysFont('DejaVu Sans', size, bold=size >= 28) for size in (20, 23, 28, 52)}
+    orange, white, muted = (255, 177, 97), (239, 243, 246), (179, 194, 206)
+    modes = tuple(BO2_MODES)
+    row = modes.index(settings['mode'])
+    keymap = {pg.K_UP: 'up', pg.K_DOWN: 'down', pg.K_RETURN: 'ok', pg.K_ESCAPE: 'back', pg.K_F5: 'launch'}
+    subtitle = tr('Choisir le mode de jeu')
+
+    def text(value, size, color, x, y, right=False):
+        image = fonts[size].render(value, True, color)
+        canvas.blit(image, (x - image.get_width() if right else x, y))
+
+    while True:
+        actions = []
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                return None
+            if event.type in (pg.JOYDEVICEADDED, pg.JOYDEVICEREMOVED):
+                pads.refresh()
+            if event.type == pg.KEYDOWN and event.key in keymap:
+                family = 'keyboard'
+                actions.append(keymap[event.key])
+        pad_actions = pads.poll()
+        if pad_actions:
+            family = pads.family
+            actions.extend(pad_actions)
+        for action in actions:
+            if action in ('back', 'quit'):
+                return None
+            if action in ('ok', 'launch'):
+                return modes[row]
+            if action in ('up', 'down'):
+                row = (row + (-1 if action == 'up' else 1)) % len(modes)
+
+        draw_session_frame(pg, canvas, 'Black Ops II', subtitle, text, orange, white, muted)
+        for index, mode in enumerate(modes):
+            y = 215 + index * 92
+            rect = (76, y, 928, 71)
+            pg.draw.rect(canvas, (56, 68, 83) if index == row else (34, 46, 60), rect, border_radius=12)
+            if index == row:
+                pg.draw.rect(canvas, orange, rect, width=2, border_radius=12)
+            text(tr(BO2_MODES[mode]), 28, orange if index == row else white, 102, y + 18)
+        text(tr('{p0}  Lancer', p0=control_label('ok', family)), 20, muted, 78, 571)
+        text(tr('{p0}  Retour', p0=control_label('back', family)), 20, muted, 1000, 571, right=True)
+        screen.fill((15, 22, 32))
+        screen.blit(pg.transform.smoothscale(canvas, area.size), area)
+        pg.display.flip()
+        clock.tick(30)
 
 
 def l4d2_session_screen(pg, screen, settings, count):
@@ -744,12 +820,8 @@ def l4d2_session_screen(pg, screen, settings, count):
                 selected[key]=values[(values.index(selected[key])+(-1 if action=='left' else 1))%len(values)]
                 break  # Rebuild the rows when the mode or map changes.
 
-        canvas.fill((15,22,32))
-        pg.draw.rect(canvas,(27,39,53),(36,26,1008,608),border_radius=26)
-        pg.draw.rect(canvas,orange,(76,70,42,5),border_radius=2)
-        text('Left 4 Dead 2',52,white,76,88)
-        text(tr('Partie locale · {p0} joueurs · hôte J{p1}',p0=count,p1=settings['host_player']),
-             23,muted,77,158)
+        subtitle = tr('Partie locale · {p0} joueurs · hôte J{p1}', p0=count, p1=settings['host_player'])
+        draw_session_frame(pg, canvas, 'Left 4 Dead 2', subtitle, text, orange, white, muted)
         for i,(key,title,_) in enumerate(choices):
             value=selected[key]
             if key=='mode':
@@ -887,12 +959,6 @@ class App:
     def current_fields(self):
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
                     self.model.celeste_skins, self.model.story_skins)
-        if self.model.data and self.model.data.get('adapter') == BO2 and self.tab == 1:
-            mode = self.model.data['bo2']['mode']
-            if mode == 'original':
-                rows = [row for row in rows if row[0] == 'bo2.mode']
-            elif mode == 'plutonium-zm':
-                rows = [row for row in rows if row[0] != 'bo2.open_custom_lobby']
         if self.model.data and self.model.data.get('adapter') == STORY_COOP:
             story = self.model.data[STORY_COOP]
             if not story['sync']:
@@ -1936,15 +2002,7 @@ class App:
                     subtitle = (tr('Story Co-op · noms et skins des joueurs') if self.tab == 2
                                 else tr('Story Co-op · réglages communs aux joueurs de cette session'))
                 if self.model.data['adapter'] == BO2:
-                    bo2_settings = self.model.data['bo2']
-                    if bo2_settings['mode'] in PLUTONIUM_MODES:
-                        if bo2_settings['automatic_join']:
-                            subtitle = tr('Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.')
-                        else:
-                            subtitle = tr('Sur J1, démarrez la partie personnalisée. Dans la console de J2, entrez {p0}.',
-                                          p0=JOIN_HOST)
-                    else:
-                        subtitle = tr('Créez une partie personnalisée sur J1, puis rejoignez-la depuis les autres instances.')
+                    subtitle = tr('Réglages Plutonium LAN · choisissez le mode au lancement')
                 if self.model.data['adapter'] == DST:
                     subtitle = tr('Résolution adaptée au partage')
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':
