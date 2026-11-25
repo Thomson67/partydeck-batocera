@@ -1478,7 +1478,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             states.append(state)
         if bo2_automatic:
             bo2_join = AutoJoin([state.parent for state in states], session_token,
-                                profile['bo2']['mode'], os.environ.get('DISPLAY', ''), started)
+                                profile['bo2']['mode'], os.environ.get('DISPLAY', ''), started,
+                                open_custom_lobby=True)
             bo2_join.start()
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)

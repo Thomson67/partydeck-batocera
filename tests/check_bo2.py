@@ -228,6 +228,25 @@ with TemporaryDirectory() as folder:
         assert all(call.kwargs['env']['DISPLAY'] == ':2' and
                    call.kwargs['env']['XAUTHORITY'] == '/tmp/player-auth' for call in run.call_args_list)
 
+    with patch.object(bo2, 'send_console_command', side_effect=[False, True]) as send:
+        observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
+        observer.poll(1)
+        observer.poll(5)
+        send.assert_not_called()
+        observer.poll(6)
+        observer.poll(7)
+        observer.poll(8)
+        command = call(bo2.automatic_path(host, token, 'display'), ':0', bo2.CUSTOM_LOBBY)
+        assert send.call_args_list == [command, command]
+        observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0, open_custom_lobby=True)
+        with log.open('ab') as stream:
+            stream.write(initialization)
+        observer.poll(10)
+        observer.poll(17)
+        assert send.call_count == 2
+        observer = bo2.AutoJoin(players, token, 'plutonium-zm', ':0', 0, open_custom_lobby=True)
+        assert not observer.open_custom_lobby
+
     with patch.object(bo2, 'join_window', return_value=True) as join:
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0)
         log.write_bytes(initialization)
