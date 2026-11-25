@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tarfile
 from tempfile import TemporaryDirectory
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_story_coop as story
 from partydeck_catalog import recipe_for
 from partydeck_profiles import defaults, read_profile, save_profile
+from partydeck_story_lobby import CLIENT_STORY_SHARE_ITEM, Lobby, Player, is_selected_pickup
 
 
 with TemporaryDirectory() as folder:
@@ -68,6 +70,8 @@ with TemporaryDirectory() as folder:
     save_profile(base, archive, defaults(archive))
     assert read_profile(base, archive)['adapter'] == story.ADAPTER
     assert read_profile(base, archive)[story.ADAPTER] == story.defaults()
+    for previous in ('keep', 'on', 'off'):
+        assert story.validate({'consumables': previous})['consumables'] == dict.fromkeys(story.CONSUMABLES, previous)
     legacy = defaults(archive)
     del legacy[story.ADAPTER]
     from partydeck_profiles import profile_path
@@ -114,7 +118,7 @@ with TemporaryDirectory() as folder:
             assert download.call_count == 2
 
     options = story.defaults()
-    options.update(port=21053, names=['J1', 'Invité', 'J3', 'J4'], skins=['link', '', '', ''], consumables='on')
+    options.update(port=21053, names=['J1', 'Invité', 'J3', 'J4'], skins=['link', '', '', ''])
     options['graphics'].update(msaa=2, volumes={'MainMusic': 70, 'SFX': 55})
     token = 'a' * 32
     for index in (1, 2):
@@ -156,12 +160,12 @@ with TemporaryDirectory() as folder:
         assert graphics['Volume']['MainMusic'] == (70 if index == 1 else 0)
         online = {
             'AutoConnect': 1, 'Enabled': 1, 'Host': story.client_host(index), 'Port': 21053,
-            'Nickname': options['names'][index - 1],
-            'Party': {'StoryCoop': 1, 'StoryCode': 'existing-campaign', 'ShareAmmoRupeesHp': 1}}
+            'Nickname': options['names'][index - 1], 'FileServer': '',
+            'Party': {'StoryCoop': 1, 'StoryCode': 'existing-campaign'}}
         if index == 1:
             online['Skin'] = 'link'
             host_settings = json.loads(story.session_config(player, token).read_text())
-            assert host_settings['storyCode'] == 'existing-campaign' and host_settings['shareAmmoRupeesHp']
+            assert host_settings['storyCode'] == 'existing-campaign' and not host_settings['shareAmmoRupeesHp']
         else:
             assert not story.session_config(player, token).exists()
             assert graphics['Language'] == 2
@@ -170,6 +174,15 @@ with TemporaryDirectory() as folder:
         assert data['Window']['Backend'] == {'Id': 1}
         assert not data['Window']['Fullscreen']['Enabled']
         assert (data['Window']['Width'], data['Window']['Height']) == (1920, 540)
+        with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)), \
+             patch.object(story, 'patch_client', return_value=False), \
+             patch.object(story.skins, 'mask_link_overrides',
+                          side_effect=subprocess.CalledProcessError(1, ['mount'])):
+            bad_skin = options | {'skins': ['link'] * 4}
+            story.configure_client(player, archive, private, player, bad_skin, base / 'skins')
+            failed_online = json.loads(path.read_text())['CVars']['gZeldaOnline']
+            assert failed_online['AutoConnect'] == 1 and failed_online['FileServer'] == ''
+            assert failed_online.get('Skin') == online.get('Skin')
     assert not (game/'shipofharkinian.json').exists()
     assert (game/'soh.exe').read_bytes() == binary
     mods = game / 'mods'
@@ -189,4 +202,25 @@ with TemporaryDirectory() as folder:
     else:
         raise AssertionError('An unknown executable was accepted for the audio fix')
 
-print('Story Co-op: archive contents, private audio fix, file selection and campaign continuity verified.')
+    for modes, old, expected in (
+            (('on', 'on', 'off'), False, {'rupees', 'ammo'}),
+            (('off', 'off', 'on'), False, {'healing'}),
+            (('keep', 'off', 'off'), True, {'rupees'}),
+            (('keep', 'off', 'off'), False, set()),
+            (('off', 'on', 'off'), True, {'ammo'}),
+            (('on', 'on', 'on'), False, None),
+            (('keep', 'keep', 'keep'), True, None)):
+        lobby = Lobby(0, {'consumables': dict(zip(story.CONSUMABLES, modes))}, None)
+        host = Player(1, None)
+        payload = json.dumps(dict(shareAmmoRupeesHp=old, storyCoop=True, storyCode='existing-campaign')).encode()
+        settings = json.loads(lobby.create_party_payload(host, payload))
+        assert settings['storyCode'] == 'existing-campaign' and settings['storyCoop']
+        assert host.pending_sharing == expected
+        assert settings['shareAmmoRupeesHp'] == (expected is None or bool(expected))
+        if expected is not None:
+            for category, item in (('rupees', 0x4C), ('ammo', 0x49), ('healing', 0x48)):
+                packet = struct.pack('<BHH', CLIENT_STORY_SHARE_ITEM, 0, item)
+                assert is_selected_pickup(packet, expected) == (category in expected)
+            assert not is_selected_pickup(struct.pack('<BHH', CLIENT_STORY_SHARE_ITEM, 0, 0x3D), expected)
+
+print('Story Co-op: private client, campaign continuity and independent consumable settings verified.')

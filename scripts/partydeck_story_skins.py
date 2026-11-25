@@ -1,4 +1,5 @@
 """Skin catalogue and local archive cache for Zelda Online v1.0.5."""
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 from pathlib import Path
 import re
@@ -48,26 +49,30 @@ def valid_archive(path, checksum):
 
 def prepare(selected, cache):
     """Fetch selected catalogue archives before the players enter the offline LAN."""
-    for reference in dict.fromkeys(selected):
-        _, checksum = CATALOGUE.get(reference, (None, None))
-        if not checksum:
-            continue
-        target = cache / f'{reference}.o2r'
-        try:
-            if valid_archive(target, checksum):
-                continue
-            cache.mkdir(parents=True, exist_ok=True)
-            with tempfile.TemporaryDirectory(dir=cache) as temporary:
-                archive = Path(temporary) / target.name
-                subprocess.run(['curl', '-fLsS', '--proto', '=http,https', '--proto-redir', '=http,https',
-                                '--connect-timeout', '5', '--max-time', '15', '--max-filesize', '8388608',
-                                RESOURCE_SERVER + target.name, '-o', str(archive)], check=True)
-                if not valid_archive(archive, checksum):
-                    raise ValueError(tr('Archive Story Co-op invalide ({p0}).', p0=target.name))
-                archive.chmod(0o644)
-                archive.replace(target)
-        except (OSError, ValueError, subprocess.SubprocessError) as error:
-            print(tr('Story Co-op : skin {p0} indisponible ({p1}).', p0=reference, p1=error), flush=True)
+    references = [ref for ref in dict.fromkeys(selected) if ref in CATALOGUE and CATALOGUE[ref][1]]
+    if references:
+        with ThreadPoolExecutor(max_workers=len(references)) as workers:
+            list(workers.map(lambda ref: cache_skin(ref, cache), references))
+
+
+def cache_skin(reference, cache):
+    _, checksum = CATALOGUE[reference]
+    target = cache / f'{reference}.o2r'
+    try:
+        if valid_archive(target, checksum):
+            return
+        cache.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=cache) as temporary:
+            archive = Path(temporary) / target.name
+            subprocess.run(['curl', '-fLsS', '--proto', '=http,https', '--proto-redir', '=http,https',
+                            '--connect-timeout', '5', '--max-time', '15', '--max-filesize', '8388608',
+                            RESOURCE_SERVER + target.name, '-o', str(archive)], check=True, timeout=17)
+            if not valid_archive(archive, checksum):
+                raise ValueError(tr('Archive Story Co-op invalide ({p0}).', p0=target.name))
+            archive.chmod(0o644)
+            archive.replace(target)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(tr('Story Co-op : skin {p0} indisponible ({p1}).', p0=reference, p1=error), flush=True)
 
 
 def stage(selected, cache, directory, installed):
@@ -80,11 +85,13 @@ def stage(selected, cache, directory, installed):
             continue
         filename = f'{reference}.o2r'
         archive = cache / filename
-        if valid_archive(archive, checksum):
-            path = config_path(directory, f'mods/PartyDeck-Story-Skins/{filename}')
-            path.parent.mkdir(parents=True, exist_ok=True)
-            write_bytes(path, archive.read_bytes())
-            installed.add(reference)
+        try:
+            if valid_archive(archive, checksum):
+                path = config_path(directory, f'mods/PartyDeck-Story-Skins/{filename}')
+                write_bytes(path, archive.read_bytes())
+                installed.add(reference)
+        except (OSError, ValueError) as error:
+            print(tr('Story Co-op : skin {p0} indisponible ({p1}).', p0=reference, p1=error), flush=True)
 
 
 def replaces_link(path):
@@ -100,7 +107,7 @@ def replaces_link(path):
 
 
 def mask_link_overrides(directory, player):
-    """Hide global Link replacements with mounts that live only for this player."""
+    """Remove Link replacements in a disposable view of this player's mods."""
     mods = config_path(directory, 'mods')
     if not mods.is_dir():
         return
@@ -109,16 +116,23 @@ def mask_link_overrides(directory, player):
     archives = [path for path in mods.rglob('*')
                 if path.suffix.lower() == '.o2r' and path.is_file() and not path.is_symlink()
                 and not any(path.is_relative_to(pack) for pack in packs) and replaces_link(path)]
-    if packs or archives:
-        empty = config_path(player, 'story-empty-mods')
-        empty.mkdir(exist_ok=True)
-        for pack in packs:
-            subprocess.run(['mount', '--bind', str(empty), str(pack)], check=True)
-        if archives:
-            blank = config_path(player, 'story-empty.o2r')
-            with zipfile.ZipFile(blank, 'w'):
-                pass
-            for archive in archives:
-                subprocess.run(['mount', '--bind', str(blank), str(archive)], check=True)
-        print(tr('Story Co-op {p0} : {p1} remplacement(s) de Link masqué(s).',
-                 p0=player.name.upper(), p1=len(packs) + len(archives)), flush=True)
+    if not packs and not archives:
+        return
+    # /tmp is backed by the player's private tmpfs. Bind the lower directory
+    # by a safe short path so ROM names may contain overlay option separators.
+    root = Path(tempfile.mkdtemp(prefix='story-mods-', dir='/tmp'))
+    lower, upper, work, view, empty = (root / name for name in ('lower', 'upper', 'work', 'view', 'empty'))
+    for path in (lower, upper, work, view, empty):
+        path.mkdir()
+    subprocess.run(['mount', '--bind', str(mods), str(lower)], check=True, timeout=5)
+    options = f'lowerdir={lower},upperdir={upper},workdir={work},index=off'
+    subprocess.run(['mount', '-t', 'overlay', '-o', options, 'overlay', str(view)], check=True, timeout=5)
+    for archive in archives:
+        (view / archive.relative_to(mods)).unlink()
+    for pack in packs:
+        subprocess.run(['mount', '--bind', str(empty), str(view / pack.relative_to(mods))], check=True, timeout=5)
+    # Publish the completed view atomically. The source directory and the
+    # other player's mods remain untouched even when filtering fails.
+    subprocess.run(['mount', '--rbind', str(view), str(mods)], check=True, timeout=5)
+    print(tr('Story Co-op {p0} : {p1} remplacement(s) de Link masqué(s).',
+             p0=player.name.upper(), p1=len(packs) + len(archives)), flush=True)

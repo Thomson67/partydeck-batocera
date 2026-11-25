@@ -184,7 +184,11 @@ EN = {
         'Story Co-op {p0}: skin {p1} missing, keeping the current appearance.',
     'Story Co-op {p0} : {p1} remplacement(s) de Link masqué(s).':
         'Story Co-op {p0}: {p1} Link replacement(s) hidden.',
-    'Partager les rubis, les munitions et les PV': 'Share rupees, ammo and HP',
+    'Story Co-op {p0} : préparation des skins ignorée ({p1}).':
+        'Story Co-op {p0}: skin setup skipped ({p1}).',
+    'Partager les rubis': 'Share rupees',
+    'Partager les munitions': 'Share ammo',
+    'Partager les PV': 'Share healing',
     'Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.':
         'Story Co-op: first run the game solo to generate oot.o2r.',
     'Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.':

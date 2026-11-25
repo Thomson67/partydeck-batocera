@@ -21,6 +21,8 @@ ADAPTER = 'ocarina-story-coop'
 LABEL = 'Ocarina of Time · Story Co-op'
 VERSION = 'v1.0.5'
 PORT = 21050
+CONSUMABLES = {'rupees': 'Partager les rubis', 'ammo': 'Partager les munitions', 'healing': 'Partager les PV'}
+SHARING_CHOICES = {'keep': 'Conserver', 'on': 'Activé', 'off': 'Désactivé'}
 GAME_DIR = Path('drive_c/game')
 CONFIG = 'shipofharkinian.json'
 SERVER_DIR = 'PartyDeck-Story-Coop'
@@ -59,7 +61,7 @@ def matches(rom):
 
 def defaults():
     return dict(automatic=True, port=PORT, room='', config=CONFIG,
-                sync=True, locations=True, teleport=True, consumables='keep',
+                sync=True, locations=True, teleport=True, consumables=dict.fromkeys(CONSUMABLES, 'keep'),
                 names=[f'J{i}' for i in range(1, 5)], skins=[''] * 4, graphics=graphics_defaults())
 
 
@@ -69,12 +71,17 @@ def validate(options):
     if not isinstance(options, dict):
         raise ValueError(tr('Profil Story Co-op invalide.'))
     options = defaults() | options
+    sharing = options['consumables']
+    if isinstance(sharing, str) and sharing in SHARING_CHOICES:
+        sharing = dict.fromkeys(CONSUMABLES, sharing)
     if (type(options['port']) is not int or not 1024 < options['port'] < 65535
             or any(type(options[key]) is not bool for key in ('automatic', 'sync', 'locations', 'teleport'))
-            or options['consumables'] not in ('keep', 'on', 'off')
+            or not isinstance(sharing, dict) or sharing.keys() != CONSUMABLES.keys()
+            or any(not isinstance(mode, str) or mode not in SHARING_CHOICES for mode in sharing.values())
             or not isinstance(options['config'], str)
             or not valid_text(options['room'], 32, optional=True)):
         raise ValueError(tr('Profil Story Co-op invalide.'))
+    options['consumables'] = sharing
     validate_config(options['config'])
     names, skins = options['names'], options['skins']
     if (not isinstance(names, list) or len(names) != 4
@@ -311,11 +318,12 @@ def start_server(rom, work, lan, cache, options, players, host_settings):
             write_bytes(path, data)
     program.chmod(0o700)
     log = work / 'server.log'
+    relay_options = {key: options[key] for key in ('automatic', 'locations', 'teleport', 'consumables')}
     with log.open('wb') as output:
         lobby = Path(__file__).with_name('partydeck_story_lobby.py')
         process = subprocess.Popen([*lan.prefix(0), sys.executable, str(lobby), str(program),
                                     str(options['port']), str(players), str(host_settings),
-                                    json.dumps({key: options[key] for key in ('automatic', 'locations', 'teleport')})],
+                                    json.dumps(relay_options)],
                                    pass_fds=(lan.fds[0],), cwd=work, stdin=subprocess.DEVNULL,
                                    stdout=output, stderr=subprocess.STDOUT)
     try:
@@ -395,22 +403,27 @@ def configure_client(player, rom, directory, root, options, skin_cache):
     host, port = client_host(index), options['port']
     online.update(Enabled=1, AutoConnect=1, Host=host, Port=port, Nickname=options['names'][index - 1])
     skin = options['skins'][index - 1]
-    available = installed_skins(directory)
-    references = {item.split('|', 1)[0] for item in available}
-    skins.stage(options['skins'], skin_cache, directory, references)
-    if skin == 'link' or (skin and skin.split('|', 1)[0] in references):
-        online['Skin'] = skin
-        skins.mask_link_overrides(directory, player)
-    elif skin:
-        print(tr('Story Co-op {p0} : skin {p1} introuvable, apparence actuelle conservée.',
-                 p0=player.name.upper(), p1=skin), flush=True)
-    if index == 1:
-        atomic_write(player / 'story-skins.json', json.dumps(available))
+    # The shared game LAN is offline. The launcher has already sourced and
+    # verified the selected catalogue assets outside this namespace.
+    online['FileServer'] = ''
+    try:
+        available = installed_skins(directory)
+        references = {item.split('|', 1)[0] for item in available}
+        skins.stage(options['skins'], skin_cache, directory, references)
+        if index == 1:
+            atomic_write(player / 'story-skins.json', json.dumps(available))
+        if skin == 'link' or (skin and skin.split('|', 1)[0] in references):
+            skins.mask_link_overrides(directory, player)
+            online['Skin'] = skin
+        elif skin:
+            print(tr('Story Co-op {p0} : skin {p1} introuvable, apparence actuelle conservée.',
+                     p0=player.name.upper(), p1=skin), flush=True)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(tr('Story Co-op {p0} : préparation des skins ignorée ({p1}).',
+                 p0=player.name.upper(), p1=error), flush=True)
     party = online.setdefault('Party', {})
     party['StoryCoop'] = int(options['sync'])
     party['StoryCode'] = options['room'] or party.get('StoryCode') or 'partydeck'
-    if options['consumables'] != 'keep':
-        party['ShareAmmoRupeesHp'] = int(options['consumables'] == 'on')
     token = os.environ.get('PARTYDECK_STORY_COOP', '')
     if options['automatic'] and index == 1 and re.fullmatch('[a-f0-9]{32}', token):
         settings = {

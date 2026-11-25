@@ -20,7 +20,9 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER, JOIN_HOST,
                            defaults as bo2_defaults, matches as matches_bo2)
-from partydeck_story_coop import (ADAPTER as STORY_COOP, LABEL as STORY_LABEL, defaults as story_defaults,
+from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
+                                 LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
+                                 defaults as story_defaults,
                                  matches as matches_story_coop, skin_choices as story_skin_choices)
 from partydeck_story_skins import CATALOGUE as STORY_SKINS
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
@@ -133,8 +135,8 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     (f'{adapter}.locations', tr('Positions visibles'), [True, False]),
                     (f'{adapter}.teleport', tr('Téléportation'), [True, False]),
                     (f'{adapter}.sync', tr('Objets et progression partagés'), [True, False]),
-                    (f'{adapter}.consumables', tr('Partager les rubis, les munitions et les PV'),
-                     ['keep', 'on', 'off'])]
+                    *[(f'{adapter}.consumables.{key}', tr(label), list(STORY_SHARING_CHOICES))
+                      for key, label in STORY_CONSUMABLES.items()]]
         if tab == 2:
             return [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
                     for index in range(4)
@@ -315,8 +317,8 @@ def label_value(key, value):
             return tr('Link standard' if value else 'Conserver')
         reference = value.split('|', 1)[0]
         return STORY_SKINS.get(reference, (reference, None))[0]
-    if key == f'{STORY_COOP}.consumables':
-        return tr({'keep': 'Conserver', 'on': 'Activé', 'off': 'Désactivé'}[value])
+    if key.startswith(f'{STORY_COOP}.consumables.'):
+        return tr(STORY_SHARING_CHOICES[value])
     if key == f'{STORY_COOP}.room' and not value:
         return tr('Conserver')
     if key == 'celestenet.language':
@@ -869,7 +871,7 @@ class App:
         if self.model.data and self.model.data.get('adapter') == BO2 and self.model.data['bo2']['mode'] == 'original':
             rows = [row for row in rows if row[0] == 'bo2.mode'] if self.tab == 1 else rows
         if self.model.data and self.model.data.get('adapter') == STORY_COOP and not self.model.data[STORY_COOP]['sync']:
-            rows = [row for row in rows if row[0] != f'{STORY_COOP}.consumables']
+            rows = [row for row in rows if not row[0].startswith(f'{STORY_COOP}.consumables.')]
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows

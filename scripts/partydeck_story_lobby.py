@@ -8,11 +8,35 @@ import struct
 import sys
 
 from partydeck_i18n import tr
-from partydeck_story_coop import client_host
+from partydeck_story_coop import CONSUMABLES, client_host
 
 # PacketTypes.hpp distinguishes the client and server packet ID spaces.
 CLIENT_INIT_LIST, CLIENT_CREATE, CLIENT_LEAVE, CLIENT_INVITE, CLIENT_JOIN, CLIENT_TELEPORT = 24, 25, 26, 27, 28, 31
+CLIENT_STORY_SHARE_ITEM = 40
 SERVER_AUTH, SERVER_LIST_APPEND, SERVER_LIST_UPDATE, SERVER_JOIN, SERVER_INVITE = 3, 21, 23, 24, 25
+
+# MOD_NONE GetItemID values from v1.0.5 z64item.h. The randomizer
+# also uses these vanilla entries for rupee and ammunition refills.
+RUPEE_PICKUPS = {0x4C, 0x4D, 0x4E, 0x55, 0x56, 0x72, 0x73, 0x74, 0x75}
+AMMO_PICKUPS = {
+    0x01, 0x65, 0x66, 0x67, 0x68,  # bombs
+    0x03, 0x6A, 0x6B,              # bombchus
+    0x49, 0x4A, 0x4B,              # arrows
+    0x07, 0x61, 0x62,              # sticks
+    0x02, 0x63, 0x64,              # nuts
+    0x3C, 0x69,                    # seeds
+}
+
+
+def is_selected_pickup(packet, enabled):
+    if len(packet) != 5:
+        return False
+    mod_index, item = struct.unpack_from('<HH', packet, 1)
+    return mod_index == 0 and (
+        ('rupees' in enabled and item in RUPEE_PICKUPS)
+        or ('ammo' in enabled and item in AMMO_PICKUPS)
+        or ('healing' in enabled and item == 0x48)  # GI_HEART
+    )
 
 
 def send(writer, packet):
@@ -55,6 +79,7 @@ class Player:
         self.ready = False
         self.creating = False
         self.invitation = None
+        self.pending_sharing = None
 
     def send(self, kind, payload=b''):
         send(self.writer, bytes((kind,)) + payload)
@@ -67,6 +92,25 @@ class Lobby:
         self.host_settings = host_settings
         self.players = {}
         self.party_id = 0
+        self.party_sharing = {}
+
+    def create_party_payload(self, player, payload):
+        sharing = self.options.get('consumables', {})
+        if all(mode == 'keep' for mode in sharing.values()):
+            return payload
+        try:
+            settings = json.loads(payload)
+        except ValueError:
+            return payload
+        if not isinstance(settings, dict):
+            return payload
+        native = settings.get('shareAmmoRupeesHp') is True
+        enabled = frozenset(key for key, mode in sharing.items()
+                            if mode == 'on' or (mode == 'keep' and native))
+        # Preserve the upstream behavior when every category is enabled.
+        player.pending_sharing = None if enabled == CONSUMABLES.keys() else enabled
+        settings['shareAmmoRupeesHp'] = bool(enabled)
+        return json.dumps(settings).encode()
 
     def invite(self, inviter, guest):
         if guest.invitation is None:
@@ -85,7 +129,8 @@ class Lobby:
             if member:
                 self.invite(member, host)
             elif not host.creating:
-                host.send(CLIENT_CREATE, self.host_settings.read_bytes())
+                payload = self.create_party_payload(host, self.host_settings.read_bytes())
+                host.send(CLIENT_CREATE, payload)
                 host.creating = True
             return
         self.party_id = host.party_id
@@ -99,6 +144,12 @@ class Lobby:
             kind = packet[0] if packet else -1
             if kind == CLIENT_TELEPORT and not self.options['teleport']:
                 continue
+            if kind == CLIENT_CREATE and not player.party_id:
+                packet = packet[:1] + self.create_party_payload(player, packet[1:])
+            elif kind == CLIENT_STORY_SHARE_ITEM:
+                sharing = self.party_sharing.get(player.party_id)
+                if sharing is not None and not is_selected_pickup(packet, sharing):
+                    continue
             send(player.writer, packet)
             if kind == CLIENT_INIT_LIST and player.network_id is not None:
                 # The client has already sent its appearance and name. The
@@ -117,6 +168,9 @@ class Lobby:
                 player.network_id, = struct.unpack_from('<H', packet, 1)
             elif kind == SERVER_JOIN and len(packet) >= 7:
                 player.party_id, = struct.unpack_from('<I', packet, 1)
+                if player.party_id and player.pending_sharing is not None:
+                    self.party_sharing[player.party_id] = player.pending_sharing
+                player.pending_sharing = None
                 player.invitation = None
                 player.creating = False
                 if self.options['automatic'] and player.party_id:

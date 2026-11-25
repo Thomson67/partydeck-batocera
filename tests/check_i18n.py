@@ -86,8 +86,10 @@ for language, automatic, skin, default_skin in (
     lang.set_language(language)
     network = {key: label for key, label, _ in fields(1, 'ocarina-story-coop')}
     assert network['ocarina-story-coop.automatic'] == automatic
-    assert network['ocarina-story-coop.consumables'] == {
-        'fr': 'Partager les rubis, les munitions et les PV', 'en': 'Share rupees, ammo and HP'}[language]
+    for key, fr, en in (('rupees', 'Partager les rubis', 'Share rupees'),
+                        ('ammo', 'Partager les munitions', 'Share ammo'),
+                        ('healing', 'Partager les PV', 'Share healing')):
+        assert network[f'ocarina-story-coop.consumables.{key}'] == (fr if language == 'fr' else en)
     player_fields = fields(2, 'ocarina-story-coop', story_skins=['linkle'])
     assert player_fields[1][:2] == ('ocarina-story-coop.skins.0', skin)
     assert len(player_fields[1][2]) == 22 and 'linkle' in player_fields[1][2]

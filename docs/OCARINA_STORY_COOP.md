@@ -55,9 +55,12 @@ du joueur et ouvrez **Network → Zelda Online → Open Window**. La croix de
 la fenêtre ferme le panneau.
 
 Dans **Réseau**, vous pouvez régler le port local, le JSON SoH, les positions
-visibles, la téléportation et la progression partagée. Le réglage
-**Partager les rubis, les munitions et les PV** fonctionne avec la progression
-partagée. **Conserver** reprend le réglage enregistré dans le JSON de J1.
+visibles, la téléportation et la progression partagée. Avec la progression
+partagée, **Partager les rubis**, **Partager les munitions** et **Partager les PV**
+se règlent séparément. **Conserver** suit le réglage combiné enregistré dans
+le jeu. Chaque joueur paie ses propres achats. Le réglage des PV concerne
+les cœurs de soin ramassés. Les réceptacles et les quarts de cœur font partie
+de la progression d’équipe.
 Le code de campagne
 vide reprend celui du JSON de J1, ou `partydeck` si celui-ci est vide.
 Le serveur associe une campagne au nom de J1 et à ce code. Conservez les
@@ -77,7 +80,8 @@ aussi de saisir sa référence, par exemple `linkle` ou
 Quand un joueur choisit explicitement un skin, Windows Party masque dans
 son instance le pack **Enhanced 3DS Link** et les archives O2R qui
 remplacent le squelette de Link. Choisissez **Conserver** pour garder
-les mods d’apparence actifs.
+les mods d’apparence actifs. Si la préparation du skin échoue, le jeu
+se lance avec l’apparence précédente et l’erreur figure dans le journal.
 
 L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,
 le filtre des textures, les volumes et la musique sur J1 uniquement.
