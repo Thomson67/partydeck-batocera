@@ -50,6 +50,10 @@ STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?" + asset + rb"(?![a-z
                                        ('t5mp', b'common_mp'), ('t5sp', rb'(?:common|plutonium_ui)'))}
 # Plutonium r5369 issues this command as it enters the online menu.
 ONLINE_MENU_MARKER = re.compile(rb'Unknown command:? "session_rejoinsession"')
+GAME_INITIALIZATION = b'------- Game Initialization -------'
+T5_ZOMBIES_INITIALIZATION = b'------ Server Initialization ------'
+PLAYER_CONNECTION = re.compile(rb"client 'Player ([1-4])' (connected|disconnected)\b")
+T5_ZOMBIES_CLIENT_LOADING = re.compile(rb'Going from CS_CONNECTED to CS_CLIENTLOADING for Player ([1-4])\b')
 T5_LOBBY_COMMANDS = {
     't5mp': ('setclientbeingusedandprimary; onlinegame 1; xblive_privatematch 1; '
              'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
@@ -349,6 +353,11 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
         count = os.environ.get('PARTYDECK_SESSION_PLAYERS', '1')
         if count in ('1', '2', '3', '4'):
             args += ['+set', 'sp_minplayers', count]
+        if (mode == 't5sp' and count in ('2', '3', '4')
+                and os.environ.get(PUBLISH_DISPLAY) == '1'
+                and os.environ.get('PARTYDECK_PRIVATE_LAN_IP')):
+            # T5 emits the client-loading acknowledgement in developer output.
+            args += ['+set', 'developer', '1']
     if player.name != 'j1':
         print(tr('Black Ops II {p0} : rejoindre J1 avec {p1}.', p0=player.name.upper(),
                  p1=JOIN_HOST), file=sys.stderr, flush=True)
@@ -553,6 +562,10 @@ class AutoJoin:
             if self.host_log is not None:
                 return
 
+    def match_starting(self, line):
+        marker = T5_ZOMBIES_INITIALIZATION if self.mode == 't5sp' else GAME_INITIALIZATION
+        return marker in line
+
     def observe_host(self, line, now):
         if b'SV_Shutdown:' in line or (self.mode in T5_LOBBY_COMMANDS and b'Server Shutdown' in line):
             self.connected.clear()
@@ -562,16 +575,20 @@ class AutoJoin:
             # T6 also prints this on map rotation with clients still connected.
             self.host_ready = None
             return True
-        if b'------- Game Initialization -------' in line:
+        if self.match_starting(line):
             # Zombies can wait for guests before the host is fully in-game.
             ready = self.mode in ('plutonium-zm', 't5sp', 't5mp') or 'j1' in self.connected
             self.host_ready = None
         else:
-            event = re.search(rb"client 'Player ([1-4])' (connected|disconnected)\b", line)
+            event = PLAYER_CONNECTION.search(line)
+            action = event[2] if event is not None else b'connected'
+            if event is None and self.mode == 't5sp':
+                # T5 Zombies acknowledges its clients when it sends the game state.
+                event = T5_ZOMBIES_CLIENT_LOADING.search(line)
             if event is None:
                 return False
             player = 'j' + event[1].decode('ascii')
-            if event[2] == b'disconnected':
+            if action == b'disconnected':
                 if player == 'j1':
                     self.connected.clear()
                     self.host_ready = None
@@ -593,7 +610,7 @@ class AutoJoin:
         return True
 
     def observe_lobby(self, line, now):
-        if b'------- Game Initialization -------' in line:
+        if self.match_starting(line):
             self.lobby_button = None
         elif ONLINE_MENU_MARKER.search(line):
             if self.lobby_button == ONLINE_BUTTON:

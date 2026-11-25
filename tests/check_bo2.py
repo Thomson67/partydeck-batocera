@@ -113,6 +113,11 @@ with TemporaryDirectory() as folder:
         assert args[args.index('r_noborder') + 1] == '1'
         assert ['+set', 'loc_language', '1'] == args[args.index('loc_language') - 1:args.index('loc_language') + 2]
         assert ('sp_minplayers' in args) == (mode == 't5sp')
+        assert 'developer' not in args
+        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), 'PARTYDECK_SESSION_PLAYERS': '2',
+                                    'PARTYDECK_PRIVATE_LAN_IP': '192.168.247.11', bo2.PUBLISH_DISPLAY: '1'}):
+            _, private_command = bo2.prepare(player, mode, game, prefix, installed_client)
+        assert ('+set developer 1' in private_command) == (mode == 't5sp')
         assert (game / 'localization.txt').read_bytes() == b'french\r\n'
 
     assert bo2.render_size(1920, 540) == (1280, 720)
@@ -259,6 +264,7 @@ with TemporaryDirectory() as folder:
     log = bo2.automatic_path(host, token, 'log')
     display = bo2.automatic_path(guest, token, 'display')
     initialization = b'------- Game Initialization -------\n'
+    t5_zombies_initialization = b'------ Server Initialization ------\n'
     log.write_bytes(b'Loading fastfile code_post_gfx_mp\nCould not load image "$lineargray".\n')
     assert not bo2.startup_ready(host, token, 0, 't6mp')
     with log.open('ab') as stream:
@@ -282,10 +288,31 @@ with TemporaryDirectory() as folder:
                                          bo2.T5_LOBBY_COMMANDS[mode])
             join.assert_not_called()
             with log.open('ab') as stream:
-                stream.write(initialization)
+                stream.write(t5_zombies_initialization if mode == 't5sp' else initialization)
             t5.poll(8)
             t5.poll(10)
             join.assert_called_once()
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
+        log.write_bytes(b"Loading fastfile 'plutonium_ui'\n" + initialization)
+        t5.poll(1)
+        t5.poll(7)
+        join.assert_not_called()
+        with log.open('ab') as stream:
+            stream.write(t5_zombies_initialization)
+        t5.poll(8)
+        t5.poll(10)
+        join.assert_called_once_with(display, ':0')
+        with log.open('ab') as stream:
+            stream.write(b'Going from CS_CONNECTED to CS_CLIENTLOADING for Player 2\n')
+        t5.poll(28)
+        join.assert_called_once_with(display, ':0')
+        assert t5.connected == {'j2'}
+        with log.open('ab') as stream:
+            stream.write(b'----- Server Shutdown -----\n' + t5_zombies_initialization)
+        t5.poll(31)
+        t5.poll(33)
+        assert join.call_args_list == [call(display, ':0'), call(display, ':0')]
     log.write_bytes(b"Loading fastfile 'common_mp'\n")
     display.write_text(json.dumps({'DISPLAY': ':0.0'}))
     with patch.object(bo2.subprocess, 'run') as run:
