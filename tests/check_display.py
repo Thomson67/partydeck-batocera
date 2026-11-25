@@ -55,6 +55,21 @@ except RuntimeError:pass
 with patch.object(coop,'top_window',side_effect=['81','82']),patch.object(coop,'place_window',return_value=True) as place:
     assert coop.reposition_windows(['own-j1','own-j2'],coop.layout(outputs[1].rectangle,2,'horizontal'))
     assert [c.args for c in place.call_args_list]==[('81',(1920,0,1920,540)),('82',(1920,540,1920,540))]
+split = [(0, 0, 1920, 540), (0, 540, 1920, 540)]
+centered = (0, 270, 1920, 540)
+with patch.object(coop, 'top_window', side_effect=['81', '90']) as search, \
+     patch.object(coop, 'window_geometry', side_effect=[split[0], centered]), \
+     patch.object(coop, 'place_window', return_value=True) as place, \
+     patch.object(coop, 'focus_window') as focus:
+    assert coop.reposition_windows(['own-j1', 'own-j2'], split, mapped_only=True)
+    place.assert_called_once_with('90', split[1])
+    focus.assert_not_called()
+    assert all(call.kwargs['visible_only'] for call in search.call_args_list)
+with patch.object(coop, 'window_geometry', side_effect=[centered, centered, split[1]]), \
+     patch.object(coop, 'remove_fullscreen'), patch.object(coop.time, 'sleep'), \
+     patch.object(coop.subprocess, 'run') as move:
+    assert coop.place_window('90', split[1])
+    assert move.call_args.args[0] == ['xdotool', 'windowmove', '90', '0', '540']
 with tempfile.TemporaryDirectory() as temp:
     base=Path(temp);rom=base/'Example.wsquashfs';rom.touch();save_profile(base,rom,defaults(rom));before=profile_path(base,rom).read_bytes()
     assert d.settings(base)==d.DEFAULTS
@@ -109,4 +124,6 @@ with tempfile.TemporaryDirectory() as temp,contextlib.ExitStack() as stack:
     stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
     assert coop.run_session(base,base,rom,rom,'2','horizontal','auto')==0
     assert starts.call_count==2
-    assert move.call_args.args[1]==[(0,0,1920,540),(0,540,1920,540)]
+    assert move.call_args_list[0].args[1] == split
+    assert move.call_args_list[1].args[1] == split
+    assert move.call_args_list[1].kwargs == {'mapped_only': True}

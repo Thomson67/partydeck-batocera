@@ -217,7 +217,13 @@ for split, second_position, inputs, shared, party, virtual, title in [
             stop_story = stack.enter_context(patch('partydeck_story_coop.stop_server'))
         classes = [f"partydeck-coop-{os.getpid()}-j1", f"partydeck-coop-{os.getpid()}-j2"]
         windows = mock(coop, "top_window", side_effect={classes[0]:"810", classes[1]:"811"}.get)
-        place = mock(coop, "place_window", return_value=True)
+        window_actions = []
+        mock(coop, "focus_window", side_effect=lambda window: window_actions.append(("focus", window)))
+        def place_window(window, _box):
+            window_actions.append(("place", window))
+            return True
+        place = mock(coop, "place_window", side_effect=place_window)
+        mock(coop, "reposition_windows")
         expected_placements = 2
         if story:
             class Clock:
@@ -235,7 +241,7 @@ for split, second_position, inputs, shared, party, virtual, title in [
             processes.append(replacement)
             starts.side_effect = processes
             mock(coop, 'story_window', side_effect=lambda state, reveal=False:
-                 not reveal and (state.parent.name == 'j2' or starts.call_count == 3))
+                 not reveal and (state.parent.name == 'j1' or starts.call_count == 3))
             expected_placements = 3
         for process in processes:
             process.poll.side_effect = lambda: 0 if place.call_count == expected_placements else None
@@ -244,7 +250,7 @@ for split, second_position, inputs, shared, party, virtual, title in [
         if party and not virtual:
             assert graphics_call.call_args.args[1]=="system"
             assert monitor_call.call_args.args==("DP-7",)
-        expected_windows = classes + classes[:1] if story else classes
+        expected_windows = classes + classes[1:] if story else classes
         assert [call.args[0] for call in windows.call_args_list] == expected_windows
         assert [call.args[-1] for call in starts.call_args_list] == expected_windows
         assert all(call.kwargs["shared_keyboard_mouse"] is (shared or virtual)
@@ -265,9 +271,11 @@ for split, second_position, inputs, shared, party, virtual, title in [
             assert all(call.kwargs['story_coop']['local_skin'] == skin for call in starts.call_args_list)
             prepare_skin.assert_called_once_with(game, base / 'dependencies/ocarina-story-coop/v1.0.5')
             assert boot_story.call_count == 1
-            assert coop.stop_players.call_args_list[0].args[0] == [processes[0]]
-            assert coop.stop_players.call_args_list[-1].args[0] == [replacement, processes[1]]
-            assert starts.call_args_list[0] == starts.call_args_list[2]
+            assert coop.stop_players.call_args_list[0].args[0] == [processes[1]]
+            assert coop.stop_players.call_args_list[-1].args[0] == [processes[0], replacement]
+            assert starts.call_args_list[1] == starts.call_args_list[2]
+            assert window_actions[-2:] == [('focus', '811'), ('place', '811')]
+            assert place.call_args_list[-1].args == ('811', second_position)
             stop_story.assert_called_once_with(server)
         assert place.call_args_list[1].args == ("811", second_position)
         assert "Joueurs : 2" in output.getvalue() and "Fenêtre J2 placée : 811" in output.getvalue()

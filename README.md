@@ -281,6 +281,8 @@ PartyDeck vérifie chaque compositeur Gamescope avant de lancer Wine. Si
 la chaîne d’affichage Vulkan est recréée en boucle, seul le compositeur du
 joueur concerné est relancé une fois. Les journaux Gamescope se trouvent
 dans `runtime/<jeu>/jN/logs/gamescope.log`.
+En écran partagé, PartyDeck vérifie aussi le placement des fenêtres pendant
+la partie. Une fenêtre recréée ou recentrée revient dans la zone de son joueur.
 Les journaux UMU sont séparés par joueur dans
 `runtime/<jeu>/jN/umu-logs/runner-*.log` ; les journaux Proton, lorsqu’activés,
 sont dans le dossier voisin `proton-logs/`.

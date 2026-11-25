@@ -172,15 +172,20 @@ def primary_monitor(output='auto'):
     return choose_output(discover_outputs(),output).rectangle
 
 
-def reposition_windows(classes,boxes):
+def reposition_windows(classes, boxes, *, mapped_only=False):
     complete=True
-    for window_class,rectangle in zip(classes,boxes):
-        window=top_window(window_class)
-        if not window:
-            complete=False
-            continue
+    for index, (window_class, rectangle) in enumerate(zip(classes, boxes), 1):
         try:
-            complete=place_window(window,rectangle) and complete
+            window = top_window(window_class, visible_only=True) if mapped_only else top_window(window_class)
+            if not window:
+                complete = False
+                continue
+            if mapped_only and window_geometry(window) == rectangle:
+                continue
+            placed = place_window(window, rectangle)
+            complete = complete and placed
+            if mapped_only and placed:
+                print(tr('Fenêtre J{p0} replacée dans sa zone : {p1}.', p0=index, p1=rectangle), flush=True)
         except (OSError,subprocess.SubprocessError):
             complete=False
     return complete
@@ -228,33 +233,48 @@ def remove_fullscreen(window):
         x11.XCloseDisplay(display)
 
 
-def top_window(window_class):
+def top_window(window_class, *, visible_only=False):
     # A window launched from SSH may still be unmapped behind the desktop.
     # Match only this player's exact class, and never choose an ambiguous ID.
-    for visible in (True, False):
+    for visible in (True,) if visible_only else (True, False):
         command = ["xdotool", "search"]
         if visible:
             command.append("--onlyvisible")
         result = subprocess.run(command + ["--class", f"^{window_class}$"],
                                 text=True, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL)
+                                stderr=subprocess.DEVNULL, timeout=2)
         ids = result.stdout.split()
         if result.returncode == 0 and ids:
             return ids[0] if len(ids) == 1 else None
     return None
 
 
+def window_geometry(window):
+    geometry = subprocess.check_output(["xdotool", "getwindowgeometry", "--shell", window],
+                                       text=True, timeout=2)
+    values = dict(line.partition("=")[::2] for line in geometry.splitlines())
+    try:
+        return tuple(int(values[name]) for name in ("X", "Y", "WIDTH", "HEIGHT"))
+    except (KeyError, ValueError):
+        return None
+
+
 def place_window(window, rectangle):
+    if window_geometry(window) == rectangle:
+        return True
     remove_fullscreen(window)
     time.sleep(0.25)
-    x, y, width, height = map(str, rectangle)
-    subprocess.run(["xdotool", "windowsize", window, width, height,
-                    "windowmove", window, x, y], check=True)
+    x, y, width, height = rectangle
+    current = window_geometry(window)
+    command = ["xdotool"]
+    resize = current is None or current[2:] != (width, height)
+    if resize:
+        command.extend(["windowsize", window, str(width), str(height)])
+    if resize or current[:2] != (x, y):
+        command.extend(["windowmove", window, str(x), str(y)])
+        subprocess.run(command, check=True, timeout=2)
     time.sleep(0.15)
-    geometry = subprocess.check_output(["xdotool", "getwindowgeometry", "--shell", window],
-                                       text=True)
-    values = dict(line.partition("=")[::2] for line in geometry.splitlines())
-    return tuple(int(values[name]) for name in ("X", "Y", "WIDTH", "HEIGHT")) == rectangle
+    return window_geometry(window) == rectangle
 
 
 def focus_window(window):
@@ -1477,21 +1497,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     continue
                 if time.monotonic() < next_attempt[index]:
                     continue
-                window = top_window(window_classes[index])
-                if window:
-                    if seen_windows.get(index) != window:
-                        seen_windows[index] = window
-                        focus_window(window)
-                        print(f"Fenêtre J{index + 1} repérée : {window}", flush=True)
-                    next_attempt[index] = time.monotonic() + 1
-                    try:
+                try:
+                    window = top_window(window_classes[index])
+                    if window:
+                        if seen_windows.get(index) != window:
+                            seen_windows[index] = window
+                            focus_window(window)
+                            print(f"Fenêtre J{index + 1} repérée : {window}", flush=True)
+                        next_attempt[index] = time.monotonic() + 1
                         if place_window(window, boxes[index]):
                             print(f"Fenêtre J{index + 1} placée : {window}", flush=True)
-                            focus_window(window)
                             del pending[index]
-                            continue
-                    except subprocess.CalledProcessError:
-                        pass  # The window can disappear during startup.
+                except (OSError, subprocess.SubprocessError):
+                    pass  # The window can disappear during startup.
             if pending:
                 time.sleep(0.5)
         for index in pending:
@@ -1523,6 +1541,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     now = time.monotonic()
                     story_startup.restarted(index, now)
                     story_placement[index] = now + 30
+                    seen_windows.pop(index, None)
                     if virtual_watcher is not None:
                         virtual_watcher.close()
                         virtual_watcher.start()
@@ -1530,15 +1549,19 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     if now >= deadline:
                         del story_placement[index]
                         continue
-                    window = top_window(window_classes[index])
-                    if window:
-                        try:
+                    try:
+                        window = top_window(window_classes[index])
+                        if window:
+                            if seen_windows.get(index) != window:
+                                # Mapping a hidden SDL window can trigger the
+                                # window manager's centering policy.
+                                focus_window(window)
+                                seen_windows[index] = window
                             if place_window(window, layout(monitor, len(players), split)[index]):
                                 del story_placement[index]
-                                focus_window(window)
                                 print(tr('Story Co-op {p0} : fenêtre replacée après relance.', p0=states[index].parent.name.upper()), flush=True)
-                        except subprocess.CalledProcessError:
-                            pass
+                    except (OSError, subprocess.SubprocessError):
+                        pass
                 if not story_startup.pending and not story_placement:
                     story_startup = None
             if now>=next_output_check:
@@ -1548,6 +1571,10 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     if current!=monitor and reposition_windows(window_classes,layout(current,len(players),split)):
                         monitor=current
                         print(tr('Écran reconnecté : fenêtres replacées sur {p0}.',p0=current),flush=True)
+                    elif current == monitor and len(players) > 1:
+                        # SDL may remap a window on the same output and let the
+                        # window manager reset its position or size.
+                        reposition_windows(window_classes, layout(monitor, len(players), split), mapped_only=True)
                 except (OSError,RuntimeError,subprocess.SubprocessError):
                     pass  # A dock can temporarily report no active outputs.
             time.sleep(0.1)

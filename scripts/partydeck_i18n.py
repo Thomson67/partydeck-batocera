@@ -363,6 +363,7 @@ EN = {
     'ACTUALISER LES ÉCRANS':'REFRESH DISPLAYS',
     'Écran indisponible : repli sur un écran actif, choix conservé.':'Unavailable display: use an active display and retain your choice.',
     'Reconnexion : placement des jeux réajusté automatiquement.':'Reconnection: game window placement adjusts automatically.',
+    'Fenêtre J{p0} replacée dans sa zone : {p1}.': 'Player {p0} window returned to its area: {p1}.',
     'GPU appliqué au prochain lancement. Le GPU du jeu peut remplacer ce choix.':'GPU applies on next launch. A per-game GPU choice can override it.',
     'GPU du jeu sur Automatique : utiliser ce réglage global.':'Per-game GPU set to Automatic: use this global setting.',
     'PARAMÈTRES':'SETTINGS',
