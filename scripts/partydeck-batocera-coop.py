@@ -933,11 +933,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                     ))
                 )
                 render = 'standard'
-                if player_count == 2 and settings['mode'] in PLUTONIUM_MODES:
-                    if split == 'horizontal':
-                        render = settings['horizontal_render']
-                    elif split == 'vertical':
-                        render = 'native'
+                # T6 crops its menus when the render target is portrait.
+                if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
+                    render = settings['horizontal_render']
                 render_width, render_height = render_size(width, height, horizontal_render=render)
                 desktop_width, desktop_height = desktop_size(render_width, render_height)
                 args.extend(['-w', str(desktop_width), '-h', str(desktop_height)])

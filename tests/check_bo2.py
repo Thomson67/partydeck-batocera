@@ -256,7 +256,13 @@ with TemporaryDirectory() as folder:
                                         'sleep', '0.2', 'click', '1']
         assert all(item.kwargs['env']['DISPLAY'] == ':1' for item in run.call_args_list)
         run.reset_mock()
-        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(stdout='WIDTH=1280\nHEIGHT=720\n')]
+        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(stdout='WIDTH=1280\nHEIGHT=720\n'), Mock()]
+        assert bo2.click_menu_button(host_display, ':0', bo2.CUSTOM_GAMES_BUTTONS['plutonium-zm'])
+        assert run.call_args.args[0] == ['xdotool', 'windowfocus', '--sync', '2718',
+                                        'mousemove', '--window', '2718', '293', '180',
+                                        'sleep', '0.2', 'click', '1']
+        run.reset_mock()
+        run.side_effect = [Mock(returncode=0, stdout='2718\n'), Mock(stdout='WIDTH=960\nHEIGHT=1080\n')]
         assert not bo2.click_menu_button(host_display, ':0', bo2.ONLINE_BUTTON)
         assert run.call_count == 2
 

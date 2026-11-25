@@ -404,12 +404,15 @@ def click_menu_button(display_file, outer_display, button):
         dimensions = dict(re.findall(r'^(WIDTH|HEIGHT)=([0-9]+)$', geometry.stdout, re.M))
         width, height = (int(dimensions.get(key, '0')) for key in ('WIDTH', 'HEIGHT'))
         measured_width, measured_height = MENU_SIZE
-        if height < 540 or width * measured_height != height * measured_width:
+        if height < measured_height or width * 9 not in (height * 16, height * 32):
             return False
         x, y = button
+        # The menu's 16:9 layout is centered in both normal and ultrawide game windows.
+        scale = height / measured_height
+        x = round(width / 2 + (x - measured_width / 2) * scale)
+        y = round(y * scale)
         subprocess.run(['xdotool', 'windowfocus', '--sync', window,
-                        'mousemove', '--window', window, str(round(x * width / measured_width)),
-                        str(round(y * height / measured_height)), 'sleep', '0.2', 'click', '1'],
+                        'mousemove', '--window', window, str(x), str(y), 'sleep', '0.2', 'click', '1'],
                        env=env, timeout=2, capture_output=True, check=True)
         return True
     except (OSError, subprocess.SubprocessError):

@@ -386,10 +386,10 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
     coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080),
                       'bo2-j2', saves=base/'saves', player_count=2, split='vertical')
     args = popen.call_args.args[0]
-    for option, size in (('-w', '960'), ('-h', '1080'), ('-W', '960'), ('-H', '1080')):
+    for option, size in (('-w', '1280'), ('-h', '720'), ('-W', '960'), ('-H', '1080')):
         assert args[args.index(option) + 1] == size
-    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '960x1080'
-    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_DESKTOP_MODE'] == '960x1080'
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'
+    assert popen.call_args.kwargs['env']['PARTYDECK_BO2_DESKTOP_MODE'] == '1280x720'
 
     from partydeck_bo2 import PUBLISH_DISPLAY, SESSION_MODE
     settings.update(automatic_join=False, open_custom_lobby=True)
