@@ -167,6 +167,7 @@ with TemporaryDirectory() as folder:
             host_settings = json.loads(story.session_config(player, token).read_text())
             assert host_settings['storyCode'] == 'existing-campaign' and not host_settings['shareAmmoRupeesHp']
         else:
+            online['Skin'] = ''
             assert not story.session_config(player, token).exists()
             assert graphics['Language'] == 2
         assert data['CVars']['gZeldaOnline'] == online
@@ -183,6 +184,26 @@ with TemporaryDirectory() as folder:
             failed_online = json.loads(path.read_text())['CVars']['gZeldaOnline']
             assert failed_online['AutoConnect'] == 1 and failed_online['FileServer'] == ''
             assert failed_online.get('Skin') == online.get('Skin')
+        if index == 2:
+            player_mods = private / 'mods'
+            player_mods.mkdir()
+            pack = player_mods / '01 - Enhanced 3DS Link Reworked'
+            pack.mkdir()
+            original_model = pack / 'original.otr'
+            original_model.write_bytes(b'original mod')
+            with zipfile.ZipFile(player_mods / 'linkle.o2r', 'w') as package:
+                package.writestr('linkle/objects/object_link_child/Link', b'catalogue skin')
+            with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)), \
+                 patch.object(story, 'patch_client', return_value=False), \
+                 patch.object(story.skins, 'mask_link_overrides') as mask:
+                selected = options | {'skins': ['link', 'linkle', '', '']}
+                story.configure_client(player, archive, private, player, selected, base / 'skins')
+                assert json.loads(path.read_text())['CVars']['gZeldaOnline']['Skin'] == 'linkle'
+                mask.assert_called_once_with(private, player)
+                story.configure_client(player, archive, private, player, options, base / 'skins')
+                assert json.loads(path.read_text())['CVars']['gZeldaOnline']['Skin'] == ''
+                assert mask.call_count == 1
+                assert original_model.read_bytes() == b'original mod'
     assert not (game/'shipofharkinian.json').exists()
     assert (game/'soh.exe').read_bytes() == binary
     mods = game / 'mods'

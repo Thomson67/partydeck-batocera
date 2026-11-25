@@ -314,7 +314,7 @@ def label_value(key, value):
         return {'': tr('Conserver'), 'Original': tr('Madeline standard')}.get(value, value)
     if key.startswith(f'{STORY_COOP}.skins.'):
         if not value or value == 'link':
-            return tr('Link standard' if value else 'Conserver')
+            return tr('Link standard' if value else 'Mods du jeu')
         reference = value.split('|', 1)[0]
         return STORY_SKINS.get(reference, (reference, None))[0]
     if key.startswith(f'{STORY_COOP}.consumables.'):

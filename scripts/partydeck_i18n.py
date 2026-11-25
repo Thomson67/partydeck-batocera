@@ -203,6 +203,7 @@ EN = {
     'Code de campagne (facultatif)': 'Campaign code (optional)',
     'Port du serveur local': 'Local server port',
     'Link standard': 'Default Link',
+    'Mods du jeu': 'Game mods',
     'Story Co-op · noms et skins des joueurs': 'Story Co-op · player names and skins',
     'Story Co-op · réglages communs aux joueurs de cette session': 'Story Co-op · shared settings for this session',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',

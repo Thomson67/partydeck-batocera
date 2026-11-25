@@ -79,8 +79,9 @@ aussi de saisir sa référence, par exemple `linkle` ou
 `linkle|linkle_1.o2r,linkle_2.o2r` si le skin utilise plusieurs archives.
 Quand un joueur choisit explicitement un skin, Windows Party masque dans
 son instance le pack **Enhanced 3DS Link** et les archives O2R qui
-remplacent le squelette de Link. Choisissez **Conserver** pour garder
-les mods d’apparence actifs. Si la préparation du skin échoue, le jeu
+remplacent le squelette de Link. Choisissez **Mods du jeu** pour retrouver
+l’apparence de votre installation, même après avoir utilisé un skin
+personnalisé. Si la préparation du skin échoue, le jeu
 se lance avec l’apparence précédente et l’erreur figure dans le journal.
 
 L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,

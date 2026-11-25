@@ -403,6 +403,10 @@ def configure_client(player, rom, directory, root, options, skin_cache):
     host, port = client_host(index), options['port']
     online.update(Enabled=1, AutoConnect=1, Host=host, Port=port, Nickname=options['names'][index - 1])
     skin = options['skins'][index - 1]
+    if not skin:
+        # The per-player configuration persists between sessions. Clear the
+        # online skin so the regular game assets and installed mods apply.
+        online['Skin'] = ''
     # The shared game LAN is offline. The launcher has already sourced and
     # verified the selected catalogue assets outside this namespace.
     online['FileServer'] = ''

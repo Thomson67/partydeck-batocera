@@ -94,6 +94,7 @@ for language, automatic, skin, default_skin in (
     assert player_fields[1][:2] == ('ocarina-story-coop.skins.0', skin)
     assert len(player_fields[1][2]) == 22 and 'linkle' in player_fields[1][2]
     assert label_value(player_fields[1][0], 'link') == default_skin
+    assert label_value(player_fields[1][0], '') == ('Mods du jeu' if language == 'fr' else 'Game mods')
     assert label_value(player_fields[1][0], 'linkle') == 'Linkle by DanatheElf'
     assert [field[1:] for field in fields(3, 'ocarina-story-coop')] == [
         field[1:] for field in fields(3, 'soh-anchor')]
