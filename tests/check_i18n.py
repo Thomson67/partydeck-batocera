@@ -80,6 +80,19 @@ for language, mode, multiplayer, original, catalog, horizontal, automatic in (
     assert next(game for game in COMMON if game.id == 'bo2').stem == f'Black Ops II · {catalog}'
 lang.set_language('fr')
 
+for language, automatic, skin, default_skin in (
+        ('fr', 'Créer et rejoindre le groupe automatiquement', 'J1 · Skin', 'Link standard'),
+        ('en', 'Automatically create and join the party', 'Player 1 · Skin', 'Default Link')):
+    lang.set_language(language)
+    network = {key: label for key, label, _ in fields(1, 'ocarina-story-coop')}
+    assert network['ocarina-story-coop.automatic'] == automatic
+    player_fields = fields(2, 'ocarina-story-coop', story_skins=['linkle'])
+    assert player_fields[1] == ('ocarina-story-coop.skins.0', skin, ['', 'link', 'linkle'])
+    assert label_value(player_fields[1][0], 'link') == default_skin
+    assert [field[1:] for field in fields(3, 'ocarina-story-coop')] == [
+        field[1:] for field in fields(3, 'soh-anchor')]
+lang.set_language('fr')
+
 for language, title, message in (
         ('fr', 'Windows Party · Lancement interrompu', 'Manettes détectées : 1. Manettes nécessaires : 2.'),
         ('en', 'Windows Party · Launch stopped', 'Controllers detected: 1. Controllers required: 2.')):

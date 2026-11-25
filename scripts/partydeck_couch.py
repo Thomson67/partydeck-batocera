@@ -20,7 +20,8 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_bo2 import (ADAPTER as BO2, MODES as BO2_MODES, PLUTONIUM_MODES, HORIZONTAL_RENDER, JOIN_HOST,
                            defaults as bo2_defaults, matches as matches_bo2)
-from partydeck_story_coop import ADAPTER as STORY_COOP, LABEL as STORY_LABEL, matches as matches_story_coop
+from partydeck_story_coop import (ADAPTER as STORY_COOP, LABEL as STORY_LABEL, defaults as story_defaults,
+                                 matches as matches_story_coop, skin_choices as story_skin_choices)
 from partydeck_celestenet import (defaults as celeste_defaults, matches as matches_celeste, skin_choices,
                                   LANGUAGES as CELESTE_LANGUAGES)
 from partydeck_nfsmw import defaults as mw_defaults, matches as matches_mw
@@ -101,7 +102,7 @@ EN_KEYS = [list('qwertyuiop'), list('asdfghjkl'), list('zxcvbnm012'),
            list('3456789 .-_'), *KEYS[4:]]
 
 
-def fields(tab, adapter='standard', celeste_skins=()):
+def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
     if tab == 0:
         return [('players', tr('Joueurs'), ['auto', '1', '2', '3', '4']),
                 ('split', tr('Partage de l’écran'), ['horizontal', 'vertical']),
@@ -122,6 +123,20 @@ def fields(tab, adapter='standard', celeste_skins=()):
         return [('bo2.mode', tr('Mode de jeu'), list(BO2_MODES)),
                 ('bo2.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
                 ('bo2.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))] if tab == 1 else []
+    if adapter == STORY_COOP:
+        if tab == 1:
+            return [(f'{adapter}.automatic', tr('Créer et rejoindre le groupe automatiquement'), [True, False]),
+                    (f'{adapter}.room', tr('Code de campagne (facultatif)'), None),
+                    (f'{adapter}.port', tr('Port du serveur local'), None),
+                    (f'{adapter}.config', tr('Chemin du JSON SoH'), None),
+                    (f'{adapter}.locations', tr('Positions visibles'), [True, False]),
+                    (f'{adapter}.teleport', tr('Téléportation'), [True, False]),
+                    (f'{adapter}.sync', tr('Objets et progression partagés'), [True, False])]
+        if tab == 2:
+            return [(f'{adapter}.{key}.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr(label)), choices)
+                    for index in range(4)
+                    for key, label, choices in [('names', 'Nom', None), ('skins', 'Skin', ['', 'link', *story_skins])]]
+        return soh_graphics_fields(adapter)
     if adapter == 'celestenet':
         if tab == 2:
             rows = [(f'celestenet.names.{index}', tr('J{p0} · {p1}', p0=index + 1, p1=tr('Nom')), None)
@@ -219,12 +234,17 @@ def fields(tab, adapter='standard', celeste_skins=()):
     if tab == 2:
         return [(f'anchor.{key}.{i}', tr('J{p0} · {p1}', p0=i + 1, p1=label), None)
                 for i in range(4) for key, label in [('names', tr('Nom')), ('teams', tr('Équipe'))]]
-    return [('anchor.graphics.internal_resolution', tr('Résolution interne'), [.5, .75, 1., 1.25, 1.5, 1.75, 2.]),
-            ('anchor.graphics.msaa', tr('Anti-aliasing MSAA'), list(range(1, 9))),
-            ('anchor.graphics.vsync', tr('VSync'), [False, True]),
-            ('anchor.graphics.texture_filter', tr('Filtre des textures'), [0, 1, 2]),
-            ('anchor.graphics.music_j1_only', tr('Musique uniquement pour J1'), [False, True]),
-            *[(f'anchor.graphics.volumes.{key}', tr(label) + ' (%)', None) for key, label in VOLUME_FIELDS]]
+    return soh_graphics_fields('anchor')
+
+
+def soh_graphics_fields(prefix):
+    graphics = f'{prefix}.graphics'
+    return [(f'{graphics}.internal_resolution', tr('Résolution interne'), [.5, .75, 1., 1.25, 1.5, 1.75, 2.]),
+            (f'{graphics}.msaa', tr('Anti-aliasing MSAA'), list(range(1, 9))),
+            (f'{graphics}.vsync', tr('VSync'), [False, True]),
+            (f'{graphics}.texture_filter', tr('Filtre des textures'), [0, 1, 2]),
+            (f'{graphics}.music_j1_only', tr('Musique uniquement pour J1'), [False, True]),
+            *[(f'{graphics}.volumes.{key}', tr(label) + ' (%)', None) for key, label in VOLUME_FIELDS]]
 
 
 def get(data, key):
@@ -286,6 +306,10 @@ def label_value(key, value):
         return tr({'keep':'Conserver','on':'Activé','off':'Désactivé'}[value])
     if key.startswith('celestenet.skins.'):
         return {'': tr('Conserver'), 'Original': tr('Madeline standard')}.get(value, value)
+    if key.startswith(f'{STORY_COOP}.skins.'):
+        return {'': tr('Conserver'), 'link': tr('Link standard')}.get(value, value.split('|', 1)[0])
+    if key == f'{STORY_COOP}.room' and not value:
+        return tr('Conserver')
     if key == 'celestenet.language':
         return tr(CELESTE_LANGUAGES[value])
     if key == 'dst.language':
@@ -330,6 +354,7 @@ class Model:
         self.rows = []
         self.filter = ''
         self.celeste_skins = []
+        self.story_skins = []
         self.reload()
         if rom is not None:
             self.select(Path(rom))
@@ -365,6 +390,7 @@ class Model:
     def select(self, rom, common=None):
         self.selected = rom
         self.celeste_skins = []
+        self.story_skins = []
         if isinstance(rom, CommonGame):
             self.rom, self.data, self.saved = None, None, None
             return
@@ -392,12 +418,15 @@ class Model:
         self.data.setdefault('celestenet',celeste_defaults())
         self.data.setdefault('dst', dst_defaults())
         self.data.setdefault('bo2', bo2_defaults(rom))
+        self.data.setdefault(STORY_COOP, story_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
             self.data['adapter'] = recipe.adapter
             self.common_for_rom[rom] = recipe
         if self.data['adapter'] == 'celestenet' or matches_celeste(rom):
             self.celeste_skins = skin_choices(self.base, rom)
+        if self.data['adapter'] == STORY_COOP:
+            self.story_skins = story_skin_choices(self.base, rom)
         self.saved = copy.deepcopy(self.data)
 
     def dirty(self):
@@ -423,6 +452,7 @@ class Model:
         if stored.get('adapter') != 'celestenet':stored.pop('celestenet', None)
         if stored.get('adapter') != DST:stored.pop('dst', None)
         if stored.get('adapter') != BO2:stored.pop('bo2', None)
+        if stored.get('adapter') != STORY_COOP:stored.pop(STORY_COOP, None)
         save_profile(self.base, self.rom, stored)
         try:
             subprocess.run([str(self.base / 'windows-party'), 'ajouter', str(self.rom),
@@ -822,11 +852,11 @@ class App:
             return (0,1,2,3,4)
         if self.model.data and self.model.data.get('adapter') == 'borderlands2':
             return (0,1,2)
-        return (0,1,2,3) if self.model.data and self.model.data.get('adapter') == 'soh-anchor' else (0,)
+        return (0,1,2,3) if self.model.data and self.model.data.get('adapter') in ('soh-anchor', STORY_COOP) else (0,)
 
     def current_fields(self):
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
-                    self.model.celeste_skins)
+                    self.model.celeste_skins, self.model.story_skins)
         if self.model.data and self.model.data.get('adapter') == BO2 and self.model.data['bo2']['mode'] == 'original':
             rows = [row for row in rows if row[0] == 'bo2.mode'] if self.tab == 1 else rows
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
@@ -1742,18 +1772,22 @@ class App:
                         self.toast(tr('Volume repris depuis la configuration commune') if key.startswith('sm64coopdx.') else tr('Volume repris depuis le JSON commun'))
                     else:
                         put(self.model.data, key, max(0, min(100, self.volume(key) + (-5 if action == 'left' else 5))))
+                elif key.startswith(f'{STORY_COOP}.skins.') and action == 'ok':
+                    self.edit(title, value, lambda text: put(self.model.data, key, text.strip()))
                 elif choices:
                     index = choices.index(value) if value in choices else 0
                     put(self.model.data, key, choices[(index + (-1 if action == 'left' else 1)) % len(choices)])
+                    if key == 'adapter' and self.model.data[key] == STORY_COOP:
+                        self.model.story_skins = story_skin_choices(self.model.base, self.model.rom)
                     if key == 'keyboard_player' and not self.model.data[key]:
                         self.model.data['input'] = 'auto'
                         self.toast(tr('Joueurs sur manettes ; clavier/souris disponible dans la fenêtre active pour les menus.'))
                 elif action == 'ok':
                     def update(text):
-                        result = int(text) if (key in ('anchor.port','hkmp.port','hkmultiplayer.port','borderlands2.port','sm64coopdx.port','l4d2.port') or ('.volumes.' in key and text.strip())) else text
+                        result = int(text) if (key in ('anchor.port',f'{STORY_COOP}.port','hkmp.port','hkmultiplayer.port','borderlands2.port','sm64coopdx.port','l4d2.port') or ('.volumes.' in key and text.strip())) else text
                         if '.volumes.' in key and text.strip() and not 0 <= result <= 100:
                             raise ValueError(tr('Volume : de 0 à 100 %, ou vide pour le JSON commun.'))
-                        if key == 'anchor.port' and not 1024 < result < 65535:
+                        if key in ('anchor.port', f'{STORY_COOP}.port') and not 1024 < result < 65535:
                             raise ValueError(tr('Port : de 1025 à 65534.'))
                         if key in ('hkmp.port','hkmultiplayer.port') and not 1024 <= result <= 65535:
                             raise ValueError(tr('Réglages Hollow Knight HKMP invalides.'))
@@ -1846,6 +1880,9 @@ class App:
                 if self.model.data['adapter'] == 'celestenet':
                     subtitle = (tr('CelesteNet · noms et skins des joueurs') if self.tab == 2 else
                                 tr('Sans debug, choisissez Se connecter localement dans les options CelesteNet.'))
+                if self.model.data['adapter'] == STORY_COOP:
+                    subtitle = (tr('Story Co-op · noms et skins des joueurs') if self.tab == 2
+                                else tr('Story Co-op · réglages communs aux joueurs de cette session'))
                 if self.model.data['adapter'] == BO2:
                     bo2_settings = self.model.data['bo2']
                     if bo2_settings['mode'] in PLUTONIUM_MODES:

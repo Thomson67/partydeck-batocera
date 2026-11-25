@@ -50,9 +50,7 @@ def validate(settings):
     for key in ("host", "room", "config"):
         if not isinstance(settings.get(key), str) or not settings[key].strip():
             raise ValueError(tr('Champ Anchor vide ou invalide : {p0}', p0=key))
-    relative = PurePosixPath(settings["config"])
-    if relative.is_absolute() or ".." in relative.parts or relative.suffix.lower() != ".json":
-        raise ValueError(tr("Le fichier SoH doit être un chemin JSON relatif au dossier de lancement."))
+    validate_config(settings["config"])
     if type(settings.get("port")) is not int or not 1024 < settings["port"] < 65535:
         raise ValueError(tr("Le port Anchor doit être compris entre 1025 et 65534."))
     for key in ("enabled", "sync"):
@@ -72,6 +70,36 @@ def validate(settings):
     return settings
 
 
+def apply_graphics(data, settings, index):
+    options = validate_graphics(settings)
+    graphics = data["CVars"].setdefault("gSettings", {})
+    graphics.update(InternalResolution=float(options["internal_resolution"]),
+                    MSAAValue=options["msaa"], VsyncEnabled=int(options["vsync"]),
+                    TextureFilter=options["texture_filter"])
+    # Advanced fixed/pixel-perfect resolution overrides the normal scale slider.
+    graphics.setdefault("AdvancedResolution", {}).update(
+        Enabled=0, VerticalResolutionToggle=0, PixelPerfectMode=0)
+    graphics.setdefault("Volume", {}).update(options.get("volumes", {}))
+    if options["music_j1_only"] and index > 0:
+        graphics["Volume"].update(MainMusic=0, SubMusic=0, Fanfare=0)
+
+
+def config_path(directory, relative):
+    path = directory
+    # Never follow a config directory into a solo save or another player's view.
+    for part in PurePosixPath(relative).parts:
+        path /= part
+        if path.is_symlink():
+            raise ValueError(tr('Configuration SoH liée à un autre emplacement : {p0}', p0=path))
+    return path
+
+
+def validate_config(relative):
+    path = PurePosixPath(relative)
+    if path.is_absolute() or ".." in path.parts or path.suffix.lower() != ".json":
+        raise ValueError(tr("Le fichier SoH doit être un chemin JSON relatif au dossier de lancement."))
+
+
 def apply_config(directory, payload):
     from partydeck_profiles import atomic_write
     settings = validate(payload["settings"])
@@ -79,13 +107,7 @@ def apply_config(directory, payload):
     if type(index) is not int or index not in range(4):
         raise ValueError(tr("Numéro de joueur Anchor invalide."))
     directory = directory.resolve()
-    path = directory / settings["config"]
-    # Never follow a config directory into a solo save or another player's view.
-    cursor = directory
-    for part in PurePosixPath(settings["config"]).parts:
-        cursor /= part
-        if cursor.is_symlink():
-            raise ValueError(tr('Configuration SoH liée à un autre emplacement : {p0}', p0=cursor))
+    path = config_path(directory, settings["config"])
     previous = json.loads(path.read_text()) if path.exists() else {}
     data = copy.deepcopy(payload["template"]) if "template" in payload else previous
     if not isinstance(data, dict) or not isinstance(previous, dict):
@@ -115,20 +137,7 @@ def apply_config(directory, payload):
     elif "template" in payload:
         anchor["LastClientId"] = previous.get("CVars", {}).get("gRemote", {}).get("Anchor", {}).get("LastClientId", 0)
     if "template" in payload:
-        options = validate_graphics(settings.get("graphics", graphics_defaults()))
-        graphics = data["CVars"].setdefault("gSettings", {})
-        graphics.update(InternalResolution=float(options["internal_resolution"]),
-                        MSAAValue=options["msaa"], VsyncEnabled=int(options["vsync"]),
-                        TextureFilter=options["texture_filter"])
-        # Advanced fixed/pixel-perfect resolution overrides the normal scale
-        # slider in SoH. Disable it so the selected multiplier actually applies.
-        advanced = graphics.setdefault("AdvancedResolution", {})
-        advanced.update(Enabled=0, VerticalResolutionToggle=0, PixelPerfectMode=0)
-        # Apply the selected common mix first. J1-only music takes precedence
-        # over those levels on the other players, without muting their SFX.
-        graphics.setdefault("Volume", {}).update(options.get("volumes", {}))
-        if options["music_j1_only"] and index > 0:
-            graphics.setdefault("Volume", {}).update(MainMusic=0, SubMusic=0, Fanfare=0)
+        apply_graphics(data, settings.get("graphics", graphics_defaults()), index)
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     if stamp is not None:
         atomic_write(stamp, identity)

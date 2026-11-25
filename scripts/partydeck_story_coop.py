@@ -13,6 +13,7 @@ import tempfile
 import time
 import zipfile
 
+from partydeck_anchor import apply_graphics, config_path, graphics_defaults, validate_config, validate_graphics, VOLUME_FIELDS
 from partydeck_i18n import tr
 
 ADAPTER = 'ocarina-story-coop'
@@ -20,6 +21,7 @@ LABEL = 'Ocarina of Time · Story Co-op'
 VERSION = 'v1.0.5'
 PORT = 21050
 GAME_DIR = Path('drive_c/game')
+CONFIG = 'shipofharkinian.json'
 SERVER_DIR = 'PartyDeck-Story-Coop'
 ASSETS = ('oot.o2r', 'oot-mq.o2r')
 RELEASE = f'https://github.com/cranebeaker/ocarina-coop/releases/download/{VERSION}/'
@@ -46,6 +48,93 @@ def matches(rom):
     return ('ocarinastorycoop' in name or
             (bool(re.search(r'ocarina|ship[\s_-]*of[\s_-]*harkinian|\bsoh\b', name))
              and bool(re.search(r'story[\s_-]*co[\s_-]*op', name))))
+
+
+def defaults():
+    return dict(automatic=True, port=PORT, room='', config=CONFIG,
+                sync=True, locations=True, teleport=True,
+                names=[f'J{i}' for i in range(1, 5)], skins=[''] * 4, graphics=graphics_defaults())
+
+
+def validate(options):
+    if options is None:
+        return defaults()
+    if not isinstance(options, dict):
+        raise ValueError(tr('Profil Story Co-op invalide.'))
+    options = defaults() | options
+    if (type(options['port']) is not int or not 1024 < options['port'] < 65535
+            or any(type(options[key]) is not bool for key in ('automatic', 'sync', 'locations', 'teleport'))
+            or not isinstance(options['config'], str)
+            or not valid_text(options['room'], 32, optional=True)):
+        raise ValueError(tr('Profil Story Co-op invalide.'))
+    validate_config(options['config'])
+    names, skins = options['names'], options['skins']
+    if (not isinstance(names, list) or len(names) != 4
+            or any(not valid_text(name, 63) for name in names)
+            or len({name.strip() for name in names}) != 4):
+        raise ValueError(tr('Story Co-op : définissez quatre noms de joueur différents (63 octets maximum).'))
+    if (not isinstance(skins, list) or len(skins) != 4
+            or any(not valid_text(skin, 255, optional=True) for skin in skins)):
+        raise ValueError(tr('Story Co-op : identifiant de skin invalide.'))
+    options['names'] = [name.strip() for name in names]
+    validate_graphics(options['graphics'])
+    return options
+
+
+def valid_text(value, limit, *, optional=False):
+    return (isinstance(value, str) and (optional or bool(value.strip()))
+            and all(char.isprintable() for char in value) and len(value.encode()) <= limit)
+
+
+def client_host(index):
+    return f'127.0.0.{index}'
+
+
+def session_config(player, token):
+    return player / f'story-coop-{token}.json'
+
+
+def installed_skins(directory):
+    """Discover namespaced player resources produced by the upstream skin converter."""
+    resources, player_skins = {}, set()
+    for path in sorted((directory / 'mods').rglob('*')):
+        if path.suffix.lower() != '.o2r' or not path.is_file() or any(c in path.name for c in '|,'):
+            continue
+        try:
+            with zipfile.ZipFile(path) as archive:
+                for entry in archive.namelist():
+                    parts = entry.replace('\\', '/').split('/', 3)
+                    if (len(parts) < 3 or parts[0] in ('alt', 'link')
+                            or not re.fullmatch(r'[A-Za-z0-9_-]+', parts[0])
+                            or parts[1] not in ('objects', 'textures', 'scenes', 'audio', 'overlays', 'misc')):
+                        continue
+                    reference = parts[0]
+                    resources.setdefault(reference, set()).add(path.name)
+                    if parts[1] == 'objects' and parts[2] in ('object_link_boy', 'object_link_child'):
+                        player_skins.add(reference)
+        except (OSError, zipfile.BadZipFile):
+            continue
+    choices = []
+    for reference in sorted(player_skins, key=str.casefold):
+        names = resources[reference]
+        value = reference if names == {reference + '.o2r'} else reference + '|' + ','.join(sorted(names))
+        if valid_text(value, 255):
+            choices.append(value)
+    return choices
+
+
+def skin_choices(base, rom):
+    if rom.is_dir():
+        for directory in game_dirs(rom):
+            if (rom / directory / 'soh.exe').is_file():
+                return installed_skins(rom / directory)
+    from partydeck_storage import identity
+    identifier, _ = identity(rom)
+    try:
+        choices = json.loads((base / 'runtime' / identifier / 'j1' / 'story-skins.json').read_text())
+    except (OSError, ValueError):
+        return []
+    return choices if isinstance(choices, list) and all(valid_text(skin, 255) for skin in choices) else []
 
 
 def digest(path):
@@ -144,14 +233,18 @@ def verify_server(files):
     return files
 
 
-def bundled_server_files(rom):
+def game_dirs(rom):
     autorun = read_member(rom, Path('autorun.cmd')) or b''
     setting = re.search(r'^DIR=([^\r\n]*)', autorun.decode('utf-8-sig', errors='replace'), re.MULTILINE)
     directory = Path(setting[1].strip().replace('\\', '/')) if setting else Path('.')
     defaults = (Path('.'),) if rom.suffix.lower() == '.pc' else (GAME_DIR, Path('.'))
     # Only probe relative paths inside the game or archive.
     candidates = defaults if directory.is_absolute() or '..' in directory.parts else (directory, *defaults)
-    for candidate in dict.fromkeys(candidates):
+    return dict.fromkeys(candidates)
+
+
+def bundled_server_files(rom):
+    for candidate in game_dirs(rom):
         relative = candidate / SERVER_DIR
         program = read_member(rom, relative / 'OOTServer')
         if program is None:
@@ -191,7 +284,7 @@ def stop_server(process):
             process.wait()
 
 
-def start_server(rom, work, lan, cache):
+def start_server(rom, work, lan, cache, options, players, host_settings):
     from partydeck_borderlands2 import write_bytes
     files = bundled_server_files(rom)
     if files is None:
@@ -210,17 +303,20 @@ def start_server(rom, work, lan, cache):
     program.chmod(0o700)
     log = work / 'server.log'
     with log.open('wb') as output:
-        process = subprocess.Popen([*lan.prefix(0), str(program), '--port', str(PORT)],
+        lobby = Path(__file__).with_name('partydeck_story_lobby.py')
+        process = subprocess.Popen([*lan.prefix(0), sys.executable, str(lobby), str(program),
+                                    str(options['port']), str(players), str(host_settings),
+                                    json.dumps({key: options[key] for key in ('automatic', 'locations', 'teleport')})],
                                    pass_fds=(lan.fds[0],), cwd=work, stdin=subprocess.DEVNULL,
                                    stdout=output, stderr=subprocess.STDOUT)
     try:
         deadline = time.monotonic() + 10
         with log.open('rb') as output:
-            marker = f'OOTServer: listening on port {PORT}'.encode()
+            marker = f'Story Co-op READY {options["port"]}'.encode()
             while process.poll() is None and time.monotonic() < deadline:
                 if any(marker in line for line in output):
                     print(tr('Story Co-op : serveur local prêt sur {p0}:{p1}.',
-                             p0=lan.address(0), p1=PORT), flush=True)
+                             p0=lan.address(0), p1=options['port']), flush=True)
                     return process
                 time.sleep(.15)
         raise RuntimeError(tr('Story Co-op : le serveur ne démarre pas. Consultez {p0}.', p0=log))
@@ -248,7 +344,7 @@ def repair_client_audio(client):
     return True
 
 
-def configure_client(player, rom, directory, root):
+def configure_client(player, rom, directory, root, options):
     from partydeck_bottles import private_windows_paths
     from partydeck_profiles import atomic_write
 
@@ -267,19 +363,43 @@ def configure_client(player, rom, directory, root):
         raise ValueError(tr('Story Co-op : ouvrez d’abord le jeu en solo pour générer oot.o2r.'))
     if repair_client_audio(client):
         print(tr('Story Co-op {p0} : correctif du crash audio appliqué.', p0=player.name.upper()), flush=True)
-    path = directory / 'shipofharkinian.json'
-    if path.is_symlink():
-        raise ValueError(tr('Le fichier est un lien symbolique : {p0}', p0=path))
-    data = json.loads(path.read_text(encoding='utf-8-sig')) if path.is_file() else {}
+    index = int(player.name.removeprefix('j'))
+    path = config_path(directory, CONFIG)
+    source = config_path(directory, options['config'])
+    data = json.loads(source.read_text(encoding='utf-8-sig')) if source.is_file() or source != path else {}
     cvars = data.setdefault('CVars', {})
     # Story Co-op 1.0.5 can spawn remote players in the title screen demo.
-    cvars.setdefault('gSettings', {})['BootSequence'] = 2  # BOOTSEQUENCE_FILESELECT
+    graphics = cvars.setdefault('gSettings', {})
+    graphics['BootSequence'] = 2  # BOOTSEQUENCE_FILESELECT
+    # Unset sliders have the same defaults as the SoH common profile. Restore
+    # them before applying a new mix so toggling J1-only music is reversible.
+    graphics.setdefault('Volume', {}).update({key: 100 for key, _ in VOLUME_FIELDS})
+    apply_graphics(data, options['graphics'], index - 1)
     online = cvars.setdefault('gZeldaOnline', {})
-    address = f'127.0.0.1:{PORT}'
-    online.update(Enabled=1, AutoConnect=1, Host='127.0.0.1', Port=PORT, Nickname=player.name.upper())
+    host, port = client_host(index), options['port']
+    online.update(Enabled=1, AutoConnect=1, Host=host, Port=port, Nickname=options['names'][index - 1])
+    skin = options['skins'][index - 1]
+    if skin:
+        online['Skin'] = skin
+    if index == 1:
+        atomic_write(player / 'story-skins.json', json.dumps(installed_skins(directory)))
     party = online.setdefault('Party', {})
-    party['StoryCoop'] = 1
-    party['StoryCode'] = party.get('StoryCode') or 'partydeck'
+    party['StoryCoop'] = int(options['sync'])
+    party['StoryCode'] = options['room'] or party.get('StoryCode') or 'partydeck'
+    token = os.environ.get('PARTYDECK_STORY_COOP', '')
+    if options['automatic'] and index == 1 and re.fullmatch('[a-f0-9]{32}', token):
+        settings = {
+            'storyCoop': options['sync'],
+            'storyCode': party['StoryCode'],
+            'privateDungeons': bool(party.get('PrivateDungeons', 0)),
+            'extraEnemies': bool(party.get('ExtraEnemies', 0)),
+            'healthMultiplier': bool(party.get('HealthMultiplier', 0)),
+            'shareAmmoRupeesHp': bool(party.get('ShareAmmoRupeesHp', 0)),
+        }
+        for key in ('ExtraEnemyWeight', 'EnemyHealthWeight', 'BossHealthWeight'):
+            value = party.get(key, 1.0)
+            settings[key[0].lower() + key[1:]] = value if type(value) in (float, int) and 0 <= value <= 5 else 1.0
+        atomic_write(session_config(player, token), json.dumps(settings))
     anchor = cvars.get('gRemote', {}).get('Anchor')
     if isinstance(anchor, dict):
         anchor['Enabled'] = 0
@@ -291,22 +411,23 @@ def configure_client(player, rom, directory, root):
         window.update(Width=int(width), Height=int(height), PositionX=0, PositionY=0)
     atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
     print(tr('Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.',
-             p0=player.name.upper(), p1=address), flush=True)
+             p0=player.name.upper(), p1=f'{host}:{port}'), flush=True)
 
 
 def install_hook(base, rom, player):
     from partydeck_anchor import instrument_native
     from partydeck_profiles import atomic_write, profile_path, read_profile
 
-    if (os.environ.get('PARTYDECK_STORY_COOP') != '1' or not profile_path(base, rom).is_file()
-            or read_profile(base, rom).get('adapter') != ADAPTER):
+    if not os.environ.get('PARTYDECK_STORY_COOP') or not profile_path(base, rom).is_file():
+        return
+    if read_profile(base, rom).get('adapter') != ADAPTER:
         return
     binary = shutil.which('batocera-wine')
     if not binary:
         raise RuntimeError(tr('batocera-wine introuvable.'))
     binary = Path(binary).resolve()
     replacement = player / 'batocera-wine-story-coop'
-    hook = [sys.executable, str(base / 'partydeck_story_coop.py'), '_client', str(player), str(rom)]
+    hook = [sys.executable, str(base / 'partydeck_story_coop.py'), '_client', str(base), str(player), str(rom)]
     atomic_write(replacement, instrument_native(binary.read_text(), hook, prefix_argument=True), 0o755)
     subprocess.run(['bash', '-n', str(replacement)], check=True)
     subprocess.run(['mount', '--bind', str(replacement), str(binary)], check=True)
@@ -314,8 +435,10 @@ def install_hook(base, rom, player):
 
 if __name__ == '__main__':
     try:
-        if len(sys.argv) == 6 and sys.argv[1] == '_client':
-            configure_client(*(Path(value) for value in sys.argv[2:]))
+        if len(sys.argv) == 7 and sys.argv[1] == '_client':
+            from partydeck_profiles import read_profile
+            base, player, rom, directory, root = map(Path, sys.argv[2:])
+            configure_client(player, rom, directory, root, read_profile(base, rom)[ADAPTER])
         else:
             parser = argparse.ArgumentParser(description=LABEL)
             parser.add_argument('source', type=Path)

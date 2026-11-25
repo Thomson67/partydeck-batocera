@@ -751,7 +751,7 @@ def run_compositor(command):
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
-                 track_runner=False, dst=False, split=None, story_coop=False):
+                 track_runner=False, dst=False, split=None, story_coop=None):
     _, _, width, height = rectangle
     bo2_resolution = None
     bo2_desktop = None
@@ -838,8 +838,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         environment['PARTYDECK_DST'] = '1'
     environment.pop('PARTYDECK_STORY_COOP', None)
     if story_coop:
-        from partydeck_story_coop import PORT
-        environment.update(PARTYDECK_STORY_COOP='1', OOT_SERVER=f'127.0.0.1:{PORT}')
+        from partydeck_story_coop import client_host
+        host = client_host(int(player.name.removeprefix('j')))
+        environment.update(PARTYDECK_STORY_COOP=session_token, OOT_SERVER=f'{host}:{story_coop["port"]}')
     if celestenet:
         environment['PARTYDECK_CELESTENET']='1'
     environment.pop('PARTYDECK_EXIT_STATE',None)
@@ -1130,9 +1131,10 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     celeste_options = profile[CELESTENET] if party and (profile or {}).get('adapter') == CELESTENET else None
     celestenet = celeste_options is not None and len(players) > 1
     from partydeck_story_coop import (ADAPTER as STORY_COOP, VERSION as STORY_VERSION,
-                                     start_server as start_story_server, stop_server as stop_story_server)
-    story_coop = len(players) > 1 and (profile or {}).get('adapter') == STORY_COOP
-    shared_lan = celestenet or story_coop
+                                     session_config as story_session_config, start_server as start_story_server,
+                                     stop_server as stop_story_server)
+    story_coop = profile[STORY_COOP] if party and len(players) > 1 and (profile or {}).get('adapter') == STORY_COOP else None
+    shared_lan = celestenet or bool(story_coop)
     from partydeck_dst import ADAPTER as DST
     dst = party and len(players) > 1 and (profile or {}).get('adapter') == DST
     bl2_lan=None
@@ -1188,6 +1190,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     network=None
     celeste_processes=[]
     story_server=None
+    story_settings = None
     bo2_join = None
     bo2_automatic = False
     bl2_host=None
@@ -1234,7 +1237,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
         if story_coop:
             cache = base / 'dependencies' / STORY_COOP / STORY_VERSION
-            story_server = start_story_server(target, PARTY_SAVES / save_name / 'story-coop', network, cache)
+            story_settings = story_session_config(base / 'runtime' / game_id / 'j1', session_token)
+            story_server = start_story_server(target, PARTY_SAVES / save_name / 'story-coop',
+                                             network, cache, story_coop, len(players), story_settings)
         if dst:
             from partydeck_dst import readiness_dir
             dst_ready = readiness_dir(base/'runtime'/game_id/'j1', session_token)
@@ -1357,6 +1362,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     try:
                         if story_server is not None:
                             stop_story_server(story_server)
+                        if story_settings is not None:
+                            story_settings.unlink(missing_ok=True)
                         if celeste_processes:
                             from partydeck_celestenet import stop
                             for process in reversed(celeste_processes):

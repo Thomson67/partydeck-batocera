@@ -200,11 +200,13 @@ for split, second_position, inputs, shared, party, virtual, title in [
             ready = stack.enter_context(patch('partydeck_bo2.startup_ready', side_effect=read_boot))
         if story:
             network = stack.enter_context(patch('partydeck_private_lan.PrivateLAN'))
-            def start_story(archive, work, lan, cache):
+            def start_story(archive, work, lan, cache, options, count, host_settings):
                 starts.assert_not_called()
                 assert archive == game and lan is network.return_value
                 assert work.is_relative_to(base / 'party-saves') and work.name == 'story-coop'
                 assert cache == base / 'dependencies/ocarina-story-coop/v1.0.5'
+                assert count == 2 and options['automatic']
+                assert host_settings.is_relative_to(base / 'runtime') and host_settings.parent.name == 'j1'
                 return server
             server = Mock()
             boot_story = stack.enter_context(patch('partydeck_story_coop.start_server', side_effect=start_story))

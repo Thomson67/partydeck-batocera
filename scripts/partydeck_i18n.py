@@ -183,6 +183,18 @@ EN = {
         'Story Co-op: first run the game solo to generate oot.o2r.',
     'Story Co-op {p0} : démarrage au choix de la sauvegarde, connexion automatique à {p1}.':
         'Story Co-op {p0}: starting at file select, automatic connection to {p1}.',
+    'Profil Story Co-op invalide.': 'Invalid Story Co-op profile.',
+    'Story Co-op : définissez quatre noms de joueur différents (63 octets maximum).':
+        'Story Co-op: set four different player names (63 bytes maximum).',
+    'Story Co-op : identifiant de skin invalide.': 'Story Co-op: invalid skin reference.',
+    'Story Co-op : J{p0} a rejoint le groupe {p1}.': 'Story Co-op: P{p0} joined party {p1}.',
+    'Story Co-op : liaison locale interrompue ({p0}).': 'Story Co-op: local connection ended ({p0}).',
+    'Créer et rejoindre le groupe automatiquement': 'Automatically create and join the party',
+    'Code de campagne (facultatif)': 'Campaign code (optional)',
+    'Port du serveur local': 'Local server port',
+    'Link standard': 'Default Link',
+    'Story Co-op · noms et skins des joueurs': 'Story Co-op · player names and skins',
+    'Story Co-op · réglages communs aux joueurs de cette session': 'Story Co-op · shared settings for this session',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',
     'Manettes détectées : {p0}. Manettes nécessaires : {p1}.': 'Controllers detected: {p0}. Controllers required: {p1}.',
     'Le clavier et la souris sont réservés aux menus pour ce jeu.': 'The keyboard and mouse are reserved for menus in this game.',

@@ -244,6 +244,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_l4d2.py ]] || die 'Module Left 4 Dead 2 absent du paquet.'
     [[ -f $source_dir/partydeck_celestenet.py ]] || die 'Module CelesteNet absent / CelesteNet module missing.'
     [[ -f $source_dir/partydeck_story_coop.py ]] || die 'Module Story Co-op absent / Story Co-op module missing.'
+    [[ -f $source_dir/partydeck_story_lobby.py ]] || die 'Module réseau Story Co-op absent / Story Co-op network module missing.'
     [[ -f $source_dir/partydeck_i18n.py ]] || die 'Module de langues absent du paquet.'
     [[ -f $source_dir/partydeck_catalog.py ]] || die 'Catalogue commun absent du paquet.'
     [[ -f $source_dir/partydeck_virtual_input.py ]] || die 'Module contrôles virtuels absent du paquet.'
@@ -324,6 +325,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_celestenet.py" "$base/partydeck_celestenet.py"
     cp -- "$source_dir/partydeck_story_coop.py" "$staging/partydeck_story_coop.py"
     mv -fT -- "$staging/partydeck_story_coop.py" "$base/partydeck_story_coop.py"
+    cp -- "$source_dir/partydeck_story_lobby.py" "$staging/partydeck_story_lobby.py"
+    mv -fT -- "$staging/partydeck_story_lobby.py" "$base/partydeck_story_lobby.py"
     cp -- "$source_dir/partydeck_bo2.py" "$staging/partydeck_bo2.py"
     mv -fT -- "$staging/partydeck_bo2.py" "$base/partydeck_bo2.py"
     cp -- "$source_dir/partydeck_plutonium.py" "$staging/partydeck_plutonium.py"

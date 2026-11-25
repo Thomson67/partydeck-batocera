@@ -67,6 +67,12 @@ with TemporaryDirectory() as folder:
     assert recipe_for(base/'SoH.wsquashfs').adapter == 'soh-anchor'
     save_profile(base, archive, defaults(archive))
     assert read_profile(base, archive)['adapter'] == story.ADAPTER
+    assert read_profile(base, archive)[story.ADAPTER] == story.defaults()
+    legacy = defaults(archive)
+    del legacy[story.ADAPTER]
+    from partydeck_profiles import profile_path
+    profile_path(base, archive).write_text(json.dumps(legacy))
+    assert read_profile(base, archive)[story.ADAPTER] == story.defaults()
 
     expected = {'OOTServer': server, 'config.json': config}
     checksums = {name: hashlib.sha256(data).hexdigest() for name, data in expected.items()}
@@ -107,6 +113,10 @@ with TemporaryDirectory() as folder:
             assert story.cached_server_files(cache) == expected
             assert download.call_count == 2
 
+    options = story.defaults()
+    options.update(port=21053, names=['J1', 'Invité', 'J3', 'J4'], skins=['link', '', '', ''])
+    options['graphics'].update(msaa=2, volumes={'MainMusic': 70, 'SFX': 55})
+    token = 'a' * 32
     for index in (1, 2):
         player = base / f'j{index}'
         private = player / story.GAME_DIR
@@ -122,28 +132,47 @@ with TemporaryDirectory() as folder:
         path.write_text(json.dumps({'CVars': cvars, 'Window': {'Backend': {'Id': 1}}}))
         fixed = binary.replace(b'client', b'stable', 1)
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player),
-                        PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='540'), \
+                        PARTYDECK_PLAYER_WIDTH='1920', PARTYDECK_PLAYER_HEIGHT='540',
+                        PARTYDECK_STORY_COOP=token), \
              patch.multiple(story, CLIENT_DIGEST=hashlib.sha256(binary).hexdigest(),
                             FIXED_CLIENT_DIGEST=hashlib.sha256(fixed).hexdigest(),
                             AUDIO_GUARD_OFFSET=binary.index(b'client'),
                             AUDIO_GUARD_ORIGINAL=b'client', AUDIO_GUARD_PATCH=b'stable'):
-            story.configure_client(player, archive, private, player)
+            story.configure_client(player, archive, private, player, options)
             assert client.read_bytes() == fixed
             inode = client.stat().st_ino
-            story.configure_client(player, archive, private, player)
+            story.configure_client(player, archive, private, player, options)
             assert client.stat().st_ino == inode
         data = json.loads(path.read_text())
-        assert data['CVars']['gSettings'] == ({'BootSequence': 2} if index == 1
-                                             else {'BootSequence': 2, 'Language': 2})
-        assert data['CVars']['gZeldaOnline'] == {
-            'AutoConnect': 1, 'Enabled': 1, 'Host': '127.0.0.1', 'Port': story.PORT, 'Nickname': f'J{index}',
+        graphics = data['CVars']['gSettings']
+        assert graphics['BootSequence'] == 2 and graphics['MSAAValue'] == 2
+        assert graphics['Volume']['SFX'] == 55
+        assert graphics['Volume']['MainMusic'] == (70 if index == 1 else 0)
+        online = {
+            'AutoConnect': 1, 'Enabled': 1, 'Host': story.client_host(index), 'Port': 21053,
+            'Nickname': options['names'][index - 1],
             'Party': {'StoryCoop': 1, 'StoryCode': 'existing-campaign'}}
+        if index == 1:
+            online['Skin'] = 'link'
+            assert json.loads(story.session_config(player, token).read_text())['storyCode'] == 'existing-campaign'
+        else:
+            assert not story.session_config(player, token).exists()
+            assert graphics['Language'] == 2
+        assert data['CVars']['gZeldaOnline'] == online
         assert data['CVars']['gRemote']['Anchor']['Enabled'] == 0
         assert data['Window']['Backend'] == {'Id': 1}
         assert not data['Window']['Fullscreen']['Enabled']
         assert (data['Window']['Width'], data['Window']['Height']) == (1920, 540)
     assert not (game/'shipofharkinian.json').exists()
     assert (game/'soh.exe').read_bytes() == binary
+    mods = game / 'mods'
+    mods.mkdir()
+    for filename, resource in (('linkle.o2r', 'linkle/objects/object_link_child/Link'),
+                               ('linkle-textures.o2r', 'linkle/textures/icon'),
+                               ('standard.o2r', 'objects/object_link_child/Link')):
+        with zipfile.ZipFile(mods / filename, 'w') as package:
+            package.writestr(resource, b'data')
+    assert story.skin_choices(base, prefix) == ['linkle|linkle-textures.o2r,linkle.o2r']
     invalid = base / 'unknown-soh.exe'
     invalid.write_bytes(b'unsupported Windows build')
     try:

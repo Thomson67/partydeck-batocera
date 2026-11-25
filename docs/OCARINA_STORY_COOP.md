@@ -43,13 +43,31 @@ dans **Windows Party**. Le profil **Ocarina of Time · Story Co-op** détecte
 ce nom. Il est aussi sélectionnable dans **Session → Profil du jeu**.
 Choisissez de deux à quatre joueurs.
 
-Windows Party lance le serveur local, connecte chaque joueur automatiquement
-et ouvre directement le choix de la sauvegarde. La démo de l’écran titre est
-sautée pour éviter que les personnages distants y apparaissent. Dans la
-fenêtre **Zelda Online**, J1 crée un
-groupe avec **Story Co-op** activé et invite J2. J2 accepte. Aux sessions
-suivantes, recréez le groupe avec le même code d’équipe pour retrouver la
-campagne. Le code par défaut est `partydeck`.
+Windows Party lance le serveur local. J1 crée le groupe et les autres
+joueurs le rejoignent automatiquement. Chaque fenêtre s’ouvre directement
+sur le choix de la sauvegarde. Sélectionnez la sauvegarde à jouer dans
+chaque fenêtre. La démo de l’écran titre est sautée pour éviter que les
+personnages distants y apparaissent.
+
+Dans **Réseau**, vous pouvez régler le port local, le JSON SoH, les positions
+visibles, la téléportation et la progression partagée. Le code de campagne
+vide reprend celui du JSON de J1, ou `partydeck` si celui-ci est vide.
+Le serveur associe une campagne au nom de J1 et à ce code. Conservez les
+deux pour retrouver votre progression. Vous pouvez aussi désactiver la
+création automatique du groupe pour gérer les invitations dans Zelda Online.
+Le PvP, les équipes d’Anchor et son serveur distant sont propres à l’autre
+profil.
+
+Dans **Joueurs**, choisissez le nom et le skin de chacun. Les skins
+convertis avec [skinconv](https://github.com/cranebeaker/ocarina-coop/tree/v1.0.5/tools/skinconv)
+sont détectés dans le dossier `mods`. Pour un `.wsquashfs`, la liste est
+mise en cache au premier lancement. Valider la ligne d’un skin permet
+aussi de saisir sa référence, par exemple `linkle` ou
+`linkle|linkle_1.o2r,linkle_2.o2r` si le skin utilise plusieurs archives.
+Les fichiers du skin doivent se trouver dans `mods`.
+
+L’onglet **Image & son** reprend la résolution interne, le MSAA, la VSync,
+le filtre des textures, les volumes et la musique sur J1 uniquement.
 
 Windows Party applique à la copie privée de `soh.exe` de chaque joueur le
 correctif du crash audio observé pendant l’introduction de la version 1.0.5.

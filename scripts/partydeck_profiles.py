@@ -20,7 +20,8 @@ from urllib.error import URLError
 
 from partydeck_bo2 import ADAPTER as BO2, defaults as bo2_defaults, matches as matches_bo2, validate as validate_bo2
 from partydeck_dst import ADAPTER as DST, defaults as dst_defaults, matches as matches_dst, validate as validate_dst
-from partydeck_story_coop import ADAPTER as STORY_COOP, matches as matches_story_coop
+from partydeck_story_coop import (ADAPTER as STORY_COOP, defaults as story_defaults,
+                                 matches as matches_story_coop, validate as validate_story)
 from partydeck_migrate import MEDIA_FIELDS, PARTY_ROMS
 
 ROM_TYPES = {".wine", ".pc", ".wsquashfs"}
@@ -73,7 +74,7 @@ def defaults(rom):
     if matches_bo2(rom):
         data.update(adapter=BO2, bo2=bo2_defaults(rom))
     if matches_story_coop(rom):
-        data['adapter'] = STORY_COOP
+        data.update(adapter=STORY_COOP, **{STORY_COOP: story_defaults()})
     return data
 
 
@@ -121,6 +122,8 @@ def validate(data, rom):
         data['dst'] = validate_dst(data.get('dst'))
     if data.get('adapter') == BO2:
         data['bo2'] = validate_bo2(data.get('bo2', bo2_defaults(rom)))
+    if data.get('adapter') == STORY_COOP:
+        data[STORY_COOP] = validate_story(data.get(STORY_COOP))
     return data
 
 
