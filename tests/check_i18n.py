@@ -100,6 +100,10 @@ for language, automatic, skin, default_skin in (
     assert label_value(player_fields[1][0], 'link') == default_skin
     assert label_value(player_fields[1][0], '') == ('Mods du jeu' if language == 'fr' else 'Game mods')
     assert label_value(player_fields[1][0], 'linkle') == 'Linkle by DanatheElf'
+    assert lang.tr('Story Co-op {p0} : fenêtre du jeu absente, relance de ce joueur.', p0='J1') == {
+        'fr': 'Story Co-op J1 : fenêtre du jeu absente, relance de ce joueur.',
+        'en': 'Story Co-op J1: game window missing, restarting this player.',
+    }[language]
     assert player_fields[-1][:2] == ('ocarina-story-coop.freecam',
         'Caméra libre au stick droit' if language == 'fr' else 'Free camera on right stick')
     assert [field[1:] for field in fields(3, 'ocarina-story-coop')] == [

@@ -149,6 +149,41 @@ time.sleep(60)
     subprocess.run([sys.executable, coop.__file__, '_await-display', str(state), *command],
                    env=environment, check=True, timeout=3)
 
+    with patch.dict(os.environ, DISPLAY=':0', XAUTHORITY='/outer-authority'), \
+         patch.object(coop.subprocess, 'run') as run:
+        run.return_value = subprocess.CompletedProcess([], 1, '', '')
+        assert coop.story_window(state) is False
+        assert '--onlyvisible' in run.call_args.args[0]
+        assert run.call_args.kwargs['env']['DISPLAY'] == ':21'
+        assert 'XAUTHORITY' not in run.call_args.kwargs['env']
+        run.return_value = subprocess.CompletedProcess([], 1, '', 'cannot open display')
+        assert coop.story_window(state) is None
+        run.side_effect = [subprocess.CompletedProcess([], 0, '137\n', ''),
+                           subprocess.CompletedProcess([], 0, '', '')]
+        assert coop.story_window(state, reveal=True) is True
+        assert '--onlyvisible' not in run.call_args_list[-2].args[0]
+        assert run.call_args.args[0] == ['xdotool', 'windowmap', '137', 'windowraise', '137']
+
+    states = [root / 'j1' / 'startup.json', root / 'j2' / 'startup.json']
+    startup = coop.StoryStartup(states, 0)
+    with patch.object(coop, 'story_window', side_effect=lambda path, reveal=False: reveal or path == states[1]):
+        assert startup.check(states, 59) is None
+        assert startup.check(states, 60) is None  # Restore the existing game window first.
+        assert startup.check(states, 63) is None
+        assert startup.check(states, 64) == 0
+        startup.restarted(0, 64)
+    with patch.object(coop, 'story_window', return_value=False):
+        assert startup.check(states, 124) is None  # A single restart.
+        assert not startup.pending
+    with patch.object(coop, 'story_window', return_value=None):
+        startup = coop.StoryStartup(states, 0)
+        assert startup.check(states, 60) is None  # Probe errors cannot cause a restart.
+    startup = coop.StoryStartup(states, 0)
+    with patch.object(coop, 'story_window', side_effect=[False, True, True, True]):
+        assert startup.check(states, 60) is None
+        assert startup.check(states, 62) is None  # Restoring the existing window is enough.
+        assert not startup.pending and not startup.retried
+
     context = root/'hotkeygen.state'
     previous = ('ports', {'exit': 'native-exit', 'screenshot': 'take-shot'}, True)
     context.write_text(json.dumps({'context': {'name': previous[0], 'keys': previous[1]},

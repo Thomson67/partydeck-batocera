@@ -6,6 +6,7 @@ import io
 from pathlib import Path
 import sys
 import tempfile
+import time
 from unittest.mock import Mock, patch
 
 path = Path(__file__).resolve().parents[1] / "scripts/partydeck-batocera-coop.py"
@@ -217,15 +218,35 @@ for split, second_position, inputs, shared, party, virtual, title in [
         classes = [f"partydeck-coop-{os.getpid()}-j1", f"partydeck-coop-{os.getpid()}-j2"]
         windows = mock(coop, "top_window", side_effect={classes[0]:"810", classes[1]:"811"}.get)
         place = mock(coop, "place_window", return_value=True)
+        expected_placements = 2
+        if story:
+            class Clock:
+                now = 0
+                time_ns = staticmethod(time.time_ns)
+
+                def monotonic(self):
+                    return self.now
+
+                def sleep(self, seconds):
+                    self.now += seconds
+
+            mock(coop, 'time', new=Clock())
+            replacement = Mock(pid=789, **{'poll.return_value': None, 'wait.return_value': 0})
+            processes.append(replacement)
+            starts.side_effect = processes
+            mock(coop, 'story_window', side_effect=lambda state, reveal=False:
+                 not reveal and (state.parent.name == 'j2' or starts.call_count == 3))
+            expected_placements = 3
         for process in processes:
-            process.poll.side_effect = lambda: 0 if place.call_count==2 else None
+            process.poll.side_effect = lambda: 0 if place.call_count == expected_placements else None
         output = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
         assert coop.run_session(base, base, game, game, "auto", split, "auto", party=party) == 0
         if party and not virtual:
             assert graphics_call.call_args.args[1]=="system"
             assert monitor_call.call_args.args==("DP-7",)
-        assert [call.args[0] for call in windows.call_args_list] == classes
-        assert [call.args[-1] for call in starts.call_args_list] == classes
+        expected_windows = classes + classes[:1] if story else classes
+        assert [call.args[0] for call in windows.call_args_list] == expected_windows
+        assert [call.args[-1] for call in starts.call_args_list] == expected_windows
         assert all(call.kwargs["shared_keyboard_mouse"] is (shared or virtual)
                    for call in starts.call_args_list)
         if party and not virtual:
@@ -244,6 +265,9 @@ for split, second_position, inputs, shared, party, virtual, title in [
             assert all(call.kwargs['story_coop']['local_skin'] == skin for call in starts.call_args_list)
             prepare_skin.assert_called_once_with(game, base / 'dependencies/ocarina-story-coop/v1.0.5')
             assert boot_story.call_count == 1
+            assert coop.stop_players.call_args_list[0].args[0] == [processes[0]]
+            assert coop.stop_players.call_args_list[-1].args[0] == [replacement, processes[1]]
+            assert starts.call_args_list[0] == starts.call_args_list[2]
             stop_story.assert_called_once_with(server)
         assert place.call_args_list[1].args == ("811", second_position)
         assert "Joueurs : 2" in output.getvalue() and "Fenêtre J2 placée : 811" in output.getvalue()

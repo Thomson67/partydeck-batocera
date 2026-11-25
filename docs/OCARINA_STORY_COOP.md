@@ -54,6 +54,12 @@ après la connexion. Pour la rouvrir, appuyez sur **Échap** dans la fenêtre
 du joueur et ouvrez **Network → Zelda Online → Open Window**. La croix de
 la fenêtre ferme le panneau.
 
+Au démarrage, PartyDeck vérifie que la fenêtre de jeu apparaît pour chaque
+joueur. Si un autre joueur est déjà affiché et que la fenêtre manque
+toujours après une minute, PartyDeck tente de la réafficher, puis relance
+une fois le joueur concerné si nécessaire. Le serveur et les autres
+joueurs continuent à tourner.
+
 Dans **Réseau**, vous pouvez régler le port local, le JSON SoH, les positions
 visibles, la téléportation et la progression partagée. Avec la progression
 partagée, **Partager les rubis**, **Partager les munitions** et **Partager les PV**

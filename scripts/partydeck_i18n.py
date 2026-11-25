@@ -210,6 +210,14 @@ EN = {
     'Caméra libre au stick droit': 'Free camera on right stick',
     'Story Co-op : partage du mod de Link indisponible ({p0}).': 'Story Co-op: could not share Link mod ({p0}).',
     'Story Co-op : mod de Link préparé pour les autres joueurs.': 'Story Co-op: Link mod ready for the other players.',
+    'Story Co-op {p0} : fenêtre du jeu visible.': 'Story Co-op {p0}: game window visible.',
+    'Story Co-op {p0} : tentative de réaffichage de la fenêtre du jeu.':
+        'Story Co-op {p0}: trying to restore the game window.',
+    'Story Co-op {p0} : fenêtre du jeu absente, relance de ce joueur.':
+        'Story Co-op {p0}: game window missing, restarting this player.',
+    'Story Co-op {p0} : fenêtre du jeu non confirmée après {p1} s.':
+        'Story Co-op {p0}: game window not confirmed after {p1} s.',
+    'Story Co-op {p0} : fenêtre replacée après relance.': 'Story Co-op {p0}: window repositioned after restart.',
     'Story Co-op · noms et skins des joueurs': 'Story Co-op · player names and skins',
     'Story Co-op · réglages communs aux joueurs de cette session': 'Story Co-op · shared settings for this session',
     'Windows Party · Lancement interrompu': 'Windows Party · Launch stopped',

@@ -3,6 +3,7 @@
 import argparse
 import ctypes as C
 from dataclasses import dataclass
+from functools import partial
 import hashlib
 import json
 import os
@@ -496,6 +497,89 @@ def await_nested_display(state, command):
     return 1
 
 
+def story_window(state, *, reveal=False):
+    try:
+        display = json.loads(state.with_suffix('.display').read_text())
+        screen = display.get('DISPLAY') if isinstance(display, dict) else None
+        outer = os.environ.get('DISPLAY', '')
+        if (not isinstance(screen, str) or not re.fullmatch(r':[0-9]+(?:\.[0-9]+)?', screen)
+                or screen.split('.')[0] == outer.split('.')[0]):
+            return None
+        env = dict(os.environ, DISPLAY=screen)
+        env.pop('XAUTHORITY', None)
+        if isinstance(display.get('XAUTHORITY'), str) and display['XAUTHORITY']:
+            env['XAUTHORITY'] = display['XAUTHORITY']
+        command = ['xdotool', 'search']
+        if not reveal:
+            command.append('--onlyvisible')
+        result = subprocess.run([*command, '--name', r'^Ship of Harkinian( |$)'],
+                                env=env, capture_output=True, text=True, timeout=2)
+        # xdotool returns 1 with no output when no window matched.
+        if result.returncode == 1 and not result.stderr.strip():
+            return False
+        windows = result.stdout.split()
+        if result.returncode or not windows:
+            return None
+        if not reveal:
+            return True
+        if len(windows) != 1 or not windows[0].isdecimal():
+            return None
+        window = windows[0]
+        result = subprocess.run(['xdotool', 'windowmap', window, 'windowraise', window],
+                                env=env, capture_output=True, text=True, timeout=2)
+        return result.returncode == 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+class StoryStartup:
+    TIMEOUT = 60
+
+    def __init__(self, states, now):
+        self.pending = dict.fromkeys(range(len(states)), now + self.TIMEOUT)
+        self.visible = set()
+        self.revealed = set()
+        self.retried = set()
+
+    def check(self, states, now):
+        missing = []
+        for index in list(self.pending):
+            visible = story_window(states[index])
+            if visible:
+                self.visible.add(index)
+                del self.pending[index]
+                print(tr('Story Co-op {p0} : fenêtre du jeu visible.', p0=states[index].parent.name.upper()), flush=True)
+            elif visible is False:
+                missing.append(index)
+        for index, deadline in list(self.pending.items()):
+            if now < deadline:
+                continue
+            name = states[index].parent.name.upper()
+            if index in missing and self.visible:
+                if index not in self.revealed and story_window(states[index], reveal=True):
+                    self.revealed.add(index)
+                    self.pending[index] = now + 4
+                    print(tr('Story Co-op {p0} : tentative de réaffichage de la fenêtre du jeu.', p0=name), flush=True)
+                    continue
+                if index not in self.retried:
+                    print(tr('Story Co-op {p0} : fenêtre du jeu absente, relance de ce joueur.', p0=name), flush=True)
+                    return index
+            del self.pending[index]
+            print(tr('Story Co-op {p0} : fenêtre du jeu non confirmée après {p1} s.',
+                     p0=name, p1=self.TIMEOUT), flush=True)
+        return None
+
+    def restarted(self, index, now):
+        self.retried.add(index)
+        self.revealed.discard(index)
+        self.pending[index] = now + self.TIMEOUT
+
+
+def clear_player_state(state):
+    for suffix in ('.json', '.umu-ready', '.stop', '.display', '.runner', '.native'):
+        state.with_suffix(suffix).unlink(missing_ok=True)
+
+
 def mount_overlay(target, area, shared=None):
     upper, work, view = (area / name for name in ("upper", "work", "view"))
     for path in (upper, work, view):
@@ -852,7 +936,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         environment['PARTYDECK_TRACK_RUNNER'] = '1'
     if exit_state is not None:
         environment['PARTYDECK_EXIT_STATE'] = str(exit_state)
-    supervise_wine = exit_state is not None and UMU_HOME.is_dir()
+    supervise_wine = exit_state is not None and (UMU_HOME.is_dir() or story_coop)
     nested_command = ([sys.executable, helper, "_publish-display", str(exit_state)]
                       if supervise_wine else wine_command)
     args.extend(["--", "/bin/sh", "-c", 'unset LD_LIBRARY_PATH LD_PRELOAD; exec "$@"',
@@ -1186,7 +1270,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     for index in range(1,len(players)+1):
         (base / ('runtime' if party else 'coop') / game_id / f'j{index}').mkdir(parents=True,exist_ok=True)
     save_name = f"{original.stem[:90]} [{game_id[:10]}]"
-    processes, states = [], []
+    processes, states, launchers = [], [], []
     bottle_players=[]
     from partydeck_umu import clean_shared_steam_runtimes, prepare_shared_steam_runtimes
     shared_runtimes = ()
@@ -1276,14 +1360,16 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                         break
                     time.sleep(.25)
             state = player/f'session-{uuid.uuid4().hex}.json'
-            processes.append(start_player(app, player, original, target, devices, rectangle,
-                                          window_classes[index - 1],
-                                          shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves,exit_state=state,
-                                          network=network,network_index=0 if shared_lan else index-1,
-                                          session_token=session_token,player_count=len(players),
-                                          l4d2_launch=l4d2_launch,celestenet=celestenet,
-                                          celeste_options=celeste_options,track_runner=track_runner,dst=dst,
-                                          split=split,story_coop=story_coop))
+            launch = partial(start_player, app, player, original, target, devices, rectangle,
+                             window_classes[index - 1],
+                             shared_keyboard_mouse=shared_keyboard_mouse or virtual_input, saves=saves, exit_state=state,
+                             network=network, network_index=0 if shared_lan else index - 1,
+                             session_token=session_token, player_count=len(players),
+                             l4d2_launch=l4d2_launch, celestenet=celestenet,
+                             celeste_options=celeste_options, track_runner=track_runner, dst=dst,
+                             split=split, story_coop=story_coop)
+            processes.append(launch())
+            launchers.append(launch)
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
@@ -1335,14 +1421,47 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                 print(f"Fenêtre J{index + 1} non repérée : {window_classes[index]}", flush=True)
         if seen_windows:
             focus_window(seen_windows[min(seen_windows)])
+        story_startup = StoryStartup(states, time.monotonic()) if story_coop else None
+        next_story_check = 0
+        story_placement = {}
         next_output_check=time.monotonic()+2
         while True:
             if bl2_host is not None:bl2_host.poll()
             result = session_result(processes,states,wayland)
             if result is not None:
                 return result
-            if time.monotonic()>=next_output_check:
-                next_output_check=time.monotonic()+2
+            now = time.monotonic()
+            if story_startup is not None and now >= next_story_check:
+                next_story_check = now + 2
+                index = story_startup.check(states, now)
+                if index is not None:
+                    state = states[index]
+                    stop_players([processes[index]], states=[state])
+                    clear_player_state(state)
+                    processes[index] = launchers[index]()
+                    now = time.monotonic()
+                    story_startup.restarted(index, now)
+                    story_placement[index] = now + 30
+                    if virtual_watcher is not None:
+                        virtual_watcher.close()
+                        virtual_watcher.start()
+                for index, deadline in list(story_placement.items()):
+                    if now >= deadline:
+                        del story_placement[index]
+                        continue
+                    window = top_window(window_classes[index])
+                    if window:
+                        try:
+                            if place_window(window, layout(monitor, len(players), split)[index]):
+                                del story_placement[index]
+                                focus_window(window)
+                                print(tr('Story Co-op {p0} : fenêtre replacée après relance.', p0=states[index].parent.name.upper()), flush=True)
+                        except subprocess.CalledProcessError:
+                            pass
+                if not story_startup.pending and not story_placement:
+                    story_startup = None
+            if now>=next_output_check:
+                next_output_check=now+2
                 try:
                     current=primary_monitor(desktop['output'])
                     if current!=monitor and reposition_windows(window_classes,layout(current,len(players),split)):
@@ -1422,12 +1541,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                         clean_shared_steam_runtimes(path.parent, shared_runtimes)
                     except (OSError, RuntimeError) as error:
                         print(f"UMU runtime cache: {error}", flush=True)
-                path.unlink(missing_ok=True)
-                path.with_suffix('.umu-ready').unlink(missing_ok=True)
-                path.with_suffix('.stop').unlink(missing_ok=True)
-                path.with_suffix('.display').unlink(missing_ok=True)
-                path.with_suffix('.runner').unlink(missing_ok=True)
-                path.with_suffix('.native').unlink(missing_ok=True)
+                clear_player_state(path)
                 if bo2_mode:
                     for kind in ('log', 'display'):
                         automatic_path(path.parent, session_token, kind).unlink(missing_ok=True)
