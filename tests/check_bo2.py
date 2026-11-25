@@ -142,10 +142,16 @@ with TemporaryDirectory() as folder:
             (game / 'zone' / locale).mkdir(parents=True)
         localization = game / 'localization.txt'
         localization.write_bytes(b'french\r\nenglish\r\n')
+        original = b'french\r\n\r\n"Param\xe8tres"\r\n'
+        for language_file in ('localization_mp.txt', 'localization_zm.txt'):
+            (game / language_file).write_bytes(original)
         launcher.write_text(bo2.instrument_native(source, hook[:2] + ['--language', 'english'] + hook[2:],
                                                   pluto_mode, log=player_log))
         launched = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         assert localization.read_bytes() == b'english\r\nenglish\r\n'
+        for suffix in ('mp', 'zm'):
+            expected = original.replace(b'french', b'english', 1) if suffix == tag[2:] else original
+            assert (game / f'localization_{suffix}.txt').read_bytes() == expected
         runtime = game / '.partydeck-plutonium'
         windows_game = 'Z:' + str(game).replace('/', chr(92)) if entry == 'play_pc' else r'C:\game'
         expected_pluto = [str(runtime), './bin/' + bo2.BOOTSTRAPPER, tag, windows_game,

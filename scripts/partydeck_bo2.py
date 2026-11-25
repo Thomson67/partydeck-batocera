@@ -245,23 +245,27 @@ def windows_game_path(game, root):
     return str(PureWindowsPath('Z:/', *game.parts[1:]))
 
 
-def apply_language(game, language):
+def apply_language(game, mode, language):
     zone = private_child(game, 'zone')
     if not private_child(zone, language).is_dir():
         raise ValueError(tr('Black Ops II : fichiers de langue {p0} introuvables dans {p1}.',
                             p0=tr(LANGUAGES[language]), p1=zone))
-    path = private_child(game, 'localization.txt')
-    previous = path.read_bytes() if path.is_file() else b''
-    # Plutonium selects its language from the first entry in localization.txt.
-    # Retain the other entries and line endings from the installed game.
-    if previous:
-        updated, replaced = re.subn(rb'\A((?:\xef\xbb\xbf)?[ \t]*)[A-Za-z]+(?=[ \t\r\n]|$)',
-                                    lambda m: m[1] + language.encode('ascii'), previous, count=1)
-        if not replaced:
-            raise ValueError(tr('Black Ops II : fichier de langue invalide dans {p0}.', p0=game))
-    else:
-        updated = language.encode('ascii') + b'\r\n'
-    if updated != previous:
+    # T6 has a mode-specific file. Keep the generic file in sync for clients
+    # that use it as a fallback, preserving each file's existing byte encoding.
+    paths = [private_child(game, name) for name in ('localization.txt', f'localization_{mode[2:]}.txt')]
+    changes = []
+    for path in paths:
+        previous = path.read_bytes() if path.is_file() else b''
+        if previous:
+            updated, replaced = re.subn(rb'\A((?:\xef\xbb\xbf)?[ \t]*)[A-Za-z]+(?=[ \t\r\n]|$)',
+                                        lambda m: m[1] + language.encode('ascii'), previous, count=1)
+            if not replaced:
+                raise ValueError(tr('Black Ops II : fichier de langue invalide dans {p0}.', p0=path))
+        else:
+            updated = language.encode('ascii') + b'\r\n'
+        if updated != previous:
+            changes.append((path, updated))
+    for path, updated in changes:
         write_bytes(path, updated)
 
 
@@ -289,7 +293,7 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
     if storage.is_dir():
         copy_client_files(storage, private_child(runtime, storage.name), sync=False)
     if language != 'keep':
-        apply_language(game, language)
+        apply_language(game, mode, language)
 
     _, _, name = identity(player)
     port = HOST_PORT + int(player.name[1:]) - 1
