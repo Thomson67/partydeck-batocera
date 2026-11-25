@@ -341,7 +341,7 @@ def join_window(display_file, outer_display):
 
 
 class AutoJoin:
-    """Wait for a real host match and send the guest's private LAN command."""
+    """Track host matches for the lifetime of the split-screen session."""
 
     def __init__(self, players, token, mode, outer_display, started):
         self.host, *self.guests = players
@@ -350,10 +350,11 @@ class AutoJoin:
         self.outer_display = outer_display
         self.started = started
         self.offsets = {}
+        self.host_log = None
         self.host_ready = None
         self.connected = set()
-        self.attempts = dict.fromkeys(self.guests, 0)
-        self.retry_at = dict.fromkeys(self.guests, 0)
+        self.attempts = dict.fromkeys((guest.name for guest in self.guests), 0)
+        self.retry_at = dict.fromkeys(self.attempts, 0)
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
 
@@ -369,7 +370,8 @@ class AutoJoin:
         # Wine normally writes to our tee. UMU captures Proton output in
         # separate per-player runner logs, so include only logs of this run.
         session_log = automatic_path(self.host, self.token, 'log')
-        logs = [session_log, *(self.host / 'umu-logs').glob('runner-*.log')]
+        logs = ([self.host_log] if self.host_log is not None else
+                [session_log, *(self.host / 'umu-logs').glob('runner-*.log')])
         for path in logs:
             try:
                 info = path.stat()
@@ -382,31 +384,65 @@ class AutoJoin:
                     self.offsets[path] = stream.tell() - len(data) + end
             except OSError:
                 continue
-            yield from data[:end].splitlines()
+            for line in data[:end].splitlines():
+                yield path, line
+            # Stick to the stream that reports the game events. A runner log
+            # can repeat the native tee's output later and replay an old match.
+            if self.host_log is not None:
+                return
+
+    def observe_host(self, line, now):
+        if b'SV_Shutdown:' in line:
+            self.connected.clear()
+            self.host_ready = None
+            return True
+        if b'==== ShutdownGame (' in line:
+            # T6 also prints this on map rotation with clients still connected.
+            self.host_ready = None
+            return True
+        if b'------- Game Initialization -------' in line:
+            # Zombies can wait for guests before the host is fully in-game.
+            ready = self.mode == 'plutonium-zm' or 'j1' in self.connected
+            self.host_ready = None
+        else:
+            event = re.search(rb"client 'Player ([1-4])' (connected|disconnected)\b", line)
+            if event is None:
+                return False
+            player = 'j' + event[1].decode('ascii')
+            if event[2] == b'disconnected':
+                if player == 'j1':
+                    self.connected.clear()
+                    self.host_ready = None
+                elif player in self.connected and player in self.attempts:
+                    # A guest can leave deliberately. Re-arm on the next map.
+                    self.attempts[player] = 4
+                    self.connected.remove(player)
+                return True
+            if player != 'j1' and player not in self.connected:
+                print(tr('Black Ops II {p0} : connexion confirmée par J1.', p0=player.upper()), flush=True)
+            self.connected.add(player)
+            ready = player == 'j1'
+
+        if ready and self.host_ready is None:
+            self.host_ready = now + 2
+            self.attempts = dict.fromkeys(self.attempts, 0)
+            self.retry_at = dict.fromkeys(self.retry_at, 0)
+            print(tr('Black Ops II : partie de J1 détectée.'), flush=True)
+        return True
 
     def poll(self, now):
-        for line in self.host_output():
-            connected = re.search(rb"client 'Player ([1-4])' connected", line)
-            if connected:
-                player = 'j' + connected[1].decode('ascii')
-                if player != 'j1' and player not in self.connected:
-                    print(tr('Black Ops II {p0} : connexion confirmée par J1.', p0=player.upper()), flush=True)
-                self.connected.add(player)
-            if self.host_ready is None and (
-                    'j1' in self.connected or
-                    (self.mode == 'plutonium-zm' and
-                     (b'Game Initialization' in line or b'Initializing game at' in line))):
-                # Zombies can wait for guests before the host is fully in-game.
-                self.host_ready = now + 2
-                print(tr('Black Ops II : partie de J1 détectée.'), flush=True)
+        for path, line in self.host_output():
+            if self.observe_host(line, now):
+                self.host_log = path
         if self.host_ready is None or now < self.host_ready:
-            return False
+            return
 
         for player in self.guests:
             if self.stop.is_set():
-                return True
-            attempts = self.attempts[player]
-            if player.name in self.connected or now < self.retry_at[player] or attempts > 3:
+                return
+            name = player.name
+            attempts = self.attempts[name]
+            if name in self.connected or now < self.retry_at[name] or attempts > 3:
                 continue
             if attempts == 3 or now >= self.host_ready + 90:
                 if attempts:
@@ -415,18 +451,16 @@ class AutoJoin:
                 else:
                     print(tr('Black Ops II {p0} : impossible d’envoyer la commande de connexion à la console.',
                              p0=player.name.upper()), flush=True)
-                self.attempts[player] = 4
+                self.attempts[name] = 4
             elif join_window(automatic_path(player, self.token, 'display'), self.outer_display):
-                self.attempts[player] += 1
-                self.retry_at[player] = now + 18
+                self.attempts[name] += 1
+                self.retry_at[name] = now + 18
                 print(tr('Black Ops II {p0} : connexion à la partie de J1 demandée.',
                          p0=player.name.upper()), flush=True)
-        return all(player.name in self.connected or self.attempts[player] > 3 for player in self.guests)
 
     def run(self):
         while not self.stop.is_set():
-            if self.poll(time.monotonic()):
-                return
+            self.poll(time.monotonic())
             self.stop.wait(1)
 
 

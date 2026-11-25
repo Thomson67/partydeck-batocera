@@ -7,7 +7,7 @@ import shlex
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_bo2 as bo2
@@ -197,6 +197,7 @@ with TemporaryDirectory() as folder:
     token = '1' * 32
     log = bo2.automatic_path(host, token, 'log')
     display = bo2.automatic_path(guest, token, 'display')
+    initialization = b'------- Game Initialization -------\n'
     for title in ('Plutonium T6 Multiplayer (r5369 LAN)', 'Plutonium T6: Zombies',
                   'Plutonium T6 MP', 'Call of Duty(R): Black Ops II - Multiplayer'):
         assert re.search(bo2.GAME_WINDOW, title, re.I), title
@@ -223,39 +224,87 @@ with TemporaryDirectory() as folder:
 
     with patch.object(bo2, 'join_window', return_value=True) as join:
         observer = bo2.AutoJoin(players, token, 'plutonium-mp', ':0', 0)
-        log.write_bytes(b'------- Game Initialization -------\n')
-        assert not observer.poll(1)
+        log.write_bytes(initialization)
+        observer.poll(1)
         join.assert_not_called()
         with log.open('ab') as stream:
             stream.write(b"client 'Player 1' connected\nclient 'Player 3' connected")
-        assert not observer.poll(2)
+        observer.poll(2)
         with log.open('ab') as stream:
             stream.write(b'\n')
-        assert not observer.poll(4)
+        observer.poll(4)
         join.assert_called_once_with(display, ':0')
-        assert not observer.poll(10)
+        observer.poll(10)
         assert join.call_count == 1
         with log.open('ab') as stream:
             stream.write(b"client 'Player 2' connected\n")
-        assert observer.poll(30)
-        assert join.call_count == 1
+        observer.poll(30)
+
+        # A delayed UMU copy can't replay old match events. Rotation keeps
+        # connected guests in the match, while leaving it suppresses retries.
+        (host / 'umu-logs').mkdir()
+        runner_log = host / 'umu-logs/runner-session.log'
+        runner_log.write_bytes(b'SV_Shutdown: EXE_SERVERQUIT\n')
+        with log.open('ab') as stream:
+            stream.write(b'==== ShutdownGame (1) ====\n' + initialization)
+        observer.poll(35)
+        observer.poll(37)
+        with log.open('ab') as stream:
+            stream.write(b"client 'Player 2' disconnected\n")
+        observer.poll(40)
+        join.assert_called_once_with(display, ':0')
+
+        # A new private match re-arms every guest that is no longer connected.
+        with log.open('ab') as stream:
+            stream.write(b"SV_Shutdown: EXE_SERVERQUIT\n==== ShutdownGame (1) ====\n")
+        observer.poll(45)
+        with log.open('ab') as stream:
+            stream.write(initialization)
+        observer.poll(50)
+        observer.poll(55)
+        join.assert_called_once_with(display, ':0')
+        with log.open('ab') as stream:
+            stream.write(b"client 'Player 1' connected\nclient 'Player 3' connected\n")
+        observer.poll(60)
+        observer.poll(62)
+        assert join.call_args_list == [call(display, ':0'), call(display, ':0')]
+        with log.open('ab') as stream:
+            stream.write(b"client 'Player 2' connected\n")
+        observer.poll(64)
+        assert observer.connected == {'j1', 'j2', 'j3'}
+        runner_log.unlink()
 
     with patch.object(bo2, 'join_window', return_value=True) as join:
         observer = bo2.AutoJoin([host, guest], token, 'plutonium-zm', ':0', 0)
-        log.write_bytes(b'------- Game Initialization -------\n')
-        assert not observer.poll(1)
-        assert not observer.poll(3)
-        assert not observer.poll(21)
-        assert not observer.poll(39)
-        assert observer.poll(57)
+        log.write_bytes(initialization)
+        for now in (1, 3, 21, 39, 57, 65):
+            observer.poll(now)
         assert join.call_count == 3
+        with log.open('ab') as stream:
+            stream.write(b'SV_Shutdown: EXE_SERVERQUIT\n' + initialization)
+        observer.poll(66)
+        observer.poll(68)
+        assert join.call_count == 4
 
     with patch.object(bo2, 'join_window', return_value=False) as join:
         observer = bo2.AutoJoin([host, guest], token, 'plutonium-mp', ':0', 0)
         log.write_bytes(b"client 'Player 1' connected\n")
-        assert not observer.poll(1)
-        assert not observer.poll(3)
-        assert observer.poll(93)
+        for now in (1, 3, 93, 94):
+            observer.poll(now)
         join.assert_called_once_with(display, ':0')
+        assert observer.attempts['j2'] == 4
+
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        observer = bo2.AutoJoin([host, guest], token, 'plutonium-mp', ':0', 0)
+        log.write_bytes(b'Preparing UMU\n')
+        runner_log.write_bytes(initialization + b"client 'Player 1' connected\n")
+        observer.poll(1)
+        observer.poll(3)
+        with runner_log.open('ab') as stream:
+            stream.write(b"client 'Player 2' connected\nclient 'Player 1' disconnected\n"
+                         + initialization + b"client 'Player 1' connected\n")
+        observer.poll(5)
+        observer.poll(7)
+        assert join.call_args_list == [call(display, ':0'), call(display, ':0')]
 
 print('BO2: profile migration, absolute Plutonium paths, Bink diagnostics, original autorun, private identities and automatic join verified.')

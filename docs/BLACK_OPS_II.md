@@ -23,7 +23,8 @@ Utilisez le client Plutonium en mode LAN pour jouer quand le menu
    Laissez **J2** et les autres invités au menu, console fermée. Windows Party
    saisit la commande de connexion dans la console de chaque invité dès que
    la partie est prête. En Zombies, J1 peut attendre les invités pendant le
-   chargement.
+   chargement. J1 peut quitter la partie et en lancer une autre dans la même
+   session Windows Party. Les invités revenus au menu la rejoignent aussi.
 
 **Options → Rejoindre automatiquement la partie de J1** est activé par
 défaut. Si la connexion échoue, ouvrez la
