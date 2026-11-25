@@ -28,12 +28,6 @@ EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
-# Dispatch the actual menu button events rather than opening the final screen.
-CUSTOM_LOBBY_STEPS = (
-    'lui_notify open_main_lobby_requested',
-    'lui_notify open_custom_games_lobby',
-)
-MP_STARTUP_MARKER = re.compile(rb"Loading fastfile '?common_mp\b")
 AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
 GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
                r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)')
@@ -336,7 +330,7 @@ def startup_ready(player, token, started, mode):
     return False
 
 
-def send_console_command(display_file, outer_display, console_command):
+def join_window(display_file, outer_display):
     try:
         display = json.loads(display_file.read_text())
     except (OSError, ValueError):
@@ -356,29 +350,24 @@ def send_console_command(display_file, outer_display, console_command):
         if windows.returncode or len(ids) != 1 or not ids[0].isdecimal():
             return False
         # Gameplay binds are ignored in the main menu. Use the console with
-        # XTEST on this player's display. Passing --window to key/type would
+        # XTEST on this guest's display. Passing --window to key/type would
         # make xdotool send synthetic XSendEvent events instead.
         for command in (
             ['windowfocus', '--sync', ids[0], 'sleep', '0.2',
              'key', '--clearmodifiers', CONSOLE_KEYCODE, 'sleep', '0.3'],
-            ['type', '--clearmodifiers', '--delay', '20', console_command],
+            ['type', '--clearmodifiers', '--delay', '20', JOIN_HOST],
             ['key', '--clearmodifiers', '--delay', '50', 'Return', CONSOLE_KEYCODE],
         ):
-            timeout = 2 + len(console_command) * .02 if command[0] == 'type' else 2
-            subprocess.run(['xdotool', *command], env=env, timeout=timeout, capture_output=True, check=True)
+            subprocess.run(['xdotool', *command], env=env, timeout=2, capture_output=True, check=True)
         return True
     except (OSError, subprocess.SubprocessError):
         return False
 
 
-def join_window(display_file, outer_display):
-    return send_console_command(display_file, outer_display, JOIN_HOST)
-
-
 class AutoJoin:
     """Track host matches for the lifetime of the split-screen session."""
 
-    def __init__(self, players, token, mode, outer_display, started, *, open_custom_lobby=False):
+    def __init__(self, players, token, mode, outer_display, started):
         self.host, *self.guests = players
         self.token = token
         self.mode = mode
@@ -387,10 +376,6 @@ class AutoJoin:
         self.offsets = {}
         self.host_log = None
         self.host_ready = None
-        self.open_custom_lobby = open_custom_lobby and mode == 'plutonium-mp'
-        self.lobby_open_at = None
-        self.lobby_deadline = None
-        self.lobby_step = 0
         self.connected = set()
         self.attempts = dict.fromkeys((guest.name for guest in self.guests), 0)
         self.retry_at = dict.fromkeys(self.attempts, 0)
@@ -467,29 +452,8 @@ class AutoJoin:
 
     def poll(self, now):
         for path, line in self.host_output():
-            if self.open_custom_lobby:
-                if b'------- Game Initialization -------' in line:
-                    self.open_custom_lobby = False
-                elif self.lobby_open_at is None and MP_STARTUP_MARKER.search(line):
-                    self.lobby_open_at = now + 5
-                    self.lobby_deadline = self.lobby_open_at + 45
             if self.observe_host(line, now):
                 self.host_log = path
-        if self.open_custom_lobby and self.lobby_open_at is not None and not self.stop.is_set():
-            if now >= self.lobby_deadline:
-                self.open_custom_lobby = False
-                print(tr('Black Ops II J1 : raccourci Partie personnalisée indisponible.'), flush=True)
-            elif now >= self.lobby_open_at and send_console_command(
-                    automatic_path(self.host, self.token, 'display'), self.outer_display,
-                    CUSTOM_LOBBY_STEPS[self.lobby_step]):
-                self.lobby_step += 1
-                if self.lobby_step == len(CUSTOM_LOBBY_STEPS):
-                    self.open_custom_lobby = False
-                    print(tr('Black Ops II J1 : commande d’ouverture de Partie personnalisée envoyée.'), flush=True)
-                else:
-                    # Allow the multiplayer lobby transition to complete before
-                    # requesting the action handled by that lobby.
-                    self.lobby_open_at = now + 5
         if self.host_ready is None or now < self.host_ready:
             return
 
