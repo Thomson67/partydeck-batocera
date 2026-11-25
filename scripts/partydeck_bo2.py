@@ -28,7 +28,7 @@ EXECUTABLES = {'mp': 't6mp.exe', 'zm': 't6zm.exe'}
 PLUTONIUM_MODES = {'plutonium-mp': 't6mp', 'plutonium-zm': 't6zm'}
 HOST_PORT = 1111
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
-AUTO_JOIN = 'PARTYDECK_BO2_AUTO_JOIN'
+PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
 GAME_WINDOW = (r'^Plutonium T6[ :]+(MP|ZM|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
                r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)')
 # Positions of the two native buttons in the verified 1920x540 layout.
@@ -91,7 +91,7 @@ def matches(rom):
 
 def defaults(rom=None):
     mode = 'plutonium-zm' if rom and re.search(r'\bzombies?\b', rom.stem.casefold()) else 'plutonium-mp'
-    return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True}
+    return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False}
 
 
 def validate(data):
@@ -106,7 +106,11 @@ def validate(data):
     automatic_join = data.get('automatic_join', True)
     if type(automatic_join) is not bool:
         raise ValueError(tr('Option de connexion automatique Black Ops II invalide.'))
-    return {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join}
+    open_custom_lobby = data.get('open_custom_lobby', False)
+    if type(open_custom_lobby) is not bool:
+        raise ValueError(tr('Option d’ouverture du salon Black Ops II invalide.'))
+    return {'mode': mode, 'horizontal_render': horizontal_render, 'automatic_join': automatic_join,
+            'open_custom_lobby': open_custom_lobby}
 
 
 def private_child(directory, name):
@@ -432,7 +436,8 @@ class AutoJoin:
         self.thread = threading.Thread(target=self.run, daemon=True)
 
     def start(self):
-        print(tr('Black Ops II : les invités attendent le lancement de la partie de J1.'), flush=True)
+        if self.guests:
+            print(tr('Black Ops II : les invités attendent le lancement de la partie de J1.'), flush=True)
         self.thread.start()
 
     def close(self):
@@ -537,7 +542,7 @@ class AutoJoin:
         for path, line in self.host_output():
             if self.lobby_button is not None:
                 self.observe_lobby(line, now)
-            if self.observe_host(line, now):
+            if self.guests and self.observe_host(line, now):
                 self.host_log = path
         if self.lobby_button is not None:
             self.poll_lobby(now)
@@ -566,7 +571,7 @@ class AutoJoin:
                          p0=player.name.upper()), flush=True)
 
     def run(self):
-        while not self.stop.is_set():
+        while not self.stop.is_set() and (self.guests or self.lobby_button is not None):
             self.poll(time.monotonic())
             self.stop.wait(1)
 

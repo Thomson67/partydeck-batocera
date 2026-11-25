@@ -126,6 +126,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter == BO2:
         return [('bo2.mode', tr('Mode de jeu'), list(BO2_MODES)),
+                ('bo2.open_custom_lobby', tr('Ouvrir Parties personnalisées au démarrage'), [False, True]),
                 ('bo2.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
                 ('bo2.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))] if tab == 1 else []
     if adapter == STORY_COOP:
@@ -886,8 +887,12 @@ class App:
     def current_fields(self):
         rows=fields(self.tab,self.model.data.get('adapter','standard') if self.model.data else 'standard',
                     self.model.celeste_skins, self.model.story_skins)
-        if self.model.data and self.model.data.get('adapter') == BO2 and self.model.data['bo2']['mode'] == 'original':
-            rows = [row for row in rows if row[0] == 'bo2.mode'] if self.tab == 1 else rows
+        if self.model.data and self.model.data.get('adapter') == BO2 and self.tab == 1:
+            mode = self.model.data['bo2']['mode']
+            if mode == 'original':
+                rows = [row for row in rows if row[0] == 'bo2.mode']
+            elif mode == 'plutonium-zm':
+                rows = [row for row in rows if row[0] != 'bo2.open_custom_lobby']
         if self.model.data and self.model.data.get('adapter') == STORY_COOP:
             story = self.model.data[STORY_COOP]
             if not story['sync']:

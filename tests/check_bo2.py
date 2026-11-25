@@ -43,7 +43,8 @@ with TemporaryDirectory() as folder:
         data = defaults(rom)
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
-        assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'automatic_join': True}
+        assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'automatic_join': True,
+                               'open_custom_lobby': False}
         for old_mode in ('mp', 'zm', 'original'):
             data['bo2'] = {'mode': old_mode}
             path = profile_path(base, rom)
@@ -51,9 +52,13 @@ with TemporaryDirectory() as folder:
             path.write_text(json.dumps(data))
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
-            assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native', 'automatic_join': True}
+            assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native', 'automatic_join': True,
+                                       'open_custom_lobby': False}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
+        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False)
+        save_profile(base, rom, migrated)
+        assert read_profile(base, rom)['bo2'] == migrated['bo2']
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
     assert not bo2.matches(base / 'Black Ops III.wsquashfs')
 
@@ -118,7 +123,7 @@ with TemporaryDirectory() as folder:
         launcher.write_text(bo2.instrument_native(source, hook, pluto_mode, log=player_log))
         subprocess.run(['bash', '-n', str(launcher)], check=True)
         env['PARTYDECK_SESSION_PLAYERS'] = '2'
-        env[bo2.AUTO_JOIN] = '1'
+        env[bo2.PUBLISH_DISPLAY] = '1'
         launched = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         runtime = game / '.partydeck-plutonium'
         windows_game = 'Z:' + str(game).replace('/', chr(92)) if entry == 'play_pc' else r'C:\game'

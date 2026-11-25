@@ -655,8 +655,8 @@ def run_wine(original, target, player, saves=None):
     # Report native completion independently of the compositor's lifetime/code.
     status = 1
     try:
-        from partydeck_bo2 import AUTO_JOIN
-        if os.environ.get(AUTO_JOIN) == '1':
+        from partydeck_bo2 import PUBLISH_DISPLAY
+        if os.environ.get(PUBLISH_DISPLAY) == '1':
             from partydeck_bo2 import automatic_path
             from partydeck_profiles import atomic_write
             token = os.environ['PARTYDECK_SESSION_TOKEN']
@@ -910,8 +910,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     _, _, width, height = rectangle
     bo2_resolution = None
     bo2_desktop = None
-    bo2_automatic = False
-    from partydeck_bo2 import ADAPTER as BO2, AUTO_JOIN, DESKTOP_MODE, PLUTONIUM_MODES, desktop_size, render_size
+    bo2_publish_display = False
+    from partydeck_bo2 import ADAPTER as BO2, PUBLISH_DISPLAY, DESKTOP_MODE, PLUTONIUM_MODES, desktop_size, render_size
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if trace_windows:
@@ -924,8 +924,12 @@ def start_player(app, player, original, target, devices, rectangle, window_class
             adapter = profile.get('adapter')
             if adapter == BO2:
                 settings = profile['bo2']
-                bo2_automatic = (network is not None and settings['mode'] in PLUTONIUM_MODES
-                                 and settings['automatic_join'])
+                bo2_publish_display = (
+                    network is not None and settings['mode'] in PLUTONIUM_MODES
+                    and (settings['automatic_join'] or (
+                        player.name == 'j1' and settings['mode'] == 'plutonium-mp' and settings['open_custom_lobby']
+                    ))
+                )
                 horizontal_render = 'standard'
                 if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
                     horizontal_render = settings['horizontal_render']
@@ -975,9 +979,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_PRIVATE_LAN_IP',None)
     environment.pop('PARTYDECK_BO2_RESOLUTION', None)
     environment.pop(DESKTOP_MODE, None)
-    environment.pop(AUTO_JOIN, None)
-    if bo2_automatic:
-        environment[AUTO_JOIN] = '1'
+    environment.pop(PUBLISH_DISPLAY, None)
+    if bo2_publish_display:
+        environment[PUBLISH_DISPLAY] = '1'
     if bo2_resolution is not None:
         environment['PARTYDECK_BO2_RESOLUTION'] = bo2_resolution
         environment[DESKTOP_MODE] = bo2_desktop
@@ -1381,6 +1385,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     story_settings = None
     bo2_join = None
     bo2_automatic = False
+    bo2_custom_lobby = False
     bl2_host=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
@@ -1420,6 +1425,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             network.start()
         if network is not None and bo2_mode:
             bo2_automatic = profile['bo2']['automatic_join']
+            bo2_custom_lobby = bo2_mode == 't6mp' and profile['bo2']['open_custom_lobby']
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1476,10 +1482,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
-        if bo2_automatic:
-            bo2_join = AutoJoin([state.parent for state in states], session_token,
+        if bo2_automatic or bo2_custom_lobby:
+            watched_players = states if bo2_automatic else states[:1]
+            bo2_join = AutoJoin([state.parent for state in watched_players], session_token,
                                 profile['bo2']['mode'], os.environ.get('DISPLAY', ''), started,
-                                open_custom_lobby=True)
+                                open_custom_lobby=bo2_custom_lobby)
             bo2_join.start()
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)

@@ -53,8 +53,17 @@ for language, mode, multiplayer, original, catalog, horizontal, automatic in (
     lang.set_language(language)
     assert fields(1, 'black-ops-2') == [
         ('bo2.mode', mode, ['plutonium-mp', 'plutonium-zm', 'original']),
+        ('bo2.open_custom_lobby', 'Ouvrir Parties personnalisées au démarrage' if language == 'fr'
+         else 'Open Custom Games at startup', [False, True]),
         ('bo2.automatic_join', automatic, [True, False]),
         ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
+    model = SimpleNamespace(data={'adapter': 'black-ops-2', 'bo2': {'mode': 'plutonium-mp'}},
+                            celeste_skins=[], story_skins=[])
+    app = SimpleNamespace(tab=1, model=model)
+    for selected in ('plutonium-mp', 'plutonium-zm', 'original'):
+        model.data['bo2']['mode'] = selected
+        assert any(key == 'bo2.open_custom_lobby' for key, _, _ in App.current_fields(app)) == (
+            selected == 'plutonium-mp')
     assert label_value('bo2.mode', 'original') == original
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
     assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']

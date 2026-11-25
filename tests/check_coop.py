@@ -158,6 +158,7 @@ for split, second_position, inputs, shared, party, virtual, title in [
     ("horizontal", (0, 540, 1920, 540), [pad, another, keyboard, mouse], True, True, False, "Game"),
     ("horizontal", (0, 540, 1920, 540), [pad, keyboard, mouse], False, True, True, "Game"),
     ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, "Black Ops II"),
+    ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, "Black Ops II lobby"),
     ("horizontal", (0, 540, 1920, 540), [pad, another], True, True, False, "Ocarina Story Co-op"),
 ]:
     with tempfile.TemporaryDirectory() as temp, contextlib.ExitStack() as stack:
@@ -166,13 +167,15 @@ for split, second_position, inputs, shared, party, virtual, title in [
         base = Path(temp)
         stack.enter_context(patch("partydeck_bottles.ROOT",base/"bottles"))
         game = base / f"{title}.wsquashfs"
-        bo2 = title == "Black Ops II"
+        bo2 = title.startswith("Black Ops II")
+        custom_lobby = title == "Black Ops II lobby"
         story = title == "Ocarina Story Co-op"
         if party:
             profile = defaults(game)
             profile['keyboard_player'] = virtual
             if bo2:
                 profile['bo2']['automatic_join'] = False
+                profile['bo2']['open_custom_lobby'] = custom_lobby
             save_profile(base, game, profile)
             mock(coop, "PARTY_SAVES", new=base / "party-saves")
         mock(coop.shutil, "which", return_value="/path")
@@ -194,6 +197,7 @@ for split, second_position, inputs, shared, party, virtual, title in [
         if bo2:
             stack.enter_context(patch('partydeck_plutonium.prepare'))
             stack.enter_context(patch('partydeck_private_lan.PrivateLAN'))
+            observer = stack.enter_context(patch('partydeck_bo2.AutoJoin'))
             def read_boot(player, token, started, mode):
                 assert starts.call_count == 1
                 assert player.name == 'j1' and token and started and mode == 't6mp'
@@ -264,6 +268,13 @@ for split, second_position, inputs, shared, party, virtual, title in [
         if bo2:
             assert ready.call_count == 2
             assert 'attente de l’initialisation de J1' in output.getvalue()
+            if custom_lobby:
+                observer.assert_called_once()
+                assert [player.name for player in observer.call_args.args[0]] == ['j1']
+                assert observer.call_args.kwargs == {'open_custom_lobby': True}
+                observer.return_value.start.assert_called_once()
+            else:
+                observer.assert_not_called()
         if story:
             network.assert_called_once_with(2, shared=True)
             assert all(call.kwargs['story_coop'] and call.kwargs['network_index'] == 0
@@ -341,7 +352,7 @@ with patch.object(coop.subprocess, 'Popen') as popen:
     assert '-w' not in popen.call_args.args[0]
 
 # T6 requires a larger desktop mode even when rendering at the native slot size.
-settings = dict(mode='plutonium-mp', horizontal_render='native', automatic_join=True)
+settings = dict(mode='plutonium-mp', horizontal_render='native', automatic_join=True, open_custom_lobby=False)
 with (patch.object(coop.subprocess, 'Popen') as popen,
       patch.object(coop, 'sandbox_arguments', return_value=[]),
       patch('partydeck_profiles.profile_path', return_value=Path(__file__)),
@@ -368,3 +379,13 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
     coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080),
                       'bo2-j2', saves=base/'saves', player_count=2, split='vertical')
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'
+
+    from partydeck_bo2 import PUBLISH_DISPLAY
+    settings.update(automatic_join=False, open_custom_lobby=True)
+    network = Mock()
+    network.child_prefix.return_value = []
+    network.address.return_value = '127.0.0.1'
+    for player, publish in (('j1', True), ('j2', False)):
+        coop.start_player(base, base/player, game, game, [], (0, 0, 1920, 540),
+                          f'bo2-{player}', saves=base/'saves', player_count=2, split='horizontal', network=network)
+        assert (popen.call_args.kwargs['env'].get(PUBLISH_DISPLAY) == '1') is publish
