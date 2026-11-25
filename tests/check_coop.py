@@ -359,8 +359,7 @@ with patch.object(coop.subprocess, 'Popen') as popen:
     assert '-w' not in popen.call_args.args[0]
 
 # T6 requires a larger desktop mode even when rendering at the native slot size.
-settings = dict(mode='plutonium-mp', horizontal_render='native', vertical_render='stretch',
-                automatic_join=True, open_custom_lobby=False)
+settings = dict(mode='plutonium-mp', horizontal_render='native', automatic_join=True, open_custom_lobby=False)
 with (patch.object(coop.subprocess, 'Popen') as popen,
       patch.object(coop, 'sandbox_arguments', return_value=[]),
       patch('partydeck_profiles.profile_path', return_value=Path(__file__)),
@@ -372,7 +371,6 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
         assert args[args.index(option) + 1] == size
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1920x540'
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_DESKTOP_MODE'] == '2560x720'
-    assert '-S' not in args
 
     settings['horizontal_render'] = '720p'
     coop.start_player(base, base/'j2', game, game, [], (0, 540, 1920, 540),
@@ -390,13 +388,8 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
     args = popen.call_args.args[0]
     for option, size in (('-w', '1280'), ('-h', '720'), ('-W', '960'), ('-H', '1080')):
         assert args[args.index(option) + 1] == size
-    assert args[args.index('-S') + 1] == 'stretch'
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_RESOLUTION'] == '1280x720'
     assert popen.call_args.kwargs['env']['PARTYDECK_BO2_DESKTOP_MODE'] == '1280x720'
-    settings['vertical_render'] = 'fit'
-    coop.start_player(base, base/'j2', game, game, [], (960, 0, 960, 1080),
-                      'bo2-j2', saves=base/'saves', player_count=2, split='vertical')
-    assert '-S' not in popen.call_args.args[0]
 
     from partydeck_bo2 import PUBLISH_DISPLAY, SESSION_MODE
     settings.update(automatic_join=False, open_custom_lobby=True)

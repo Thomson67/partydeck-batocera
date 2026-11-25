@@ -43,8 +43,7 @@ with TemporaryDirectory() as folder:
         data = defaults(rom)
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
-        assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'vertical_render': 'stretch',
-                               'automatic_join': True,
+        assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'automatic_join': True,
                                'open_custom_lobby': False}
         for old_mode in ('mp', 'zm', 'original'):
             data['bo2'] = {'mode': old_mode}
@@ -53,12 +52,11 @@ with TemporaryDirectory() as folder:
             path.write_text(json.dumps(data))
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
-            assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native',
-                                       'vertical_render': 'stretch', 'automatic_join': True,
+            assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native', 'automatic_join': True,
                                        'open_custom_lobby': False}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
-        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False, vertical_render='fit')
+        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False)
         save_profile(base, rom, migrated)
         assert read_profile(base, rom)['bo2'] == migrated['bo2']
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
