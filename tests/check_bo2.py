@@ -179,9 +179,12 @@ with TemporaryDirectory() as folder:
                              'bot = AddTestClient();', '::changeTeam(team);', '::bot_spawn_think(team);'):
                     assert line in code
                 bo2.prepare(player, mode, game, prefix, installed_client, bot_counts=(5, 0, 0, 6))
-                assert 'total = 6;' in script.read_text()
-                assert 'targets[0] = 0;' in script.read_text()
-                assert 'targets[1] = 0;' in script.read_text()
+                code = script.read_text()
+                assert 'total = 6;' in code
+                assert 'targets[0] = 0;' in code
+                assert 'targets[1] = 0;' in code
+                # T5 supports subtraction here, not prefix negation of a variable.
+                assert not re.search(r'[(,=]\s*-[a-zA-Z_]', code)
                 bo2.prepare(player, mode, game, prefix, installed_client)
                 assert not script.exists()
 

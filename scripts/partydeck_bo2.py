@@ -494,10 +494,16 @@ balance_bots(targets)
     axis = team_bots("axis");
     allies_needed = targets[0] - allies.size;
     axis_needed = targets[1] - axis.size;
-    if (allies_needed > 0 && axis_needed < 0)
-        allies_needed -= transfer_bots(axis, "allies", min(allies_needed, -axis_needed));
-    else if (axis_needed > 0 && allies_needed < 0)
-        axis_needed -= transfer_bots(allies, "axis", min(axis_needed, -allies_needed));
+    if (allies_needed > 0 && axis.size > targets[1])
+    {
+        axis_surplus = axis.size - targets[1];
+        allies_needed -= transfer_bots(axis, "allies", min(allies_needed, axis_surplus));
+    }
+    else if (axis_needed > 0 && allies.size > targets[0])
+    {
+        allies_surplus = allies.size - targets[0];
+        axis_needed -= transfer_bots(allies, "axis", min(axis_needed, allies_surplus));
+    }
 
     // Reserve the remaining slots against bots still connecting or supplied
     // by another mod. A change in team sizes must not create extra bots.
