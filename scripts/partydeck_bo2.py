@@ -52,7 +52,7 @@ STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?" + asset + rb"(?![a-z
 # Plutonium r5369 issues this command as it enters the online menu.
 ONLINE_MENU_MARKER = re.compile(rb'Unknown command:? "session_rejoinsession"')
 GAME_INITIALIZATION = b'------- Game Initialization -------'
-T5_ZOMBIES_INITIALIZATION = b'------ Server Initialization ------'
+T5_ZOMBIES_MAP = re.compile(rb'\bServer:\s+(?:zombie_[a-z0-9_]+|zombietron)\b', re.I)
 PLAYER_CONNECTION = re.compile(rb"client 'Player ([1-4])' (connected|disconnected)\b")
 T5_ZOMBIES_CLIENT_LOADING = re.compile(rb'Going from CS_CONNECTED to CS_CLIENTLOADING for Player ([1-4])\b')
 T5_LOBBY_COMMANDS = {
@@ -565,8 +565,10 @@ class AutoJoin:
                 return
 
     def match_starting(self, line):
-        marker = T5_ZOMBIES_INITIALIZATION if self.mode == 't5sp' else GAME_INITIALIZATION
-        return marker in line
+        if self.mode == 't5sp':
+            # T5 starts a local listen server for its frontend too.
+            return T5_ZOMBIES_MAP.search(line) is not None
+        return GAME_INITIALIZATION in line
 
     def observe_host(self, line, now):
         if b'SV_Shutdown:' in line or (self.mode in T5_LOBBY_COMMANDS and b'Server Shutdown' in line):
@@ -600,6 +602,8 @@ class AutoJoin:
                     self.attempts[player] = 4
                     self.connected.remove(player)
                 return True
+            if self.mode == 't5sp' and (player == 'j1' or self.host_ready is None):
+                return False
             if player != 'j1' and player not in self.connected:
                 print(tr('Black Ops II {p0} : connexion confirmée par J1.', p0=player.upper()), flush=True)
             self.connected.add(player)

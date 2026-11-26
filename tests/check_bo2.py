@@ -266,7 +266,9 @@ with TemporaryDirectory() as folder:
     log = bo2.automatic_path(host, token, 'log')
     display = bo2.automatic_path(guest, token, 'display')
     initialization = b'------- Game Initialization -------\n'
-    t5_zombies_initialization = b'------ Server Initialization ------\n'
+    t5_frontend_initialization = (b"------ Server Initialization ------\nServer: frontend\n"
+                                  + initialization + b'Going from CS_CONNECTED to CS_CLIENTLOADING for Player 1\n')
+    t5_zombies_initialization = b'------ Server Initialization ------\nServer: zombie_theater\n'
     log.write_bytes(b'Loading fastfile code_post_gfx_mp\nCould not load image "$lineargray".\n')
     assert not bo2.startup_ready(host, token, 0, 't6mp')
     with log.open('ab') as stream:
@@ -300,7 +302,7 @@ with TemporaryDirectory() as folder:
             join.assert_called_once()
     with patch.object(bo2, 'join_window', return_value=True) as join:
         t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
-        log.write_bytes(b"Loading fastfile 'plutonium_ui'\n" + initialization)
+        log.write_bytes(b"Loading fastfile 'plutonium_ui'\n" + t5_frontend_initialization)
         t5.poll(1)
         t5.poll(7)
         join.assert_not_called()
@@ -322,9 +324,15 @@ with TemporaryDirectory() as folder:
         join.assert_called_once_with(display, ':0')
         assert t5.connected == {'j2'}
         with log.open('ab') as stream:
-            stream.write(b'----- Server Shutdown -----\n' + t5_zombies_initialization)
+            stream.write(b'----- Server Shutdown -----\n' + t5_frontend_initialization)
         t5.poll(52)
         t5.poll(54)
+        join.assert_called_once_with(display, ':0')
+        with log.open('ab') as stream:
+            stream.write(b'----- Server Shutdown -----\n'
+                         b'------ Server Initialization ------\nServer: zombie_coast\n')
+        t5.poll(55)
+        t5.poll(57)
         assert join.call_args_list == [call(display, ':0'), call(display, ':0')]
     log.write_bytes(b"Loading fastfile 'common_mp'\n")
     display.write_text(json.dumps({'DISPLAY': ':0.0'}))
