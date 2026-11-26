@@ -2,7 +2,7 @@
 BO1 Zombies Bots by reee23463-debug
 https://github.com/reee23463-debug/bo1-zombies-bots
 Upstream revision e8a4705932bb2c4c886a303c8e2edde596866c29.
-PartyDeck changes: restrict map loading and wait for the selected LAN players.
+PartyDeck changes: restrict map loading and give the selected LAN players time to join.
 
 MIT License
 
@@ -76,9 +76,11 @@ bo1bots_start()
 {
 	level endon("end_game");
 
-	// Keep the human slots available until the LAN guests have joined.
+	// PartyDeck caps test clients before launch, reserving slots for guests.
+	// After a short wait, a slow or absent guest should not block bots.
 	humans = getdvarint("partydeck_bo1_humans");
-	while(bo1bots_humans_connected() < humans)
+	deadline = gettime() + 15000;
+	while(bo1bots_humans_connected() < humans && gettime() < deadline)
 		wait 0.25;
 
 	hc_t = undefined;

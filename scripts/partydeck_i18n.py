@@ -145,7 +145,7 @@ EN = {
         'Black Ops II mode selector unavailable. Using the profile’s mode.',
     'Rejoindre automatiquement la partie de J1': 'Automatically join P1’s match',
     'Ouvrir Parties personnalisées au démarrage': 'Open Custom Games at startup',
-    'Ouvrir le salon privé au démarrage (Multijoueur)': 'Open Private Match at startup (Multiplayer)',
+    'Ouvrir le salon privé au démarrage': 'Open Private Match at startup',
     'Total de bots en équipe · Équilibrage auto': 'Total team bots · Auto balance',
     'Par équipe (manuel)': 'Per team (manual)',
     'Bots en chacun-pour-soi': 'Free-for-all bots',

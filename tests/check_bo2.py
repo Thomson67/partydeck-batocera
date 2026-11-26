@@ -209,7 +209,7 @@ with TemporaryDirectory() as folder:
         if expected:
             code = script.read_text()
             assert 'MIT License' in code and 'reee23463-debug' in code
-            assert 'while(bo1bots_humans_connected() < humans)' in code
+            assert 'while(bo1bots_humans_connected() < humans && gettime() < deadline)' in code
             assert f'+set bo1_bots_count {expected}' in command
             assert f'+set partydeck_bo1_humans {humans}' in command
             assert f'+set sp_minplayers {humans}' in command
@@ -405,7 +405,7 @@ with TemporaryDirectory() as folder:
     for mode in ('t5sp', 't5mp', 'plutonium-mp', 'plutonium-zm', 'original'):
         for private_lan in (True, False):
             enabled = bo2.custom_lobby_enabled({'mode': mode, 'open_custom_lobby': True}, private_lan)
-            assert enabled is (mode == 't5mp' or (private_lan and mode.startswith('plutonium-')))
+            assert enabled is (mode in ('t5sp', 't5mp') or (private_lan and mode.startswith('plutonium-')))
     assert len(bo2.T5_LOBBY_COMMANDS['t5mp']) < 256
     assert bo2.t5_bot_counts(bo2.validate({'mode': 't5mp'}, bo2.BO1)) == ()
     assert bo2.t5_bot_counts(bo2.validate(
@@ -414,7 +414,7 @@ with TemporaryDirectory() as folder:
         {'mode': 't5mp', 'private_bots': 5, 'allies_bots': 2, 'axis_bots': 4, 'team_total_bots': 6},
         bo2.BO1)) == (5, 0, 0, 6)
     assert bo2.t5_bot_counts({'mode': 't5sp', 'private_bots': 5}) == ()
-    for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'plutonium_ui_mp')):
+    for mode, asset in (('t5mp', 'plutonium_ui_mp'),):
         log.write_bytes(b"Loading fastfile 'common_mp'\n")
         t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)
         with patch.object(bo2, 'send_console_command', return_value=True) as send, \
@@ -449,6 +449,58 @@ with TemporaryDirectory() as folder:
             t5.poll(40)
             t5.poll(42)
             assert join.call_count == 2
+    # Never open a private lobby after merely issuing a key. The native
+    # Zombies action must be confirmed by reading the engine's mode.
+    t5 = bo2.AutoJoin([host], token, 't5sp', ':0', 0, open_custom_lobby=True)
+    host_display = bo2.automatic_path(host, token, 'display')
+    log.write_bytes(b"Loading fastfile 'plutonium_ui'\n")
+    mode_off = b'"zombiemode" is: "0^7" default: "0^7"\n'
+    title = b'"ui_skipMainLockout" is: "0^7"\n'
+    menu = title.replace(b'"0^7"', b'"1^7"')
+    with patch.object(bo2, 'send_console_command', return_value=True) as send, \
+         patch.object(bo2, 'press_menu_keys', return_value=True) as keys:
+        t5.poll(1)
+        t5.poll(6)
+        query = call(host_display, ':0', 'zombiemode; ui_skipMainLockout')
+        assert send.call_args_list == [query]
+        with log.open('ab') as stream:
+            stream.write(mode_off + title)
+        t5.poll(9)
+        keys.assert_called_once_with(host_display, ':0', ('Return',))
+        t5.poll(11)
+        with log.open('ab') as stream:
+            stream.write(mode_off + menu)
+        t5.poll(14)
+        assert keys.call_args_list[-1] == call(host_display, ':0', ('Down', 'Return'))
+        t5.poll(16)
+        with log.open('ab') as stream:
+            stream.write(mode_off.replace(b'is: "0^7"', b'is: "1^7"'))
+        t5.poll(19)
+        assert send.call_args_list == [query, query, query, call(host_display, ':0', bo2.T5_ZOMBIES_HOST_LOBBY)]
+    assert 'set zombiemode' not in bo2.T5_ZOMBIES_HOST_LOBBY
+    for marker in (b'LOADING... maps/zombie_theater.d3dbsp', rb'g_gametype\zom\mapname\zombie_theater\protocol'):
+        assert t5.match_starting(marker)
+    for marker in (b'LOADING... maps/frontend.d3dbsp', rb'g_gametype\cmp\mapname\frontend\protocol',
+                   b'Loading fastfile zombie_theater_patch'):
+        assert not t5.match_starting(marker)
+
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
+        # UMU may log only the end of a frontend while the Wine tee records gameplay.
+        runner_log = host / 'umu-logs/runner-frontend.log'
+        runner_log.parent.mkdir(exist_ok=True)
+        runner_log.write_bytes(b'----- Server Shutdown -----\n' + t5_frontend_initialization)
+        log.write_bytes(b'')
+        t5.poll(1)
+        assert t5.host_log is None
+        with log.open('ab') as stream:
+            stream.write(b'LOADING... maps/zombie_theater.d3dbsp\n')
+        t5.poll(3)
+        t5.poll(5)
+        join.assert_called_once_with(display, ':0')
+        assert t5.host_log == log
+        runner_log.unlink()
+        runner_log.parent.rmdir()
     with patch.object(bo2, 'join_window', return_value=True) as join:
         t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
         log.write_bytes(b"Loading fastfile 'plutonium_ui'\n" + t5_frontend_initialization)

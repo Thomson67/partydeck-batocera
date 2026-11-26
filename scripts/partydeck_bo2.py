@@ -60,7 +60,13 @@ STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?" + asset + rb"(?![a-z
 # Plutonium r5369 issues this command as it enters the online menu.
 ONLINE_MENU_MARKER = re.compile(rb'Unknown command:? "session_rejoinsession"')
 GAME_INITIALIZATION = b'------- Game Initialization -------'
-T5_ZOMBIES_MAP = re.compile(rb'\bServer:\s+(?:zombie_[a-z0-9_]+|zombietron)\b', re.I)
+T5_ZOMBIES_MAP = re.compile(
+    rb'(?:\bServer:\s+|\bLOADING\.\.\. maps/|\\mapname\\)(?:zombie_[a-z0-9_]+|zombietron)(?![a-z0-9_])',
+    re.I)
+T5_MENU_DVAR = re.compile(rb'"(zombiemode|ui_skipMainLockout)"\s+is:\s+"(0|1|true|false)(?:\^7)?"', re.I)
+T5_ZOMBIES_HOST_LOBBY = ('setclientbeingusedandprimary; set ui_gametype zom; '
+                         'xblive_privatematch 1; xblive_rankedmatch 0; xstartpartyhost; '
+                         'closemenu main_online; closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby')
 PLAYER_CONNECTION = re.compile(rb"client 'Player ([1-4])' (connected|disconnected)\b")
 T5_ZOMBIES_CLIENT_LOADING = re.compile(rb'Going from CS_CONNECTED to CS_CLIENTLOADING for Player ([1-4])\b')
 T5_LOBBY_COMMANDS = {
@@ -69,10 +75,8 @@ T5_LOBBY_COMMANDS = {
              'set onlinegame 1; set xblive_privatematch 1; '
              'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
              'closemenu live_flyout; openmenu menu_xboxlive_privatelobby'),
-    # T5 Zombies must go through the native menu, which can set the read-only
-    # zombiemode dvar before the engine chooses the map's common fastfile.
 }
-CUSTOM_LOBBY_MODES = CUSTOM_GAMES_BUTTONS.keys() | T5_LOBBY_COMMANDS.keys()
+CUSTOM_LOBBY_MODES = CUSTOM_GAMES_BUTTONS.keys() | T5_EXECUTABLES.keys()
 ZOMBIES_DLC_LOAD = re.compile(rb"Loading fastfile '?\w+_load_zm\b")
 # Xwayland's evdev keycode for the physical key under Escape (grave or ²).
 CONSOLE_KEYCODE = '49'
@@ -187,7 +191,7 @@ def validate(data, adapter=ADAPTER):
 def custom_lobby_enabled(settings, private_lan):
     mode = settings['mode']
     return (settings['open_custom_lobby'] and mode in CUSTOM_LOBBY_MODES
-            and (private_lan or mode in T5_LOBBY_COMMANDS))
+            and (private_lan or mode in T5_EXECUTABLES))
 
 
 def t5_bot_counts(settings):
@@ -786,6 +790,22 @@ def send_console_command(display_file, outer_display, text):
         return False
 
 
+def press_menu_keys(display_file, outer_display, keys):
+    env = game_display(display_file, outer_display)
+    if env is None:
+        return False
+    try:
+        window = game_window(env)
+        if window is None:
+            return False
+        subprocess.run(['xdotool', 'windowfocus', '--sync', window, 'sleep', '0.2',
+                        'key', '--clearmodifiers', '--delay', '150', *keys],
+                       env=env, timeout=2, capture_output=True, check=True)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def click_menu_button(display_file, outer_display, button):
     env = game_display(display_file, outer_display)
     if env is None:
@@ -829,6 +849,9 @@ class AutoJoin:
         self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in CUSTOM_LOBBY_MODES else None
         self.lobby_click_at = None
         self.lobby_deadline = None
+        self.t5_menu_dvars = {}
+        self.t5_menu_keys = set()
+        self.t5_menu_query = False
         self.connected = set()
         self.attempts = dict.fromkeys((guest.name for guest in self.guests), 0)
         self.retry_at = dict.fromkeys(self.attempts, 0)
@@ -922,6 +945,12 @@ class AutoJoin:
     def observe_lobby(self, line, now):
         if self.match_starting(line):
             self.lobby_button = None
+        elif self.mode == 't5sp':
+            if self.lobby_click_at is None and STARTUP_MARKERS['t5sp'].search(line):
+                self.lobby_click_at = now + 5
+                self.lobby_deadline = self.lobby_click_at + 25
+            elif self.t5_menu_query and (state := T5_MENU_DVAR.search(line)):
+                self.t5_menu_dvars[state[1].lower()] = state[2].lower() in (b'1', b'true')
         elif ONLINE_MENU_MARKER.search(line):
             if self.lobby_button == ONLINE_BUTTON:
                 # J1 already navigated manually.
@@ -939,6 +968,28 @@ class AutoJoin:
                 self.lobby_click_at = now + 5
                 self.lobby_deadline = self.lobby_click_at + 20
 
+    def poll_t5_zombies_lobby(self, display, now):
+        dvars = self.t5_menu_dvars
+        if dvars.get(b'zombiemode'):
+            # The native menu action sets this read-only dvar. Only open the
+            # lobby after the engine confirms it will load Zombies assets.
+            if send_console_command(display, self.outer_display, T5_ZOMBIES_HOST_LOBBY):
+                print(tr('Black Ops J1 : ouverture du salon demandée.'), flush=True)
+                self.lobby_button = None
+            return
+        if b'zombiemode' in dvars and b'ui_skipmainlockout' in dvars:
+            keys = ('Down', 'Return') if dvars[b'ui_skipmainlockout'] else ('Return',)
+            if keys not in self.t5_menu_keys:
+                if press_menu_keys(display, self.outer_display, keys):
+                    self.t5_menu_keys.add(keys)
+                    self.t5_menu_query = False
+                    dvars.clear()
+                    self.lobby_click_at = now + 2
+                return
+        dvars.clear()
+        self.t5_menu_query = send_console_command(display, self.outer_display, 'zombiemode; ui_skipMainLockout')
+        self.lobby_click_at = now + 3
+
     def poll_lobby(self, now):
         if self.lobby_deadline is None or self.stop.is_set():
             return
@@ -949,6 +1000,9 @@ class AutoJoin:
         if self.lobby_click_at is None or now < self.lobby_click_at:
             return
         display = automatic_path(self.host, self.token, 'display')
+        if self.mode == 't5sp':
+            self.poll_t5_zombies_lobby(display, now)
+            return
         if self.mode in T5_LOBBY_COMMANDS:
             if send_console_command(display, self.outer_display, T5_LOBBY_COMMANDS[self.mode]):
                 print(tr('Black Ops J1 : ouverture du salon demandée.'), flush=True)
@@ -970,7 +1024,11 @@ class AutoJoin:
             if self.lobby_button is not None:
                 self.observe_lobby(line, now)
             if self.guests and self.observe_host(line, now):
-                self.host_log = path
+                # A runner can echo a frontend shutdown while the native
+                # Wine tee reports the real map. Lock to the stream that
+                # reports a match, once the first Zombies map is observed.
+                if self.mode != 't5sp' or self.match_starting(line):
+                    self.host_log = path
         if self.lobby_button is not None:
             self.poll_lobby(now)
         if self.host_ready is None or now < self.host_ready:

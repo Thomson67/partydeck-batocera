@@ -431,7 +431,7 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
     settings['automatic_join'] = False
     coop.start_player(base, base/'j1', game, game, [], (0, 0, 1920, 540), 'bo1-j1',
                       saves=base/'saves', player_count=2, split='horizontal', network=network)
-    assert PUBLISH_DISPLAY not in popen.call_args.kwargs['env']
+    assert popen.call_args.kwargs['env'][PUBLISH_DISPLAY] == '1'
     settings.update(mode='t5mp', open_custom_lobby=False, automatic_join=False, allies_bots=2)
     for player in ('j1', 'j2'):
         coop.start_player(base, base/player, game, game, [], (0, 0, 1920, 540), f'bo1-{player}',
