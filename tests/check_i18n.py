@@ -66,8 +66,8 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
     assert App.available_tabs(bo1_app) == (0, 1, 2, 3)
     assert tuple(map(lang.tr, BO1_TABS)) == ('Session', 'Options', 'Affichage' if language == 'fr' else 'Display', 'Bots')
     assert fields(1, 'black-ops-1') == [
-        ('bo1.open_custom_lobby', 'Ouvrir la partie privée au démarrage' if language == 'fr'
-         else 'Open Private Match at startup', [False, True]),
+        ('bo1.open_custom_lobby', 'Ouvrir le salon privé au démarrage (Multijoueur)' if language == 'fr'
+         else 'Open Private Match at startup (Multiplayer)', [False, True]),
         ('bo1.automatic_join', automatic, [True, False]),
         ('bo1.language', 'Langue du jeu' if language == 'fr' else 'Game language', ['keep', 'french', 'english']),
     ]

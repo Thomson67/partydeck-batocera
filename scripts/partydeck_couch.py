@@ -142,7 +142,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     ('bo1.zombie_bots', tr('Bots alliés · Zombies'), list(T5_ZOMBIE_BOT_COUNTS))]
         if tab != 1:
             return []
-        lobby_label = (tr('Ouvrir la partie privée au démarrage') if adapter == BO1
+        lobby_label = (tr('Ouvrir le salon privé au démarrage (Multijoueur)') if adapter == BO1
                        else tr('Ouvrir Parties personnalisées au démarrage'))
         rows = [(f'{section}.open_custom_lobby', lobby_label, [False, True]),
                 (f'{section}.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),

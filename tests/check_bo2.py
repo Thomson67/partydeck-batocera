@@ -401,7 +401,11 @@ with TemporaryDirectory() as folder:
     assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Campaign (r5369 LAN)', re.I)
     assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Co-Op (r5369) (LAN)', re.I)
     assert not re.search(bo2.GAME_WINDOW, 'Plutonium T5 Console (r5369)', re.I)
-    assert 'onlinegame' not in bo2.T5_LOBBY_COMMANDS['t5sp']
+    assert 't5sp' not in bo2.T5_LOBBY_COMMANDS
+    for mode in ('t5sp', 't5mp', 'plutonium-mp', 'plutonium-zm', 'original'):
+        for private_lan in (True, False):
+            enabled = bo2.custom_lobby_enabled({'mode': mode, 'open_custom_lobby': True}, private_lan)
+            assert enabled is (mode == 't5mp' or (private_lan and mode.startswith('plutonium-')))
     assert len(bo2.T5_LOBBY_COMMANDS['t5mp']) < 256
     assert bo2.t5_bot_counts(bo2.validate({'mode': 't5mp'}, bo2.BO1)) == ()
     assert bo2.t5_bot_counts(bo2.validate(
@@ -422,8 +426,11 @@ with TemporaryDirectory() as folder:
                 stream.write(f"Loading fastfile '{asset}'\n".encode())
             t5.poll(7)
             t5.poll(12)
-            send.assert_called_once_with(bo2.automatic_path(host, token, 'display'), ':0',
-                                         bo2.T5_LOBBY_COMMANDS[mode])
+            if mode == 't5mp':
+                send.assert_called_once_with(bo2.automatic_path(host, token, 'display'), ':0',
+                                             bo2.T5_LOBBY_COMMANDS[mode])
+            else:
+                send.assert_not_called()
             join.assert_not_called()
             with log.open('ab') as stream:
                 stream.write(t5_zombies_initialization if mode == 't5sp' else initialization)

@@ -428,6 +428,10 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
                 coop.start_player(base, base/player, game, game, [], (0, 0, 960, 1080), f'bo1-{player}',
                                   saves=base/'saves', player_count=count, split=split, network=network)
             assert popen.call_args.kwargs['env'].get(T5_FOV_OVERRIDE) == expected
+    settings['automatic_join'] = False
+    coop.start_player(base, base/'j1', game, game, [], (0, 0, 1920, 540), 'bo1-j1',
+                      saves=base/'saves', player_count=2, split='horizontal', network=network)
+    assert PUBLISH_DISPLAY not in popen.call_args.kwargs['env']
     settings.update(mode='t5mp', open_custom_lobby=False, automatic_join=False, allies_bots=2)
     for player in ('j1', 'j2'):
         coop.start_player(base, base/player, game, game, [], (0, 0, 1920, 540), f'bo1-{player}',

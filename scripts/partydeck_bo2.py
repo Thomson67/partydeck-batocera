@@ -69,10 +69,10 @@ T5_LOBBY_COMMANDS = {
              'set onlinegame 1; set xblive_privatematch 1; '
              'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
              'closemenu live_flyout; openmenu menu_xboxlive_privatelobby'),
-    't5sp': ('setclientbeingusedandprimary; set zombiemode 1; set spmode 0; '
-             'xblive_privatematch 1; xblive_rankedmatch 0; xstartpartyhost; '
-             'closemenu main_text; closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),
+    # T5 Zombies must go through the native menu, which can set the read-only
+    # zombiemode dvar before the engine chooses the map's common fastfile.
 }
+CUSTOM_LOBBY_MODES = CUSTOM_GAMES_BUTTONS.keys() | T5_LOBBY_COMMANDS.keys()
 ZOMBIES_DLC_LOAD = re.compile(rb"Loading fastfile '?\w+_load_zm\b")
 # Xwayland's evdev keycode for the physical key under Escape (grave or ²).
 CONSOLE_KEYCODE = '49'
@@ -182,6 +182,12 @@ def validate(data, adapter=ADAPTER):
                 raise ValueError(tr('Nombre de bots Black Ops invalide.'))
             settings[key] = count
     return settings
+
+
+def custom_lobby_enabled(settings, private_lan):
+    mode = settings['mode']
+    return (settings['open_custom_lobby'] and mode in CUSTOM_LOBBY_MODES
+            and (private_lan or mode in T5_LOBBY_COMMANDS))
 
 
 def t5_bot_counts(settings):
@@ -820,7 +826,7 @@ class AutoJoin:
         self.offsets = {}
         self.host_log = None
         self.host_ready = None
-        self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in PLUTONIUM_MODES else None
+        self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in CUSTOM_LOBBY_MODES else None
         self.lobby_click_at = None
         self.lobby_deadline = None
         self.connected = set()
@@ -868,7 +874,7 @@ class AutoJoin:
         return GAME_INITIALIZATION in line
 
     def observe_host(self, line, now):
-        if b'SV_Shutdown:' in line or (self.mode in T5_LOBBY_COMMANDS and b'Server Shutdown' in line):
+        if b'SV_Shutdown:' in line or (self.mode in T5_EXECUTABLES and b'Server Shutdown' in line):
             self.connected.clear()
             self.host_ready = None
             return True

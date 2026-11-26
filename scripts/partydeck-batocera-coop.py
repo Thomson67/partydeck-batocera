@@ -914,7 +914,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     bo1_fov = 0
     from partydeck_bo2 import (BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                                PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
-                               T5_FOV_OVERRIDE, desktop_size, render_size)
+                               T5_FOV_OVERRIDE, custom_lobby_enabled, desktop_size, render_size)
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if trace_windows:
@@ -931,8 +931,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 bo2_publish_display = (
                     settings['mode'] in PLUTONIUM_MODES
                     and ((network is not None and settings['automatic_join'])
-                         or (player.name == 'j1' and settings['open_custom_lobby']
-                             and (network is not None or adapter == BO1)))
+                         or (player.name == 'j1' and custom_lobby_enabled(settings, network is not None)))
                 )
                 render = 'standard'
                 # T6 crops its menus when the render target is portrait.
@@ -1319,7 +1318,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     session_token=uuid.uuid4().hex
     started = time.time_ns()
     from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES,
-                               PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready)
+                               PLUTONIUM_MODES, AutoJoin, automatic_path, custom_lobby_enabled, startup_ready)
     bo2_settings = None
     bo2_mode = None
     adapter = profile.get('adapter') if profile else None
@@ -1451,7 +1450,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             network.start()
         if bo2_mode:
             bo2_automatic = network is not None and bo2_settings['automatic_join']
-            bo2_custom_lobby = (network is not None or adapter == BO1) and bo2_settings['open_custom_lobby']
+            bo2_custom_lobby = custom_lobby_enabled(bo2_settings, network is not None)
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
