@@ -54,6 +54,9 @@ GAME_WINDOW = (r'^Plutonium T[56][ :_]+(MP|SP|ZM|Singleplayer|Single Player|Mult
 MENU_SIZE = (1920, 540)
 ONLINE_BUTTON = (668, 326)
 CUSTOM_GAMES_BUTTONS = {'plutonium-mp': (700, 99), 'plutonium-zm': (700, 135)}
+# Plutonium's terminal output includes color and erase sequences even when
+# stdout is redirected. Strip them before matching words and dvar values.
+TERMINAL_CSI = re.compile(rb'\x1b\[[0-?]*[ -/]*[@-~]')
 STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?" + asset + rb"(?![a-zA-Z0-9_])")
                    for mode, asset in (('t6mp', b'common_mp'), ('t6zm', b'common_zm'),
                                        ('t5mp', b'plutonium_ui_mp'), ('t5sp', rb'(?:common|plutonium_ui)'))}
@@ -730,7 +733,7 @@ def startup_ready(player, token, started, mode):
     for path in session_logs(player, token, started):
         try:
             with path.open('rb') as stream:
-                if any(marker.search(line) for line in stream):
+                if any(marker.search(TERMINAL_CSI.sub(b'', line)) for line in stream):
                     return True
         except OSError:
             continue
@@ -893,7 +896,7 @@ class AutoJoin:
             except OSError:
                 continue
             for line in data[:end].splitlines():
-                yield path, line
+                yield path, TERMINAL_CSI.sub(b'', line)
             # Stick to the stream that reports the game events. A runner log
             # can repeat the native tee's output later and replay an old match.
             if self.host_log is not None:

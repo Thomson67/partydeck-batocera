@@ -491,6 +491,40 @@ with TemporaryDirectory() as folder:
                    b'Loading fastfile zombie_theater_patch'):
         assert not t5.match_starting(marker)
 
+    # Replay the terminal bytes from the Batocera T5 Zombies journal.
+    color = b'\x1b[38;2;255;255;255m'
+    redraw = color + b'\r\x1b[2K' + color
+    initial = b"Loading fastfile 'plutonium_ui'\r\n"
+    log.write_bytes(redraw + initial)
+    assert bo2.startup_ready(host, token, 0, 't5sp')
+    t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0, open_custom_lobby=True)
+    with patch.object(bo2, 'send_console_command', return_value=True) as send, \
+         patch.object(bo2, 'press_menu_keys', return_value=True) as keys, \
+         patch.object(bo2, 'join_window', return_value=True) as join:
+        t5.poll(1)
+        t5.poll(6)
+        with log.open('ab') as stream:
+            stream.write(redraw + b'"zombiemode" is: "0' + color + b'" default: "0' + color + b'"\r\n')
+            stream.write(redraw + b'"ui_skipMainLockout" is: "1' + color + b'" default: "0' + color + b'"\r\n')
+        t5.poll(9)
+        keys.assert_called_once_with(host_display, ':0', ('Down', 'Return'))
+        t5.poll(11)
+        with log.open('ab') as stream:
+            stream.write(redraw + b'"zombiemode" is: "1' + color + b'" default: "0' + color + b'"\r\n')
+        t5.poll(14)
+        assert send.call_args_list == [query, query, call(host_display, ':0', bo2.T5_ZOMBIES_HOST_LOBBY)]
+        join.assert_not_called()
+        with log.open('ab') as stream:
+            stream.write(redraw + b'Server: zombie_theater\r\n')
+            stream.write(redraw + b'LOADING... maps/zombie_theater.d3dbsp\r\n')
+        t5.poll(20)
+        t5.poll(22)
+        join.assert_called_once_with(display, ':0')
+        with log.open('ab') as stream:
+            stream.write(redraw + b'Going from CS_CONNECTED to CS_CLIENTLOADING for Player 2\r\n')
+        t5.poll(23)
+        assert t5.connected == {'j2'}
+
     with patch.object(bo2, 'join_window', return_value=True) as join:
         t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
         log.write_bytes(b'Loading fastfile plutonium_ui\n' + b' ' * 1100000)
