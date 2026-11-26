@@ -66,7 +66,8 @@ with TemporaryDirectory() as folder:
         assert recipe_for(rom1).adapter == bo2.BO1
         profile = defaults(rom1)
         assert profile['bo1']['mode'] == 't5mp' and not profile['bo1']['vertical_native']
-        assert profile['bo1']['vertical_fov'] == 0
+        assert profile['bo1']['vertical_fov'] == profile['bo1']['horizontal_fov'] == 0
+        assert profile['bo1']['zombie_bots'] == 0
         assert private_lan_enabled(profile, 2) and not private_lan_enabled(profile, 1)
     assert defaults(base / 'BO1 Zombies.wsquashfs')['bo1']['mode'] == 't5sp'
     assert not bo2.matches_bo1(base / 'Black Ops Cold War.wsquashfs')
@@ -88,18 +89,19 @@ with TemporaryDirectory() as folder:
 
     bo1_rom = base / 'Black Ops.wsquashfs'
     bo1_profile = defaults(bo1_rom)
-    bo1_profile['bo1'].update(mode='t5sp', private_bots=5, allies_bots=2, axis_bots=4)
+    bo1_profile['bo1'].update(mode='t5sp', private_bots=5, allies_bots=2, axis_bots=4, zombie_bots=3)
     save_profile(base, bo1_rom, bo1_profile)
     with patch.object(bo2.shutil, 'which', return_value=str(native)), \
          patch.object(bo2, 'client_path', return_value=None), patch.object(bo2.subprocess, 'run'):
         for selected_mode, player_number, expected in (('t5mp', 'j1', True), ('t5mp', 'j2', False),
-                                                       ('t5sp', 'j1', False)):
+                                                       ('t5sp', 'j1', False), ('t5sp', 'j2', False)):
             slot = player.parent / player_number
             slot.mkdir(exist_ok=True)
             with patch.dict(os.environ, {bo2.SESSION_MODE: selected_mode}):
                 bo2.install_hook(base, bo1_rom, slot)
             hook = (slot / 'batocera-wine-bo2').read_text()
             assert ('--bots 5 2 4 0' in hook) == expected
+            assert ('--zombie-bots 3' in hook) == (selected_mode == 't5sp' and player_number == 'j1')
 
     installed_client = base / 'Plutonium from Windows'
     (installed_client / 'bin').mkdir(parents=True)
@@ -145,13 +147,13 @@ with TemporaryDirectory() as folder:
         new_fov = b'seta cg_fov_default "100"\r\nseta cg_fov "100"\r\n'
         other = b'seta cg_fovScale "1.25"\r\n'
         file.write_bytes(old_fov)
-        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), bo2.T5_VERTICAL_FOV: '100'}):
+        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), bo2.T5_FOV_OVERRIDE: '100'}):
             _, command = bo2.prepare(player, mode, game, prefix, installed_client)
         assert '+set cg_fov 100 +set cg_fov_default 100' in command
         file.write_bytes(new_fov + other)
         generated = configs / 'config.cfg'
         generated.write_bytes(new_fov + other)
-        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), bo2.T5_VERTICAL_FOV: '105'}):
+        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), bo2.T5_FOV_OVERRIDE: '105'}):
             _, command = bo2.prepare(player, mode, game, prefix, installed_client)
         assert '+set cg_fov 105 +set cg_fov_default 105' in command
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)):
@@ -187,6 +189,28 @@ with TemporaryDirectory() as folder:
                 assert not re.search(r'[(,=]\s*-[a-zA-Z_]', code)
                 bo2.prepare(player, mode, game, prefix, installed_client)
                 assert not script.exists()
+
+    for humans, slot, expected in (('1', 'j1', 3), ('2', 'j1', 2), ('3', 'j1', 1),
+                                    ('4', 'j1', 0), ('2', 'j2', 0)):
+        player = base / 'zombie-bots' / slot
+        prefix = player / 'prefix'
+        game = prefix / 'drive_c' / 'game'
+        game.mkdir(parents=True, exist_ok=True)
+        (game / bo2.T5_EXECUTABLES['t5sp']).touch()
+        (game / 'binkw32.dll').touch()
+        with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player), PARTYDECK_SESSION_PLAYERS=humans):
+            cwd, command = bo2.prepare(player, 't5sp', game, prefix, installed_client, zombie_bots=3)
+        script = cwd / 'storage/t5/scripts' / bo2.T5_ZOMBIE_BOT_SCRIPT
+        assert script.is_file() == bool(expected)
+        if expected:
+            code = script.read_text()
+            assert 'MIT License' in code and 'reee23463-debug' in code
+            assert 'while(bo1bots_humans_connected() < humans)' in code
+            assert f'+set bo1_bots_count {expected}' in command
+            assert f'+set partydeck_bo1_humans {humans}' in command
+            assert f'+set sp_minplayers {humans}' in command
+        else:
+            assert 'bo1_bots_count' not in command
 
     player = base / 't5mp' / 'j1'
     prefix = player / 'prefix'

@@ -335,6 +335,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_soh_camera.py" "$base/partydeck_soh_camera.py"
     cp -- "$source_dir/partydeck_bo2.py" "$staging/partydeck_bo2.py"
     mv -fT -- "$staging/partydeck_bo2.py" "$base/partydeck_bo2.py"
+    cp -- "$source_dir/../plugins/partydeck_bo1_zombies.gsc" "$staging/partydeck_bo1_zombies.gsc"
+    mv -fT -- "$staging/partydeck_bo1_zombies.gsc" "$base/partydeck_bo1_zombies.gsc"
     cp -- "$source_dir/partydeck_plutonium.py" "$staging/partydeck_plutonium.py"
     mv -fT -- "$staging/partydeck_plutonium.py" "$base/partydeck_plutonium.py"
     cp -- "$source_dir/partydeck_dst.py" "$staging/partydeck_dst.py"

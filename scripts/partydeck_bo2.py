@@ -37,7 +37,9 @@ LANGUAGES = {'keep': 'Conserver', 'french': 'Français', 'english': 'Anglais'}
 HOST_PORT = 1111
 T5_BOT_COUNTS = tuple(range(13))
 T5_TEAM_BOT_COUNTS = tuple(range(7))
-T5_VERTICAL_FOV = 'PARTYDECK_BO1_VERTICAL_FOV'
+T5_FOV_OVERRIDE = 'PARTYDECK_BO1_FOV'
+T5_ZOMBIE_BOT_COUNTS = tuple(range(4))
+T5_ZOMBIE_BOT_SCRIPT = 'partydeck_bo1_zombies.gsc'
 T5_FOV_CHOICES = (0, *range(65, 111, 5))
 T5_CONFIG_NAMES = {'config.cfg', 'config_mp.cfg', 'conlzm.cfg'}
 T5_FOV_LINE = re.compile(rb'^[ \t]*seta?[ \t]+"?cg_fov(?:_default)?"?[ \t]+', re.I)
@@ -135,8 +137,9 @@ def defaults(rom=None, adapter=ADAPTER):
     if adapter == BO1:
         mode = 't5sp' if mode == 'plutonium-zm' else 't5mp'
         return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True,
-                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False, 'vertical_fov': 0,
-                'private_bots': 0, 'allies_bots': 0, 'axis_bots': 0, 'team_total_bots': 0}
+                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False,
+                'horizontal_fov': 0, 'vertical_fov': 0,
+                'private_bots': 0, 'allies_bots': 0, 'axis_bots': 0, 'team_total_bots': 0, 'zombie_bots': 0}
     return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False,
             'language': 'keep'}
 
@@ -166,12 +169,14 @@ def validate(data, adapter=ADAPTER):
         if type(vertical_native) is not bool:
             raise ValueError(tr('Format vertical Black Ops invalide.'))
         settings['vertical_native'] = vertical_native
-        vertical_fov = data.get('vertical_fov', 0)
-        if type(vertical_fov) is not int or vertical_fov not in T5_FOV_CHOICES:
-            raise ValueError(tr('Champ de vision vertical Black Ops invalide.'))
-        settings['vertical_fov'] = vertical_fov
+        for key in ('horizontal_fov', 'vertical_fov'):
+            fov = data.get(key, 0)
+            if type(fov) is not int or fov not in T5_FOV_CHOICES:
+                raise ValueError(tr('Champ de vision Black Ops invalide.'))
+            settings[key] = fov
         for key, choices in (('private_bots', T5_BOT_COUNTS), ('allies_bots', T5_TEAM_BOT_COUNTS),
-                             ('axis_bots', T5_TEAM_BOT_COUNTS), ('team_total_bots', T5_BOT_COUNTS)):
+                             ('axis_bots', T5_TEAM_BOT_COUNTS), ('team_total_bots', T5_BOT_COUNTS),
+                             ('zombie_bots', T5_ZOMBIE_BOT_COUNTS)):
             count = data.get(key, 0)
             if type(count) is not int or count not in choices:
                 raise ValueError(tr('Nombre de bots Black Ops invalide.'))
@@ -276,7 +281,7 @@ def configure_client(directory, player):
     return 'Goldberg'
 
 
-def prepare(player, mode, directory, root, plutonium_source, language='keep', *, bot_counts=()):
+def prepare(player, mode, directory, root, plutonium_source, language='keep', *, bot_counts=(), zombie_bots=0):
     if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
         raise ValueError(tr('Black Ops II : espace privé du joueur requis.'))
     from partydeck_bottles import private_windows_paths
@@ -290,7 +295,7 @@ def prepare(player, mode, directory, root, plutonium_source, language='keep', *,
     exe = find_game(directory, root, game_mode, allowed)
     if plutonium_mode:
         return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode, language,
-                                 bot_counts=bot_counts)
+                                 bot_counts=bot_counts, zombie_bots=zombie_bots)
 
     client = configure_client(exe.parent if exe else directory, player)
     status = (tr('Black Ops II {p0} : profil privé {p1} appliqué.', p0=player.name.upper(), p1=client)
@@ -564,7 +569,32 @@ assign_bot(bot, team)
 """ % (free, total, allies, axis)).encode('ascii'))
 
 
-def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_counts=()):
+def configure_t5_zombie_bots(runtime, count, humans):
+    folder = runtime
+    for name in ('storage', 't5', 'scripts'):
+        folder = private_child(folder, name)
+    script = private_child(folder, T5_ZOMBIE_BOT_SCRIPT)
+    count = min(count, 4 - humans)
+    if not count:
+        script.unlink(missing_ok=True)
+        return []
+
+    # Plutonium compiles raw GSC in the host's private storage. Reuse an
+    # existing copy of the upstream mod if the user already installed one.
+    original = private_child(folder, 'zm_bo1_bots.gsc')
+    original_zm = private_child(private_child(folder, 'zm'), 'zm_bo1_bots.gsc')
+    if original.is_file() or original_zm.is_file():
+        script.unlink(missing_ok=True)
+    else:
+        bundled = Path(__file__).with_name(T5_ZOMBIE_BOT_SCRIPT)
+        if not bundled.is_file():
+            bundled = bundled.parent.parent / 'plugins' / bundled.name
+        write_bytes(script, bundled.read_bytes())
+    return ['+set', 'bo1_bots_enabled', '1', '+set', 'bo1_bots_count', str(count),
+            '+set', 'bo1_bots_max_players', '4', '+set', 'partydeck_bo1_humans', str(humans)]
+
+
+def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_counts=(), zombie_bots=0):
     binaries = private_child(source, 'bin')
     games = private_child(source, 'games')
     bootstrapper = private_child(binaries, BOOTSTRAPPER)
@@ -589,8 +619,13 @@ def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_
     storage = private_child(source, 'storage')
     if storage.is_dir():
         copy_client_files(storage, private_child(runtime, storage.name), sync=False)
+    session_players = os.environ.get('PARTYDECK_SESSION_PLAYERS', '1')
+    zombie_args = []
     if t5:
         configure_t5_bots(runtime, bot_counts if mode == 't5mp' and player.name == 'j1' else ())
+        humans = int(session_players) if session_players in ('1', '2', '3', '4') else 1
+        zombie_count = zombie_bots if mode == 't5sp' and player.name == 'j1' else 0
+        zombie_args = configure_t5_zombie_bots(runtime, zombie_count, humans)
     if language != 'keep':
         apply_language(game, mode, language)
 
@@ -601,8 +636,8 @@ def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_
             mode, game_path, name_option, name, '-lan', *display_arguments(t5=t5),
             '+set', 'net_port', str(port)]
     if t5:
-        args += ['+set', 'gpad_enabled', '1']
-        fov = os.environ.get(T5_VERTICAL_FOV, '0')
+        args += ['+set', 'gpad_enabled', '1', *zombie_args]
+        fov = os.environ.get(T5_FOV_OVERRIDE, '0')
         override_fov = fov in {str(value) for value in T5_FOV_CHOICES if value}
         preserve_t5_fov(runtime, override_fov)
         if override_fov:
@@ -610,7 +645,7 @@ def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_
         if language != 'keep':
             args += ['+set', 'loc_language', '1' if language == 'french' else '0']
     if mode in ('t6zm', 't5sp') and player.name == 'j1':
-        count = os.environ.get('PARTYDECK_SESSION_PLAYERS', '1')
+        count = session_players
         if count in ('1', '2', '3', '4'):
             args += ['+set', 'sp_minplayers', count]
         if (mode == 't5sp' and count in ('2', '3', '4')
@@ -982,6 +1017,8 @@ def install_hook(base, rom, player):
     counts = t5_bot_counts(settings | {'mode': mode})
     if player.name == 'j1' and counts:
         hook.extend(('--bots', *map(str, counts)))
+    if player.name == 'j1' and mode == 't5sp' and settings['zombie_bots']:
+        hook.extend(('--zombie-bots', str(settings['zombie_bots'])))
     hook.extend((str(player), str(source)))
     replacement = player / 'batocera-wine-bo2'
     log = None
@@ -999,13 +1036,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--language', choices=LANGUAGES, default='keep')
     parser.add_argument('--bots', type=int, nargs=4, default=())
+    parser.add_argument('--zombie-bots', type=int, choices=T5_ZOMBIE_BOT_COUNTS, default=0)
     for field in ('player', 'source', 'mode', 'directory', 'root'):
         parser.add_argument(field)
     args = parser.parse_args()
     try:
         mode = validate({'mode': args.mode}, BO1 if args.mode in T5_EXECUTABLES else ADAPTER)['mode']
         cwd, command = prepare(Path(args.player), mode, Path(args.directory), Path(args.root), Path(args.source),
-                               args.language, bot_counts=args.bots)
+                               args.language, bot_counts=args.bots, zombie_bots=args.zombie_bots)
         if cwd is not None:
             if '\n' in str(cwd):
                 raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=cwd))

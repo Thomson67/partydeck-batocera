@@ -20,7 +20,7 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                            MODES as BO2_MODES, SELECTABLE_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
-                           T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
+                           T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, T5_ZOMBIE_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
                                  TIME_MODES as STORY_TIME_MODES,
@@ -131,13 +131,15 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
         horizontal = (f'{section}.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))
         if adapter == BO1 and tab == 2:
             return [horizontal,
+                    ('bo1.horizontal_fov', tr('Champ de vision en partage horizontal'), list(T5_FOV_CHOICES)),
                     ('bo1.vertical_native', tr('Résolution native en vertical (test)'), [False, True]),
                     ('bo1.vertical_fov', tr('Champ de vision en partage vertical'), list(T5_FOV_CHOICES))]
         if adapter == BO1 and tab == 3:
             return [('bo1.private_bots', tr('Bots en chacun-pour-soi'), list(T5_BOT_COUNTS)),
                     ('bo1.team_total_bots', tr('Total de bots en équipe · Équilibrage auto'), list(T5_BOT_COUNTS)),
                     ('bo1.allies_bots', tr('Bots alliés · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
-                    ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS))]
+                    ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
+                    ('bo1.zombie_bots', tr('Bots alliés · Zombies'), list(T5_ZOMBIE_BOT_COUNTS))]
         if tab != 1:
             return []
         lobby_label = (tr('Ouvrir la partie privée au démarrage') if adapter == BO1
@@ -322,7 +324,7 @@ def label_value(key, value):
         return tr(HORIZONTAL_RENDER[value])
     if key == 'bo1.team_total_bots' and value == 0:
         return tr('Par équipe (manuel)')
-    if key == 'bo1.vertical_fov':
+    if key in ('bo1.horizontal_fov', 'bo1.vertical_fov'):
         return f'{value}°' if value else tr('Réglage du jeu')
     if key in ('bo1.language', 'bo2.language'):
         return tr(BO2_LANGUAGES[value])

@@ -405,7 +405,7 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
         assert environment[SESSION_MODE] == 'plutonium-zm'
         assert (environment.get(PUBLISH_DISPLAY) == '1') is publish
 
-from partydeck_bo2 import BO1, T5_VERTICAL_FOV, defaults as black_ops_defaults
+from partydeck_bo2 import BO1, T5_FOV_OVERRIDE, defaults as black_ops_defaults
 settings = black_ops_defaults(adapter=BO1) | {'mode': 't5sp', 'open_custom_lobby': True}
 with (patch.object(coop.subprocess, 'Popen') as popen,
       patch.object(coop, 'sandbox_arguments', return_value=[]),
@@ -418,14 +418,16 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
         env = popen.call_args.kwargs['env']
         assert env['PARTYDECK_BO2_RESOLUTION'] == resolution and env[SESSION_MODE] == 't5sp'
         assert env[PUBLISH_DISPLAY] == '1'
-    for split, count, selected, expected in (('vertical', 2, 100, '100'), ('vertical', 2, 0, None),
-                                            ('horizontal', 2, 100, None), ('vertical', 1, 100, None)):
-        settings['vertical_fov'] = selected
+    for split, count, horizontal_fov, vertical_fov, expected in (
+            ('vertical', 2, 85, 100, '100'), ('vertical', 2, 85, 0, None),
+            ('horizontal', 2, 85, 100, '85'), ('horizontal', 2, 0, 100, None),
+            ('horizontal', 1, 85, 100, None), ('horizontal', 4, 85, 100, None)):
+        settings.update(horizontal_fov=horizontal_fov, vertical_fov=vertical_fov)
         for player in ('j1', 'j2'):
-            with patch.dict(coop.os.environ, {T5_VERTICAL_FOV: '95'}):
+            with patch.dict(coop.os.environ, {T5_FOV_OVERRIDE: '95'}):
                 coop.start_player(base, base/player, game, game, [], (0, 0, 960, 1080), f'bo1-{player}',
                                   saves=base/'saves', player_count=count, split=split, network=network)
-            assert popen.call_args.kwargs['env'].get(T5_VERTICAL_FOV) == expected
+            assert popen.call_args.kwargs['env'].get(T5_FOV_OVERRIDE) == expected
     settings.update(mode='t5mp', open_custom_lobby=False, automatic_join=False, allies_bots=2)
     for player in ('j1', 'j2'):
         coop.start_player(base, base/player, game, game, [], (0, 0, 1920, 540), f'bo1-{player}',

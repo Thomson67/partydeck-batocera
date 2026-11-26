@@ -911,10 +911,10 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     bo2_resolution = None
     bo2_desktop = None
     bo2_publish_display = False
-    bo1_vertical_fov = 0
+    bo1_fov = 0
     from partydeck_bo2 import (BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                                PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
-                               T5_VERTICAL_FOV, desktop_size, render_size)
+                               T5_FOV_OVERRIDE, desktop_size, render_size)
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if trace_windows:
@@ -938,9 +938,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 # T6 crops its menus when the render target is portrait.
                 if player_count == 2 and split == 'horizontal' and settings['mode'] in PLUTONIUM_MODES:
                     render = settings['horizontal_render']
-                if adapter == BO1 and player_count == 2 and split == 'vertical':
-                    bo1_vertical_fov = settings['vertical_fov']
-                    if settings['vertical_native']:
+                if adapter == BO1 and player_count == 2 and split in ('horizontal', 'vertical'):
+                    bo1_fov = settings[f'{split}_fov']
+                    if split == 'vertical' and settings['vertical_native']:
                         render = 'native'
                 render_width, render_height = render_size(width, height, horizontal_render=render)
                 desktop_width, desktop_height = desktop_size(render_width, render_height)
@@ -988,9 +988,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_PRIVATE_LAN_IP',None)
     environment.pop('PARTYDECK_BO2_RESOLUTION', None)
     environment.pop(DESKTOP_MODE, None)
-    environment.pop(T5_VERTICAL_FOV, None)
-    if bo1_vertical_fov:
-        environment[T5_VERTICAL_FOV] = str(bo1_vertical_fov)
+    environment.pop(T5_FOV_OVERRIDE, None)
+    if bo1_fov:
+        environment[T5_FOV_OVERRIDE] = str(bo1_fov)
     environment.pop(PUBLISH_DISPLAY, None)
     environment.pop(SESSION_MODE, None)
     if bo2_publish_display:
