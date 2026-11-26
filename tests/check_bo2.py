@@ -326,6 +326,18 @@ with TemporaryDirectory() as folder:
             t5.poll(13)
             t5.poll(15)
             join.assert_called_once()
+            t5.poll(34)
+            with log.open('ab') as stream:
+                stream.write(t5_zombies_initialization if mode == 't5sp' else initialization)
+            t5.poll(35)
+            t5.poll(37)
+            join.assert_called_once()
+            with log.open('ab') as stream:
+                stream.write(b'----- Server Shutdown -----\n'
+                             + (t5_zombies_initialization if mode == 't5sp' else initialization))
+            t5.poll(40)
+            t5.poll(42)
+            assert join.call_count == 2
     with patch.object(bo2, 'join_window', return_value=True) as join:
         t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
         log.write_bytes(b"Loading fastfile 'plutonium_ui'\n" + t5_frontend_initialization)
