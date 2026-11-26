@@ -82,9 +82,18 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
     assert label_value('bo1.vertical_fov', 0) == ('Réglage du jeu' if language == 'fr' else 'In-game setting')
     assert fields(3, 'black-ops-1') == [
         ('bo1.private_bots', 'Bots en chacun-pour-soi' if language == 'fr' else 'Free-for-all bots', list(range(13))),
+        ('bo1.team_total_bots', 'Total de bots en équipe · Équilibrage auto' if language == 'fr'
+         else 'Total team bots · Auto balance', list(range(13))),
         ('bo1.allies_bots', 'Bots alliés · Modes en équipe' if language == 'fr' else 'Allies bots · Team modes', list(range(7))),
         ('bo1.axis_bots', 'Bots de l’Axe · Modes en équipe' if language == 'fr' else 'Axis bots · Team modes', list(range(7))),
     ]
+    assert label_value('bo1.team_total_bots', 0) == ('Par équipe (manuel)' if language == 'fr' else 'Per team (manual)')
+    assert label_value('bo1.team_total_bots', 6) == '6'
+    bo1_app.tab = 3
+    bo1_app.model.celeste_skins = bo1_app.model.story_skins = ()
+    for total in (0, 6):
+        bo1_app.model.data['bo1'] = {'team_total_bots': total}
+        assert App.current_fields(bo1_app) == fields(3, 'black-ops-1')[:2 if total else 4]
     assert lang.tr('Choisir le mode de jeu') == ('Choisir le mode de jeu' if language == 'fr' else 'Choose the game mode')
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
     assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']

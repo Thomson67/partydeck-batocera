@@ -136,7 +136,7 @@ def defaults(rom=None, adapter=ADAPTER):
         mode = 't5sp' if mode == 'plutonium-zm' else 't5mp'
         return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True,
                 'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False, 'vertical_fov': 0,
-                'private_bots': 0, 'allies_bots': 0, 'axis_bots': 0}
+                'private_bots': 0, 'allies_bots': 0, 'axis_bots': 0, 'team_total_bots': 0}
     return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False,
             'language': 'keep'}
 
@@ -171,7 +171,7 @@ def validate(data, adapter=ADAPTER):
             raise ValueError(tr('Champ de vision vertical Black Ops invalide.'))
         settings['vertical_fov'] = vertical_fov
         for key, choices in (('private_bots', T5_BOT_COUNTS), ('allies_bots', T5_TEAM_BOT_COUNTS),
-                             ('axis_bots', T5_TEAM_BOT_COUNTS)):
+                             ('axis_bots', T5_TEAM_BOT_COUNTS), ('team_total_bots', T5_BOT_COUNTS)):
             count = data.get(key, 0)
             if type(count) is not int or count not in choices:
                 raise ValueError(tr('Nombre de bots Black Ops invalide.'))
@@ -182,7 +182,10 @@ def validate(data, adapter=ADAPTER):
 def t5_bot_counts(settings):
     if settings['mode'] != 't5mp':
         return ()
-    counts = tuple(settings.get(key, 0) for key in ('private_bots', 'allies_bots', 'axis_bots'))
+    total = settings.get('team_total_bots', 0)
+    allies = settings.get('allies_bots', 0) if not total else 0
+    axis = settings.get('axis_bots', 0) if not total else 0
+    counts = (settings.get('private_bots', 0), allies, axis, total)
     return counts if any(counts) else ()
 
 
@@ -394,11 +397,12 @@ def configure_t5_bots(runtime, counts):
         script.unlink(missing_ok=True)
         return
 
-    total, allies, axis = counts
-    if total not in T5_BOT_COUNTS or allies not in T5_TEAM_BOT_COUNTS or axis not in T5_TEAM_BOT_COUNTS:
+    free, allies, axis, total = counts
+    if (free not in T5_BOT_COUNTS or total not in T5_BOT_COUNTS
+            or allies not in T5_TEAM_BOT_COUNTS or axis not in T5_TEAM_BOT_COUNTS):
         raise ValueError(tr('Nombre de bots Black Ops invalide.'))
-    # The T5 runtime compiles this script for each map on the LAN host.
-    # Reuse its stock routine to select a team and class for each bot.
+    # T5 owns the team/class transitions. Set the team once the bot finishes
+    # connecting, before its regular class and respawn logic starts.
     write_bytes(script, (r"""
 init()
 {
@@ -415,44 +419,143 @@ start_bots()
     while (!isdefined(level.teambased) || !isdefined(level.players) || level.players.size == 0)
         wait 0.25;
 
-    if (level.teambased)
+    if (!level.teambased)
     {
-        fill_bots("allies", %d);
-        fill_bots("axis", %d);
+        bots = team_bots("free");
+        fill_bots("free", %d - bots.size);
+        return;
     }
-    else
-        fill_bots("free", %d);
+
+    total = %d;
+    for (;;)
+    {
+        if (game["state"] == "postgame")
+            return;
+
+        targets = team_targets(total, human_team("allies"), human_team("axis"));
+        if (targets.size != 0)
+            balance_bots(targets);
+        wait 2;
+    }
 }
 
-fill_bots(team, target)
+team_targets(total, allies, axis)
 {
+    targets = [];
+    if (!total)
+    {
+        targets[0] = %d;
+        targets[1] = %d;
+        return targets;
+    }
+    if (allies + axis == 0)
+        return targets;
+    targets[0] = 0;
+    targets[1] = 0;
+    for (i = 0; i < total; i++)
+    {
+        if (allies + targets[0] <= axis + targets[1])
+            targets[0]++;
+        else
+            targets[1]++;
+    }
+    return targets;
+}
+
+human_team(team)
+{
+    count = 0;
     players = level.players;
     for (i = 0; i < players.size; i++)
     {
         player = players[i];
-        if (!player IsTestClient())
-            continue;
-        if (!level.teambased || (isdefined(player.team) && player.team == team))
-            target--;
+        if (!player IsTestClient() && isdefined(player.team) && player.team == team)
+            count++;
     }
+    return count;
+}
 
-    for (i = 0; i < target; i++)
+team_bots(team)
+{
+    bots = [];
+    players = level.players;
+    for (i = 0; i < players.size; i++)
+    {
+        player = players[i];
+        if (player IsTestClient() && (team == "free" || (isdefined(player.team) && player.team == team)))
+            bots[bots.size] = player;
+    }
+    return bots;
+}
+
+balance_bots(targets)
+{
+    allies = team_bots("allies");
+    axis = team_bots("axis");
+    allies_needed = targets[0] - allies.size;
+    axis_needed = targets[1] - axis.size;
+    if (allies_needed > 0 && axis_needed < 0)
+        allies_needed -= transfer_bots(axis, "allies", min(allies_needed, -axis_needed));
+    else if (axis_needed > 0 && allies_needed < 0)
+        axis_needed -= transfer_bots(allies, "axis", min(axis_needed, -allies_needed));
+
+    // Reserve the remaining slots against bots still connecting or supplied
+    // by another mod. A change in team sizes must not create extra bots.
+    bots = team_bots("free");
+    remaining = targets[0] + targets[1] - bots.size;
+    added = fill_bots("allies", min(allies_needed, remaining));
+    fill_bots("axis", min(axis_needed, remaining - added));
+}
+
+transfer_bots(bots, team, count)
+{
+    moved = 0;
+    for (i = 0; i < bots.size && moved < count; i++)
+    {
+        bot = bots[i];
+        if (!isdefined(bot) || !isdefined(bot.pers["partydeck_bot"]))
+            continue;
+        assign_bot(bot, team);
+        bot notify("menuresponse", "changeclass", "smg_mp");
+        moved++;
+    }
+    return moved;
+}
+
+fill_bots(team, count)
+{
+    added = 0;
+    for (i = 0; i < count; i++)
     {
         bot = AddTestClient();
         if (!isdefined(bot))
         {
             println("PartyDeck bots: could not add a client to " + team);
-            return;
+            break;
         }
+        added++;
+        for (attempt = 0; attempt < 30 && isdefined(bot) && !isdefined(bot.pers["team"]); attempt++)
+            wait 0.1;
+        if (!isdefined(bot) || !isdefined(bot.pers["team"]))
+            continue;
         bot.pers["isBot"] = true;
+        bot.pers["partydeck_bot"] = true;
         bot.equipment_enabled = false;
+        if (team != "free")
+            assign_bot(bot, team);
         bot thread maps\mp\gametypes\_bot::bot_spawn_think(team);
         wait 0.25;
     }
-    if (target > 0)
-        println("PartyDeck bots: added " + target + " to " + team);
+    return added;
 }
-""" % (allies, axis, total)).encode('ascii'))
+
+assign_bot(bot, team)
+{
+    if (!isdefined(bot.team) || bot.team != team)
+        bot maps\mp\gametypes\_teams::changeTeam(team);
+    bot.pers["dont_autobalance"] = true;
+}
+""" % (free, total, allies, axis)).encode('ascii'))
 
 
 def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_counts=()):
@@ -889,7 +992,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--language', choices=LANGUAGES, default='keep')
-    parser.add_argument('--bots', type=int, nargs=3, default=())
+    parser.add_argument('--bots', type=int, nargs=4, default=())
     for field in ('player', 'source', 'mode', 'directory', 'root'):
         parser.add_argument(field)
     args = parser.parse_args()

@@ -135,6 +135,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     ('bo1.vertical_fov', tr('Champ de vision en partage vertical'), list(T5_FOV_CHOICES))]
         if adapter == BO1 and tab == 3:
             return [('bo1.private_bots', tr('Bots en chacun-pour-soi'), list(T5_BOT_COUNTS)),
+                    ('bo1.team_total_bots', tr('Total de bots en équipe · Équilibrage auto'), list(T5_BOT_COUNTS)),
                     ('bo1.allies_bots', tr('Bots alliés · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
                     ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS))]
         if tab != 1:
@@ -319,6 +320,8 @@ def label_value(key, value):
         return tr('Activé') if value else tr('Désactivé')
     if key in ('bo1.horizontal_render', 'bo2.horizontal_render'):
         return tr(HORIZONTAL_RENDER[value])
+    if key == 'bo1.team_total_bots' and value == 0:
+        return tr('Par équipe (manuel)')
     if key == 'bo1.vertical_fov':
         return f'{value}°' if value else tr('Réglage du jeu')
     if key in ('bo1.language', 'bo2.language'):
@@ -997,6 +1000,9 @@ class App:
                 rows = [row for row in rows if not row[0].startswith(f'{STORY_COOP}.consumables.')]
             if story['camera_distance_mode'] != 'fixed':
                 rows = [row for row in rows if row[0] != f'{STORY_COOP}.camera_distance']
+        if self.tab == 3 and self.model.data and self.model.data.get('adapter') == BO1:
+            if self.model.data['bo1']['team_total_bots']:
+                rows = [row for row in rows if row[0] not in ('bo1.allies_bots', 'bo1.axis_bots')]
         if self.model.data and self.model.data.get('adapter')=='nfsmw-lan' and self.model.data.get('nfsmw',{}).get('private_lan',True):
             rows=[row for row in rows if row[0]!='nfsmw.host']
         return rows

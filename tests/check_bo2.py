@@ -99,7 +99,7 @@ with TemporaryDirectory() as folder:
             with patch.dict(os.environ, {bo2.SESSION_MODE: selected_mode}):
                 bo2.install_hook(base, bo1_rom, slot)
             hook = (slot / 'batocera-wine-bo2').read_text()
-            assert ('--bots 5 2 4' in hook) == expected
+            assert ('--bots 5 2 4 0' in hook) == expected
 
     installed_client = base / 'Plutonium from Windows'
     (installed_client / 'bin').mkdir(parents=True)
@@ -169,15 +169,19 @@ with TemporaryDirectory() as folder:
         (game / bo2.T5_EXECUTABLES[mode]).touch()
         (game / 'binkw32.dll').touch()
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)):
-            cwd, _ = bo2.prepare(player, mode, game, prefix, installed_client, bot_counts=(5, 2, 4))
+            cwd, _ = bo2.prepare(player, mode, game, prefix, installed_client, bot_counts=(5, 2, 4, 0))
             script = cwd / 'storage/t5/scripts/mp/partydeck_bots.gsc'
             assert script.is_file() == enabled
             if enabled:
                 code = script.read_text()
-                for line in ('if (level.teambased)', 'fill_bots("allies", 2);',
-                             'fill_bots("axis", 4);', 'fill_bots("free", 5);',
-                             'bot = AddTestClient();', '::bot_spawn_think(team);'):
+                for line in ('if (!level.teambased)', 'targets[0] = 2;', 'targets[1] = 4;',
+                             'fill_bots("free", 5 - bots.size);', 'total = 0;',
+                             'bot = AddTestClient();', '::changeTeam(team);', '::bot_spawn_think(team);'):
                     assert line in code
+                bo2.prepare(player, mode, game, prefix, installed_client, bot_counts=(5, 0, 0, 6))
+                assert 'total = 6;' in script.read_text()
+                assert 'targets[0] = 0;' in script.read_text()
+                assert 'targets[1] = 0;' in script.read_text()
                 bo2.prepare(player, mode, game, prefix, installed_client)
                 assert not script.exists()
 
@@ -370,7 +374,10 @@ with TemporaryDirectory() as folder:
     assert len(bo2.T5_LOBBY_COMMANDS['t5mp']) < 256
     assert bo2.t5_bot_counts(bo2.validate({'mode': 't5mp'}, bo2.BO1)) == ()
     assert bo2.t5_bot_counts(bo2.validate(
-        {'mode': 't5mp', 'private_bots': 5, 'allies_bots': 2, 'axis_bots': 4}, bo2.BO1)) == (5, 2, 4)
+        {'mode': 't5mp', 'private_bots': 5, 'allies_bots': 2, 'axis_bots': 4}, bo2.BO1)) == (5, 2, 4, 0)
+    assert bo2.t5_bot_counts(bo2.validate(
+        {'mode': 't5mp', 'private_bots': 5, 'allies_bots': 2, 'axis_bots': 4, 'team_total_bots': 6},
+        bo2.BO1)) == (5, 0, 0, 6)
     assert bo2.t5_bot_counts({'mode': 't5sp', 'private_bots': 5}) == ()
     for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'plutonium_ui_mp')):
         log.write_bytes(b"Loading fastfile 'common_mp'\n")
