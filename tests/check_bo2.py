@@ -198,9 +198,13 @@ with TemporaryDirectory() as folder:
         game.mkdir(parents=True, exist_ok=True)
         (game / bo2.T5_EXECUTABLES['t5sp']).touch()
         (game / 'binkw32.dll').touch()
+        old_script = game / '.partydeck-plutonium/storage/t5/scripts' / bo2.T5_ZOMBIE_BOT_SCRIPT
+        old_script.parent.mkdir(parents=True, exist_ok=True)
+        old_script.write_text('previous global script')
         with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player), PARTYDECK_SESSION_PLAYERS=humans):
             cwd, command = bo2.prepare(player, 't5sp', game, prefix, installed_client, zombie_bots=3)
-        script = cwd / 'storage/t5/scripts' / bo2.T5_ZOMBIE_BOT_SCRIPT
+        assert not old_script.exists()
+        script = cwd / 'storage/t5/scripts/sp/zom' / bo2.T5_ZOMBIE_BOT_SCRIPT
         assert script.is_file() == bool(expected)
         if expected:
             code = script.read_text()

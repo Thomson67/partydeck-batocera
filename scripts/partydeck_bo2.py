@@ -573,17 +573,20 @@ def configure_t5_zombie_bots(runtime, count, humans):
     folder = runtime
     for name in ('storage', 't5', 'scripts'):
         folder = private_child(folder, name)
-    script = private_child(folder, T5_ZOMBIE_BOT_SCRIPT)
+    # The global scripts directory is read while T5 is still loading its
+    # frontend. Move our previous copy out of that path before Wine starts.
+    private_child(folder, T5_ZOMBIE_BOT_SCRIPT).unlink(missing_ok=True)
+    zombies = private_child(private_child(folder, 'sp'), 'zom')
+    script = private_child(zombies, T5_ZOMBIE_BOT_SCRIPT)
     count = min(count, 4 - humans)
     if not count:
         script.unlink(missing_ok=True)
         return []
 
-    # Plutonium compiles raw GSC in the host's private storage. Reuse an
-    # existing copy of the upstream mod if the user already installed one.
-    original = private_child(folder, 'zm_bo1_bots.gsc')
-    original_zm = private_child(private_child(folder, 'zm'), 'zm_bo1_bots.gsc')
-    if original.is_file() or original_zm.is_file():
+    # Reuse an existing copy of the upstream mod when one was installed
+    # manually, to avoid loading two scripts that define the same routines.
+    if any(private_child(directory, 'zm_bo1_bots.gsc').is_file()
+           for directory in (folder, zombies, private_child(folder, 'zm'))):
         script.unlink(missing_ok=True)
     else:
         bundled = Path(__file__).with_name(T5_ZOMBIE_BOT_SCRIPT)
