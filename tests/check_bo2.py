@@ -114,10 +114,12 @@ with TemporaryDirectory() as folder:
         assert ['+set', 'loc_language', '1'] == args[args.index('loc_language') - 1:args.index('loc_language') + 2]
         assert ('sp_minplayers' in args) == (mode == 't5sp')
         assert 'developer' not in args
+        assert 'con_minicon' not in args
         with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), 'PARTYDECK_SESSION_PLAYERS': '2',
                                     'PARTYDECK_PRIVATE_LAN_IP': '192.168.247.11', bo2.PUBLISH_DISPLAY: '1'}):
             _, private_command = bo2.prepare(player, mode, game, prefix, installed_client)
         assert ('+set developer 1' in private_command) == (mode == 't5sp')
+        assert ('+set con_minicon 0' in private_command) == (mode == 't5sp')
         assert (game / 'localization.txt').read_bytes() == b'french\r\n'
 
     assert bo2.render_size(1920, 540) == (1280, 720)

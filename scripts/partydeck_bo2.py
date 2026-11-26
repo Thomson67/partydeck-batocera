@@ -358,7 +358,8 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
                 and os.environ.get(PUBLISH_DISPLAY) == '1'
                 and os.environ.get('PARTYDECK_PRIVATE_LAN_IP')):
             # T5 emits the client-loading acknowledgement in developer output.
-            args += ['+set', 'developer', '1']
+            # Keep the output available to AutoJoin without drawing it over the game.
+            args += ['+set', 'developer', '1', '+set', 'con_minicon', '0']
     if player.name != 'j1':
         print(tr('Black Ops II {p0} : rejoindre J1 avec {p1}.', p0=player.name.upper(),
                  p1=JOIN_HOST), file=sys.stderr, flush=True)
