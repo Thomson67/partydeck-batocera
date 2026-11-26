@@ -633,130 +633,15 @@ bo1_next_act(n)
 {
 }
 
+// Only use actions registered by Plutonium T5.
 bo1_on(n)
 {
-	switch(n)
-	{
-		case "attack":
-		case "fire":
-			self botaction("+fire");
-			self botaction("+attack");
-			self botaction("+unk14");
-			break;
-		case "use":
-		case "activate":
-			self botaction("+use");
-			self botaction("+usereload");
-			self botaction("+activate");
-			self botaction("+unk11");
-			self botaction("+unk9");
-			break;
-		case "reload":
-			self botaction("+reload");
-			self botaction("+usereload");
-			self botaction("+unk10");
-			self botaction("+unk9");
-			break;
-		case "melee":
-			self botaction("+melee");
-			self botaction("+unk12");
-			break;
-		case "jump":
-		case "gostand":
-			self botaction("+gostand");
-			self botaction("+unk4");
-			break;
-		case "crouch":
-		case "gocrouch":
-			self botaction("+gocrouch");
-			break;
-		case "prone":
-		case "goprone":
-			self botaction("+goprone");
-			break;
-		case "ads":
-			self botaction("+ads");
-			self botaction("+remote");
-			break;
-		case "sprint":
-			self botaction("+sprint");
-			self botaction("+unk13");
-			break;
-		case "frag":
-			self botaction("+frag");
-			self botaction("+unk2");
-			break;
-		case "smoke":
-			self botaction("+smoke");
-			self botaction("+unk");
-			break;
-		default:
-			self botaction("+" + n);
-			break;
-	}
+	self botaction("+" + n);
 }
 
 bo1_off(n)
 {
-	switch(n)
-	{
-		case "attack":
-		case "fire":
-			self botaction("-fire");
-			self botaction("-attack");
-			self botaction("-unk14");
-			break;
-		case "use":
-		case "activate":
-			self botaction("-use");
-			self botaction("-usereload");
-			self botaction("-activate");
-			self botaction("-unk11");
-			self botaction("-unk9");
-			break;
-		case "reload":
-			self botaction("-reload");
-			self botaction("-usereload");
-			self botaction("-unk10");
-			self botaction("-unk9");
-			break;
-		case "melee":
-			self botaction("-melee");
-			self botaction("-unk12");
-			break;
-		case "jump":
-		case "gostand":
-			self botaction("-gostand");
-			self botaction("-unk4");
-			break;
-		case "crouch":
-		case "gocrouch":
-			self botaction("-gocrouch");
-			break;
-		case "prone":
-		case "goprone":
-			self botaction("-goprone");
-			break;
-		case "ads":
-			self botaction("-ads");
-			self botaction("-remote");
-			break;
-		case "sprint":
-			self botaction("-sprint");
-			self botaction("-unk13");
-			break;
-		case "frag":
-			self botaction("-frag");
-			self botaction("-unk2");
-			break;
-		case "smoke":
-			self botaction("-smoke");
-			self botaction("-unk");
-			break;
-		default:
-			self botaction("-" + n);
-			break;
-	}
+	self botaction("-" + n);
 }
 
 bo1_down(p)
@@ -828,9 +713,9 @@ bo1_face(pos)
 bo1_press(sec)
 {
 	self bo1_stop();
-	self bo1_on("use");
+	self bo1_on("activate");
 	wait sec;
-	self bo1_off("use");
+	self bo1_off("activate");
 }
 
 bo1_jump()
@@ -2849,7 +2734,7 @@ bo1_do_revive(mate)
 {
 	bo1bots_dbg(self.name + " reviving " + mate.name);
 	t = 0;
-	self bo1_on("use");
+	self bo1_on("activate");
 	while(t < 8 && isDefined(mate) && bo1_down(mate) && !bo1_down(self) && isAlive(self))
 	{
 		self bo1_face(mate.origin + (0, 0, 30));
@@ -2862,7 +2747,7 @@ bo1_do_revive(mate)
 		if(self bo1_any_zombie_near(90))
 			break;
 	}
-	self bo1_off("use");
+	self bo1_off("activate");
 	self bo1_stop();
 }
 
@@ -3058,7 +2943,7 @@ bo1_board_press(w)
 		self._holding_button = [];
 	self._holding_button[btn] = true;
 	self._use_button_think_threaded = true;
-	self bo1_on("use");
+	self bo1_on("activate");
 
 	trig = bo1_find_window_trigger(w);
 	if(isDefined(trig))
@@ -3095,7 +2980,7 @@ bo1_board_press(w)
 		if(self bo1_any_zombie_near(90) || (isDefined(self.bo1.hit_time) && gettime() - self.bo1.hit_time < 1000))
 		{
 			self._holding_button[btn] = false;
-			self bo1_off("use");
+			self bo1_off("activate");
 			if(made)
 				return 1;
 			return -1;
@@ -3119,7 +3004,7 @@ bo1_board_press(w)
 	}
 
 	self._holding_button[btn] = false;
-	self bo1_off("use");
+	self bo1_off("activate");
 
 	if(made)
 		return 1;

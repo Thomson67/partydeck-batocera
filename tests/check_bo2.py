@@ -210,6 +210,10 @@ with TemporaryDirectory() as folder:
             code = script.read_text()
             assert 'MIT License' in code and 'reee23463-debug' in code
             assert 'while(bo1bots_humans_connected() < humans && gettime() < deadline)' in code
+            assert set(re.findall(r'\bbo1_(?:on|off)\("([^"]+)"\)', code)) == {
+                'activate', 'ads', 'attack', 'frag', 'gostand', 'melee', 'reload', 'smoke', 'sprint',
+            }
+            assert re.findall(r'\bbotaction\(([^)]*)\)', code) == ['"+" + n', '"-" + n']
             assert f'+set bo1_bots_count {expected}' in command
             assert f'+set partydeck_bo1_humans {humans}' in command
             assert f'+set sp_minplayers {humans}' in command
@@ -463,19 +467,22 @@ with TemporaryDirectory() as folder:
         t5.poll(6)
         query = call(host_display, ':0', 'zombiemode; ui_skipMainLockout')
         assert send.call_args_list == [query]
+        for now in (9, 12, 15):
+            t5.poll(now)
+        assert send.call_args_list == [query]
         with log.open('ab') as stream:
             stream.write(mode_off + title)
-        t5.poll(9)
+        t5.poll(16)
         keys.assert_called_once_with(host_display, ':0', ('Return',))
-        t5.poll(11)
+        t5.poll(18)
         with log.open('ab') as stream:
             stream.write(mode_off + menu)
-        t5.poll(14)
+        t5.poll(21)
         assert keys.call_args_list[-1] == call(host_display, ':0', ('Down', 'Return'))
-        t5.poll(16)
+        t5.poll(23)
         with log.open('ab') as stream:
             stream.write(mode_off.replace(b'is: "0^7"', b'is: "1^7"'))
-        t5.poll(19)
+        t5.poll(26)
         assert send.call_args_list == [query, query, query, call(host_display, ':0', bo2.T5_ZOMBIES_HOST_LOBBY)]
     assert 'set zombiemode' not in bo2.T5_ZOMBIES_HOST_LOBBY
     for marker in (b'LOADING... maps/zombie_theater.d3dbsp', rb'g_gametype\zom\mapname\zombie_theater\protocol'):
@@ -484,6 +491,24 @@ with TemporaryDirectory() as folder:
                    b'Loading fastfile zombie_theater_patch'):
         assert not t5.match_starting(marker)
 
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
+        log.write_bytes(b'Loading fastfile plutonium_ui\n' + b' ' * 1100000)
+        t5.poll(1)
+        with log.open('ab') as stream:
+            stream.write(b'\rServer: zombie_theater\r')
+        t5.poll(2)
+        t5.poll(3)
+        t5.poll(5)
+        join.assert_called_once_with(display, ':0')
+    with patch.object(bo2, 'join_window', return_value=True) as join:
+        t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
+        log.write_bytes(t5_frontend_initialization * 20)
+        t5.poll(1)
+        log.write_bytes(t5_zombies_initialization)
+        t5.poll(2)
+        t5.poll(4)
+        join.assert_called_once_with(display, ':0')
     with patch.object(bo2, 'join_window', return_value=True) as join:
         t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)
         # UMU may log only the end of a frontend while the Wine tee records gameplay.

@@ -703,7 +703,7 @@ def instrument_native(source, hook, mode, *, log=None):
             # Each player has its own output stream. Keep the main session
             # journal intact and preserve the native Wine exit status.
             body = re.sub(r'(?m)^( *\(cd "\$\{partydeck_bo2_cwd\}".*)\)$',
-                          lambda match: f'{match[1]} > >(tee -- {shlex.quote(str(log))}) 2>&1)', body)
+                          lambda match: f'{match[1]} > >(tee -a -- {shlex.quote(str(log))}) 2>&1)', body)
         parts[index] = body.replace(marker, setup + marker)
     return ''.join(parts)
 
@@ -843,7 +843,7 @@ class AutoJoin:
         self.mode = mode
         self.outer_display = outer_display
         self.started = started
-        self.offsets = {}
+        self.log_positions = {}
         self.host_log = None
         self.host_ready = None
         self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in CUSTOM_LOBBY_MODES else None
@@ -877,10 +877,19 @@ class AutoJoin:
         for path in logs:
             try:
                 with path.open('rb') as stream:
-                    stream.seek(self.offsets.get(path, 0))
-                    data = stream.read(262144)
-                    end = data.rfind(b'\n') + 1
-                    self.offsets[path] = stream.tell() - len(data) + end
+                    stat = os.fstat(stream.fileno())
+                    identity = (stat.st_dev, stat.st_ino)
+                    previous, offset = self.log_positions.get(path, (None, 0))
+                    if identity != previous or stat.st_size < offset:
+                        offset = 0
+                    stream.seek(offset)
+                    limit = 1048576
+                    data = stream.read(limit)
+                    end = max(data.rfind(b'\n'), data.rfind(b'\r')) + 1
+                    if not end and len(data) == limit:
+                        # A long diagnostic must not block all later events.
+                        end = limit - 1024
+                    self.log_positions[path] = (identity, offset + end)
             except OSError:
                 continue
             for line in data[:end].splitlines():
@@ -986,7 +995,8 @@ class AutoJoin:
                     dvars.clear()
                     self.lobby_click_at = now + 2
                 return
-        dvars.clear()
+        if self.t5_menu_query:
+            return
         self.t5_menu_query = send_console_command(display, self.outer_display, 'zombiemode; ui_skipMainLockout')
         self.lobby_click_at = now + 3
 
