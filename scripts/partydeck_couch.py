@@ -51,6 +51,7 @@ from partydeck_dst import (ADAPTER as DST, LANGUAGES as DST_LANGUAGES, HUD_SIZES
                            defaults as dst_defaults, matches as matches_dst)
 
 TABS = ['Session', 'Réseau', 'Joueurs', 'Image & son', 'Gameplay']
+BO1_TABS = ('Session', 'Options', 'Affichage', 'Bots')
 KEY_LABELS = {'ok':'Entrée', 'back':'Échap', 'save':'F2', 'search':'F3', 'add':'Inser', 'launch':'F5', 'tabs':'PgUp/PgDn'}
 STORAGE_OPTIONS = (
     ('auto_clean', 'Entretien automatique'),
@@ -126,21 +127,25 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('dst.text_scale', tr('Taille des textes des menus'), list(DST_TEXT_SIZES)),
                 ('dst.music_j1_only', tr('Musique uniquement pour J1'), [False, True])] if tab == 3 else []
     if adapter in BLACK_OPS_PROFILES:
+        section = BLACK_OPS_PROFILES[adapter]
+        horizontal = (f'{section}.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))
+        if adapter == BO1 and tab == 2:
+            return [horizontal,
+                    ('bo1.vertical_native', tr('Résolution native en vertical (test)'), [False, True]),
+                    ('bo1.vertical_fov', tr('Champ de vision en partage vertical'), list(T5_FOV_CHOICES))]
+        if adapter == BO1 and tab == 3:
+            return [('bo1.private_bots', tr('Bots en chacun-pour-soi'), list(T5_BOT_COUNTS)),
+                    ('bo1.allies_bots', tr('Bots alliés · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
+                    ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS))]
         if tab != 1:
             return []
-        section = BLACK_OPS_PROFILES[adapter]
         lobby_label = (tr('Ouvrir la partie privée au démarrage') if adapter == BO1
                        else tr('Ouvrir Parties personnalisées au démarrage'))
         rows = [(f'{section}.open_custom_lobby', lobby_label, [False, True]),
                 (f'{section}.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
-                (f'{section}.language', tr('Langue du jeu'), list(BO2_LANGUAGES)),
-                (f'{section}.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))]
-        if adapter == BO1:
-            rows.append(('bo1.vertical_fov', tr('Champ de vision en partage vertical'), list(T5_FOV_CHOICES)))
-            rows.append(('bo1.private_bots', tr('Bots en chacun-pour-soi'), list(T5_BOT_COUNTS)))
-            rows.extend([('bo1.allies_bots', tr('Bots alliés · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
-                         ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS))])
-            rows.append(('bo1.vertical_native', tr('Résolution native en vertical (test)'), [False, True]))
+                (f'{section}.language', tr('Langue du jeu'), list(BO2_LANGUAGES))]
+        if adapter == BO2:
+            rows.append(horizontal)
         return rows
     if adapter == STORY_COOP:
         if tab == 1:
@@ -970,7 +975,9 @@ class App:
         if self.model.data and self.model.data.get('adapter') == 'celestenet':return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'hollowknight-hkmultiplayer':return (0,1,2,3)
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
-        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO1, BO2):return (0,1)
+        if self.model.data and self.model.data.get('adapter') == BO1:
+            return tuple(range(len(BO1_TABS)))
+        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2):return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
@@ -1997,8 +2004,10 @@ class App:
                     title=tr(('Session','Réseau','Coop')[i])
                 elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
-                elif self.model.data.get('adapter') in BLACK_OPS_PROFILES:
-                    title=tr(('Session', 'Options')[i])
+                elif self.model.data.get('adapter') == BO1:
+                    title = tr(BO1_TABS[i])
+                elif self.model.data.get('adapter') == BO2:
+                    title = tr(('Session', 'Options')[i])
                 elif self.model.data.get('adapter') == 'celestenet':
                     title = tr(('Session','Options','Joueurs')[i])
                 elif self.model.data.get('adapter') == 'l4d2-goldberg':
@@ -2027,7 +2036,7 @@ class App:
                     subtitle = (tr('Story Co-op · noms et skins des joueurs') if self.tab == 2
                                 else tr('Story Co-op · réglages communs aux joueurs de cette session'))
                 if self.model.data['adapter'] in BLACK_OPS_PROFILES:
-                    subtitle = tr('Réglages Plutonium LAN · choisissez le mode au lancement')
+                    subtitle = tr('Réglages Plutonium LAN · choisissez le mode au lancement') if self.tab == 1 else ''
                 if self.model.data['adapter'] == DST:
                     subtitle = tr('Résolution adaptée au partage')
                 if self.model.data['adapter']=='hollowknight-hkmultiplayer':

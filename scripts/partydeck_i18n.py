@@ -522,6 +522,7 @@ EN = {
     'Wine a terminé normalement ; incident Gamescope à la fermeture ({p0}), non transmis à EmulationStation.':'Wine exited normally; Gamescope shutdown failure ({p0}) was not forwarded to EmulationStation.',
     'Fermeture de la session demandée (signal {p0}).':'Session shutdown requested (signal {p0}).',
     'Graphismes':'Graphics','Gameplay':'Gameplay','Options':'Options','Son':'Audio',
+    'Affichage': 'Display', 'Bots': 'Bots',
     'SM64CoopDX · profil commun':'SM64CoopDX · shared profile',
     'Distance d’affichage':'Draw distance','Caméra libre':'Free camera',
     'Sensibilité caméra · axe X':'Camera sensitivity · X axis','Sensibilité caméra · axe Y':'Camera sensitivity · Y axis',

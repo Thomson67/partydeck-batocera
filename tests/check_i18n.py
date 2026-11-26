@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch,Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import partydeck_i18n as lang
-from partydeck_couch import App,STORAGE_GAME_ROW,STORAGE_OPTIONS,control_label,context_hints,fields,label_value
+from partydeck_couch import App,BO1_TABS,STORAGE_GAME_ROW,STORAGE_OPTIONS,control_label,context_hints,fields,label_value
 from partydeck_profiles import defaults,save_profile,read_profile,profile_path,edit_profile_legacy,edit_anchor,edit_soh_graphics
 from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
@@ -62,24 +62,29 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
     assert lang.tr(BO2_MODES['original']) == original
     assert label_value('bo2.language', 'french') == ('Français' if language == 'fr' else 'French')
     assert label_value('bo2.language', 'english') == ('Anglais' if language == 'fr' else 'English')
-    assert fields(1, 'black-ops-1')[0] == ('bo1.open_custom_lobby',
-        'Ouvrir la partie privée au démarrage' if language == 'fr'
-        else 'Open Private Match at startup', [False, True])
-    assert fields(1, 'black-ops-1')[-5] == ('bo1.vertical_fov',
-        'Champ de vision en partage vertical' if language == 'fr' else 'Vertical split-screen field of view',
-        [0, *range(65, 111, 5)])
+    bo1_app = SimpleNamespace(model=SimpleNamespace(data={'adapter': 'black-ops-1'}))
+    assert App.available_tabs(bo1_app) == (0, 1, 2, 3)
+    assert tuple(map(lang.tr, BO1_TABS)) == ('Session', 'Options', 'Affichage' if language == 'fr' else 'Display', 'Bots')
+    assert fields(1, 'black-ops-1') == [
+        ('bo1.open_custom_lobby', 'Ouvrir la partie privée au démarrage' if language == 'fr'
+         else 'Open Private Match at startup', [False, True]),
+        ('bo1.automatic_join', automatic, [True, False]),
+        ('bo1.language', 'Langue du jeu' if language == 'fr' else 'Game language', ['keep', 'french', 'english']),
+    ]
+    assert fields(2, 'black-ops-1') == [
+        ('bo1.horizontal_render', horizontal, ['native', '720p', 'standard']),
+        ('bo1.vertical_native', 'Résolution native en vertical (test)' if language == 'fr'
+         else 'Native vertical resolution (experimental)', [False, True]),
+        ('bo1.vertical_fov', 'Champ de vision en partage vertical' if language == 'fr'
+         else 'Vertical split-screen field of view', [0, *range(65, 111, 5)]),
+    ]
     assert label_value('bo1.vertical_fov', 100) == '100°'
     assert label_value('bo1.vertical_fov', 0) == ('Réglage du jeu' if language == 'fr' else 'In-game setting')
-    assert fields(1, 'black-ops-1')[-4] == ('bo1.private_bots',
-        'Bots en chacun-pour-soi' if language == 'fr'
-        else 'Free-for-all bots', list(range(13)))
-    assert fields(1, 'black-ops-1')[-3:-1] == [
+    assert fields(3, 'black-ops-1') == [
+        ('bo1.private_bots', 'Bots en chacun-pour-soi' if language == 'fr' else 'Free-for-all bots', list(range(13))),
         ('bo1.allies_bots', 'Bots alliés · Modes en équipe' if language == 'fr' else 'Allies bots · Team modes', list(range(7))),
         ('bo1.axis_bots', 'Bots de l’Axe · Modes en équipe' if language == 'fr' else 'Axis bots · Team modes', list(range(7))),
     ]
-    assert fields(1, 'black-ops-1')[-1] == ('bo1.vertical_native',
-        'Résolution native en vertical (test)' if language == 'fr'
-        else 'Native vertical resolution (experimental)', [False, True])
     assert lang.tr('Choisir le mode de jeu') == ('Choisir le mode de jeu' if language == 'fr' else 'Choose the game mode')
     assert label_value('adapter', 'ocarina-story-coop') == 'Ocarina of Time · Story Co-op'
     assert 'ocarina-story-coop' in dict((key, values) for key, _, values in fields(0, 'ocarina-story-coop'))['adapter']
