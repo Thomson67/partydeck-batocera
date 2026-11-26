@@ -305,6 +305,7 @@ with TemporaryDirectory() as folder:
     assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Co-Op (r5369) (LAN)', re.I)
     assert not re.search(bo2.GAME_WINDOW, 'Plutonium T5 Console (r5369)', re.I)
     assert 'onlinegame' not in bo2.T5_LOBBY_COMMANDS['t5sp']
+    assert len(bo2.T5_LOBBY_COMMANDS['t5mp']) < 256
     for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'plutonium_ui_mp')):
         log.write_bytes(b"Loading fastfile 'common_mp'\n")
         t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)

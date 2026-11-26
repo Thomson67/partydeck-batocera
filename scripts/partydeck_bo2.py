@@ -57,9 +57,8 @@ PLAYER_CONNECTION = re.compile(rb"client 'Player ([1-4])' (connected|disconnecte
 T5_ZOMBIES_CLIENT_LOADING = re.compile(rb'Going from CS_CONNECTED to CS_CLIENTLOADING for Player ([1-4])\b')
 T5_LOBBY_COMMANDS = {
     # Match the Multiplayer "Private Match" action in ui_mp/main.menu.
-    't5mp': ('setclientbeingusedandprimary; set systemlink 0; set splitscreen 0; set onlinegame 1; '
-             'set xblive_rankedmatch 0; set xblive_wagermatch 0; set xblive_clanmatch 0; '
-             'set xblive_theater 0; set xblive_basictraining 0; set xblive_privatematch 1; '
+    't5mp': ('setclientbeingusedandprimary; set systemlink 0; set splitscreen 0; '
+             'set onlinegame 1; set xblive_privatematch 1; '
              'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
              'closemenu live_flyout; openmenu menu_xboxlive_privatelobby'),
     't5sp': ('setclientbeingusedandprimary; set zombiemode 1; set spmode 0; '
