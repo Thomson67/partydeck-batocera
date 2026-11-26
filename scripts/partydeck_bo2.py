@@ -579,7 +579,8 @@ class AutoJoin:
         if self.match_starting(line):
             # Zombies can wait for guests before the host is fully in-game.
             ready = self.mode in ('plutonium-zm', 't5sp', 't5mp') or 'j1' in self.connected
-            self.host_ready = None
+            if self.mode != 't5sp':
+                self.host_ready = None
         else:
             event = PLAYER_CONNECTION.search(line)
             action = event[2] if event is not None else b'connected'
@@ -682,7 +683,10 @@ class AutoJoin:
                     print(tr('Black Ops II {p0} : impossible d’envoyer la commande de connexion à la console.',
                              p0=player.name.upper()), flush=True)
                 self.attempts[name] = 4
-            elif join_window(automatic_path(player, self.token, 'display'), self.outer_display):
+            # T5 Zombies may report the guest only after it finishes loading.
+            # Another connect during that transition can unload its active map.
+            elif (self.mode != 't5sp' or attempts == 0) and join_window(
+                    automatic_path(player, self.token, 'display'), self.outer_display):
                 self.attempts[name] += 1
                 self.retry_at[name] = now + 18
                 print(tr('Black Ops II {p0} : connexion à la partie de J1 demandée.',

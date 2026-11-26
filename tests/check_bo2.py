@@ -307,15 +307,22 @@ with TemporaryDirectory() as folder:
         t5.poll(8)
         t5.poll(10)
         join.assert_called_once_with(display, ':0')
+        # A slow guest can be loading long after the T6 retry interval.
+        t5.poll(28)
+        with log.open('ab') as stream:
+            stream.write(t5_zombies_initialization)
+        t5.poll(29)
+        t5.poll(31)
+        join.assert_called_once_with(display, ':0')
         with log.open('ab') as stream:
             stream.write(b'Going from CS_CONNECTED to CS_CLIENTLOADING for Player 2\n')
-        t5.poll(28)
+        t5.poll(49)
         join.assert_called_once_with(display, ':0')
         assert t5.connected == {'j2'}
         with log.open('ab') as stream:
             stream.write(b'----- Server Shutdown -----\n' + t5_zombies_initialization)
-        t5.poll(31)
-        t5.poll(33)
+        t5.poll(52)
+        t5.poll(54)
         assert join.call_args_list == [call(display, ':0'), call(display, ':0')]
     log.write_bytes(b"Loading fastfile 'common_mp'\n")
     display.write_text(json.dumps({'DISPLAY': ':0.0'}))
