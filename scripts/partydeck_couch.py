@@ -129,7 +129,9 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
         if tab != 1:
             return []
         section = BLACK_OPS_PROFILES[adapter]
-        rows = [(f'{section}.open_custom_lobby', tr('Ouvrir Parties personnalisées au démarrage'), [False, True]),
+        lobby_label = (tr('Ouvrir la partie privée au démarrage') if adapter == BO1
+                       else tr('Ouvrir Parties personnalisées au démarrage'))
+        rows = [(f'{section}.open_custom_lobby', lobby_label, [False, True]),
                 (f'{section}.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
                 (f'{section}.language', tr('Langue du jeu'), list(BO2_LANGUAGES)),
                 (f'{section}.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))]

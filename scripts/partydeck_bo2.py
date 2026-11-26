@@ -48,7 +48,7 @@ ONLINE_BUTTON = (668, 326)
 CUSTOM_GAMES_BUTTONS = {'plutonium-mp': (700, 99), 'plutonium-zm': (700, 135)}
 STARTUP_MARKERS = {mode: re.compile(rb"Loading fastfile '?" + asset + rb"(?![a-zA-Z0-9_])")
                    for mode, asset in (('t6mp', b'common_mp'), ('t6zm', b'common_zm'),
-                                       ('t5mp', b'common_mp'), ('t5sp', rb'(?:common|plutonium_ui)'))}
+                                       ('t5mp', b'plutonium_ui_mp'), ('t5sp', rb'(?:common|plutonium_ui)'))}
 # Plutonium r5369 issues this command as it enters the online menu.
 ONLINE_MENU_MARKER = re.compile(rb'Unknown command:? "session_rejoinsession"')
 GAME_INITIALIZATION = b'------- Game Initialization -------'
@@ -56,9 +56,12 @@ T5_ZOMBIES_MAP = re.compile(rb'\bServer:\s+(?:zombie_[a-z0-9_]+|zombietron)\b', 
 PLAYER_CONNECTION = re.compile(rb"client 'Player ([1-4])' (connected|disconnected)\b")
 T5_ZOMBIES_CLIENT_LOADING = re.compile(rb'Going from CS_CONNECTED to CS_CLIENTLOADING for Player ([1-4])\b')
 T5_LOBBY_COMMANDS = {
-    't5mp': ('setclientbeingusedandprimary; onlinegame 1; xblive_privatematch 1; '
+    # Match the Multiplayer "Private Match" action in ui_mp/main.menu.
+    't5mp': ('setclientbeingusedandprimary; set systemlink 0; set splitscreen 0; set onlinegame 1; '
+             'set xblive_rankedmatch 0; set xblive_wagermatch 0; set xblive_clanmatch 0; '
+             'set xblive_theater 0; set xblive_basictraining 0; set xblive_privatematch 1; '
              'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
-             'closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),
+             'closemenu live_flyout; openmenu menu_xboxlive_privatelobby'),
     't5sp': ('setclientbeingusedandprimary; set zombiemode 1; set spmode 0; '
              'xblive_privatematch 1; xblive_rankedmatch 0; xstartpartyhost; '
              'closemenu main_text; closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),

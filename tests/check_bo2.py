@@ -305,20 +305,25 @@ with TemporaryDirectory() as folder:
     assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Co-Op (r5369) (LAN)', re.I)
     assert not re.search(bo2.GAME_WINDOW, 'Plutonium T5 Console (r5369)', re.I)
     assert 'onlinegame' not in bo2.T5_LOBBY_COMMANDS['t5sp']
-    for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'common_mp')):
-        log.write_bytes(f"Loading fastfile '{asset}'\n".encode())
+    for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'plutonium_ui_mp')):
+        log.write_bytes(b"Loading fastfile 'common_mp'\n")
         t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)
         with patch.object(bo2, 'send_console_command', return_value=True) as send, \
              patch.object(bo2, 'join_window', return_value=True) as join:
             t5.poll(1)
             t5.poll(6)
+            send.assert_not_called()
+            with log.open('ab') as stream:
+                stream.write(f"Loading fastfile '{asset}'\n".encode())
+            t5.poll(7)
+            t5.poll(12)
             send.assert_called_once_with(bo2.automatic_path(host, token, 'display'), ':0',
                                          bo2.T5_LOBBY_COMMANDS[mode])
             join.assert_not_called()
             with log.open('ab') as stream:
                 stream.write(t5_zombies_initialization if mode == 't5sp' else initialization)
-            t5.poll(8)
-            t5.poll(10)
+            t5.poll(13)
+            t5.poll(15)
             join.assert_called_once()
     with patch.object(bo2, 'join_window', return_value=True) as join:
         t5 = bo2.AutoJoin([host, guest], token, 't5sp', ':0', 0)

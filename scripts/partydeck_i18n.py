@@ -140,6 +140,7 @@ EN = {
         'Black Ops II mode selector unavailable. Using the profile’s mode.',
     'Rejoindre automatiquement la partie de J1': 'Automatically join P1’s match',
     'Ouvrir Parties personnalisées au démarrage': 'Open Custom Games at startup',
+    'Ouvrir la partie privée au démarrage': 'Open Private Match at startup',
     'Option de connexion automatique Black Ops II invalide.': 'Invalid Black Ops II automatic join setting.',
     'Option d’ouverture du salon Black Ops II invalide.': 'Invalid Black Ops II startup lobby setting.',
     'Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.': 'Start the custom game on P1. The other players join automatically.',
