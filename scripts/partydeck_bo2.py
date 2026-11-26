@@ -39,6 +39,7 @@ JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
 SESSION_MODE = 'PARTYDECK_BO2_MODE'
 GAME_WINDOW = (r'^Plutonium T[56][ :_]+(MP|SP|ZM|Singleplayer|Single Player|Multiplayer|Multijoueur|Zombies)([^a-z0-9]|$)'
+               r'|^Plutonium T5[ :_]+(Co-Op|Campaign)([^a-z0-9]|$)'
                r'|Black Ops (II|2).*(Multiplayer|Multijoueur|Zombies)'
                r'|^Call of Duty(\(R\))?[: ]+Black Ops( - (Multiplayer|Zombies))?$')
 # Positions of the two native buttons in the verified 1920x540 layout.
@@ -58,7 +59,7 @@ T5_LOBBY_COMMANDS = {
     't5mp': ('setclientbeingusedandprimary; onlinegame 1; xblive_privatematch 1; '
              'exec default_xboxlive.cfg; set ui_mapname mp_mountain; set ui_gametype tdm; '
              'closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),
-    't5sp': ('setclientbeingusedandprimary; set zombiemode 1; set spmode 0; onlinegame 1; '
+    't5sp': ('setclientbeingusedandprimary; set zombiemode 1; set spmode 0; '
              'xblive_privatematch 1; xblive_rankedmatch 0; xstartpartyhost; '
              'closemenu main_text; closemenu menu_xboxlive; openmenu menu_xboxlive_privatelobby'),
 }

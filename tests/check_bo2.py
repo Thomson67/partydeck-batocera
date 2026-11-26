@@ -277,6 +277,10 @@ with TemporaryDirectory() as folder:
     assert not re.search(bo2.GAME_WINDOW, 'Plutonium T6 Console (r5369)', re.I)
     assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Singleplayer (r5369)', re.I)
     assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Multiplayer (r5369)', re.I)
+    assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Campaign (r5369 LAN)', re.I)
+    assert re.search(bo2.GAME_WINDOW, 'Plutonium T5 Co-Op (r5369) (LAN)', re.I)
+    assert not re.search(bo2.GAME_WINDOW, 'Plutonium T5 Console (r5369)', re.I)
+    assert 'onlinegame' not in bo2.T5_LOBBY_COMMANDS['t5sp']
     for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'common_mp')):
         log.write_bytes(f"Loading fastfile '{asset}'\n".encode())
         t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)
@@ -323,7 +327,16 @@ with TemporaryDirectory() as folder:
         assert not bo2.join_window(display, ':0')
         assert run.call_count == 1
         run.reset_mock()
-        run.side_effect = [Mock(returncode=0, stdout='2718\n'), *(Mock(returncode=0) for _ in range(3))]
+
+        def guest_xdotool(command, **kwargs):
+            if command[1] != 'search':
+                return Mock(returncode=0)
+            windows = {'2718': 'Plutonium T5 Co-Op (r5369) (LAN)',
+                       '2518': 'Plutonium T5 Console (r5369)'}
+            matches = [wid for wid, title in windows.items() if re.search(command[-1], title, re.I)]
+            return Mock(returncode=0 if matches else 1, stdout='\n'.join(matches))
+
+        run.side_effect = guest_xdotool
         assert bo2.join_window(display, ':0')
         search, focus, typing, submit = run.call_args_list
         assert search.args[0] == ['xdotool', 'search', '--onlyvisible', '--name', bo2.GAME_WINDOW]
