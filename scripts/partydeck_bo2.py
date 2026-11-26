@@ -181,14 +181,27 @@ def find_game(directory, root, mode, allowed):
     exe = search(directory)
     if exe is not None:
         return exe
+    folders = [directory]
     game = child(child(root, 'drive_c'), 'game').resolve()
     if any(game.is_relative_to(path) for path in allowed):
         exe = search(game)
         if exe is not None:
             return exe
+        folders.append(game)
     exe = search(root)
     if exe is not None:
         return exe
+    if mode == 't5mp':
+        # Plutonium launches its own t5mp.exe. The campaign executable
+        # can locate the shared game directory when the MP assets are present.
+        for folder in dict.fromkeys([*folders, root]):
+            campaign = private_child(folder, T5_EXECUTABLES['t5sp'])
+            if not campaign.is_file():
+                continue
+            common = private_child(private_child(folder, 'zone'), 'Common')
+            if all(private_child(common, name).is_file() for name in ('common_mp.ff', 'ui_mp.ff')):
+                return campaign
+        raise ValueError(tr('Black Ops : BlackOpsMP.exe introuvable et données Multijoueur incomplètes dans zone/Common (common_mp.ff, ui_mp.ff).'))
     if mode == 'original':
         return None
     raise ValueError(tr('Black Ops II : {p0} introuvable. Vérifiez DIR dans autorun.cmd ou essayez le lancement d’origine.',

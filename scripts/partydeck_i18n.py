@@ -176,6 +176,8 @@ EN = {
     'Black Ops II : fichier de langue invalide dans {p0}.': 'Black Ops II: invalid language file in {p0}.',
     'Black Ops II : chemin redirigé dans la vue du joueur ({p0}).': 'Black Ops II: redirected path in the player view ({p0}).',
     'Black Ops II : {p0} introuvable. Vérifiez DIR dans autorun.cmd ou essayez le lancement d’origine.': 'Black Ops II: {p0} not found. Check DIR in autorun.cmd or try Original launch.',
+    'Black Ops : BlackOpsMP.exe introuvable et données Multijoueur incomplètes dans zone/Common (common_mp.ff, ui_mp.ff).':
+        'Black Ops: BlackOpsMP.exe not found and Multiplayer assets are incomplete in zone/Common (common_mp.ff, ui_mp.ff).',
     'Black Ops II : joueur privé invalide.': 'Black Ops II: invalid private player.',
     'Black Ops II : espace privé du joueur requis.': 'Black Ops II: private player namespace required.',
     'Black Ops II {p0} : profil privé {p1} appliqué.': 'Black Ops II {p0}: private {p1} profile applied.',

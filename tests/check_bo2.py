@@ -122,6 +122,26 @@ with TemporaryDirectory() as folder:
         assert ('+set con_minicon 0' in private_command) == (mode == 't5sp')
         assert (game / 'localization.txt').read_bytes() == b'french\r\n'
 
+    # A shared BO1 installation may have all MP data beside the campaign
+    # executable even when the original BlackOpsMP.exe is absent.
+    (game / bo2.T5_EXECUTABLES['t5mp']).unlink()
+    (game / bo2.T5_EXECUTABLES['t5sp']).touch()
+    common = game / 'zone' / 'common'
+    common.mkdir()
+    (common / 'common_mp.ff').touch()
+    with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)):
+        try:
+            bo2.prepare(player, 't5mp', game, prefix, installed_client)
+        except ValueError as error:
+            assert 'ui_mp.ff' in str(error)
+        else:
+            raise AssertionError('Expected incomplete T5 multiplayer data to be reported')
+        (common / 'ui_mp.ff').touch()
+        cwd, command = bo2.prepare(player, 't5mp', game, prefix, installed_client)
+    assert cwd == game / '.partydeck-plutonium'
+    assert shlex.split(command)[1:3] == ['t5mp', r'C:\game']
+    assert not (game / bo2.T5_EXECUTABLES['t5mp']).exists()
+
     assert bo2.render_size(1920, 540) == (1280, 720)
     assert bo2.render_size(960, 1080) == (1280, 720)
     assert bo2.render_size(960, 540) == (1280, 720)
