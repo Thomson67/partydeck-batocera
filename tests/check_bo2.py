@@ -133,11 +133,13 @@ with TemporaryDirectory() as folder:
         assert ('sp_minplayers' in args) == (mode == 't5sp')
         assert 'developer' not in args
         assert 'con_minicon' not in args
+        assert 'con_errormessagetime' not in args
         with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), 'PARTYDECK_SESSION_PLAYERS': '2',
                                     'PARTYDECK_PRIVATE_LAN_IP': '192.168.247.11', bo2.PUBLISH_DISPLAY: '1'}):
             _, private_command = bo2.prepare(player, mode, game, prefix, installed_client)
         assert ('+set developer 1' in private_command) == (mode == 't5sp')
         assert ('+set con_minicon 0' in private_command) == (mode == 't5sp')
+        assert ('+set con_errormessagetime 0' in private_command) == (mode == 't5sp')
         assert (game / 'localization.txt').read_bytes() == b'french\r\n'
 
         configs = cwd / 'storage/t5/players'
