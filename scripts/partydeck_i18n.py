@@ -148,8 +148,6 @@ EN = {
     'Bots alliés · Modes en équipe': 'Allies bots · Team modes',
     'Bots de l’Axe · Modes en équipe': 'Axis bots · Team modes',
     'Nombre de bots Black Ops invalide.': 'Invalid Black Ops bot count.',
-    'Black Ops J1 : ajout automatique des bots interrompu.': 'Black Ops P1: automatic bot spawning stopped.',
-    'Black Ops J1 : réglages de bots transmis.': 'Black Ops P1: bot settings sent.',
     'Option de connexion automatique Black Ops II invalide.': 'Invalid Black Ops II automatic join setting.',
     'Option d’ouverture du salon Black Ops II invalide.': 'Invalid Black Ops II startup lobby setting.',
     'Démarrez la partie personnalisée sur J1. Les autres joueurs la rejoignent automatiquement.': 'Start the custom game on P1. The other players join automatically.',

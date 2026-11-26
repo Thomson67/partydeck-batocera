@@ -914,7 +914,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     bo1_vertical_fov = 0
     from partydeck_bo2 import (BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                                PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
-                               T5_VERTICAL_FOV, desktop_size, render_size, t5_bot_counts)
+                               T5_VERTICAL_FOV, desktop_size, render_size)
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if trace_windows:
@@ -931,9 +931,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 bo2_publish_display = (
                     settings['mode'] in PLUTONIUM_MODES
                     and ((network is not None and settings['automatic_join'])
-                         or (player.name == 'j1' and (
-                             (settings['open_custom_lobby'] and (network is not None or adapter == BO1))
-                             or t5_bot_counts(settings))))
+                         or (player.name == 'j1' and settings['open_custom_lobby']
+                             and (network is not None or adapter == BO1)))
                 )
                 render = 'standard'
                 # T6 crops its menus when the render target is portrait.
@@ -1320,7 +1319,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     session_token=uuid.uuid4().hex
     started = time.time_ns()
     from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES,
-                               PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready, t5_bot_counts)
+                               PLUTONIUM_MODES, AutoJoin, automatic_path, startup_ready)
     bo2_settings = None
     bo2_mode = None
     adapter = profile.get('adapter') if profile else None
@@ -1413,7 +1412,6 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     bo2_join = None
     bo2_automatic = False
     bo2_custom_lobby = False
-    bot_counts = ()
     bl2_host=None
     wayland = bool(os.environ.get('WAYLAND_DISPLAY'))
     window_classes = [f"partydeck-coop-{os.getpid()}-j{i}" for i in range(1, len(players) + 1)]
@@ -1454,7 +1452,6 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if bo2_mode:
             bo2_automatic = network is not None and bo2_settings['automatic_join']
             bo2_custom_lobby = (network is not None or adapter == BO1) and bo2_settings['open_custom_lobby']
-            bot_counts = t5_bot_counts(bo2_settings)
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1511,11 +1508,11 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
             if celestenet and celeste_options['automatic']:
                 celeste_processes.append(start_join(network,index-1))
             states.append(state)
-        if bo2_automatic or bo2_custom_lobby or bot_counts:
+        if bo2_automatic or bo2_custom_lobby:
             watched_players = states if bo2_automatic else states[:1]
             bo2_join = AutoJoin([state.parent for state in watched_players], session_token,
                                 bo2_settings['mode'], os.environ.get('DISPLAY', ''), started,
-                                open_custom_lobby=bo2_custom_lobby, bot_counts=bot_counts)
+                                open_custom_lobby=bo2_custom_lobby)
             bo2_join.start()
         if virtual_input:
             virtual_watcher=Watcher(base,original,processes,players,window_classes)

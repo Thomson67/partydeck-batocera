@@ -41,9 +41,6 @@ T5_VERTICAL_FOV = 'PARTYDECK_BO1_VERTICAL_FOV'
 T5_FOV_CHOICES = (0, *range(65, 111, 5))
 T5_CONFIG_NAMES = {'config.cfg', 'config_mp.cfg', 'conlzm.cfg'}
 T5_FOV_LINE = re.compile(rb'^[ \t]*seta?[ \t]+"?cg_fov(?:_default)?"?[ \t]+', re.I)
-T5_PRIVATE_MATCH = re.compile(rb'"xblive_privatematch" is: "([01])(?:\^7)?"')
-T5_GAMETYPE = re.compile(rb'"g_gametype" is: "([a-z0-9_]+)(?:\^7)?"', re.I)
-T5_TEAM_GAMETYPES = {b'ctf', b'dem', b'dom', b'hq', b'koth', b'sab', b'sd', b'tdm'}
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
 SESSION_MODE = 'PARTYDECK_BO2_MODE'
@@ -276,7 +273,7 @@ def configure_client(directory, player):
     return 'Goldberg'
 
 
-def prepare(player, mode, directory, root, plutonium_source, language='keep'):
+def prepare(player, mode, directory, root, plutonium_source, language='keep', *, bot_counts=()):
     if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != str(player):
         raise ValueError(tr('Black Ops II : espace privé du joueur requis.'))
     from partydeck_bottles import private_windows_paths
@@ -289,7 +286,8 @@ def prepare(player, mode, directory, root, plutonium_source, language='keep'):
     game_mode = plutonium_mode[2:] if plutonium_mode and plutonium_mode.startswith('t6') else mode
     exe = find_game(directory, root, game_mode, allowed)
     if plutonium_mode:
-        return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode, language)
+        return prepare_plutonium(player, exe.parent, root, plutonium_source, plutonium_mode, language,
+                                 bot_counts=bot_counts)
 
     client = configure_client(exe.parent if exe else directory, player)
     status = (tr('Black Ops II {p0} : profil privé {p1} appliqué.', p0=player.name.upper(), p1=client)
@@ -387,7 +385,77 @@ def preserve_t5_fov(runtime, override):
         snapshot.unlink()
 
 
-def prepare_plutonium(player, game, root, source, mode, language='keep'):
+def configure_t5_bots(runtime, counts):
+    folder = runtime
+    for name in ('storage', 't5', 'scripts', 'mp'):
+        folder = private_child(folder, name)
+    script = private_child(folder, 'partydeck_bots.gsc')
+    if not any(counts):
+        script.unlink(missing_ok=True)
+        return
+
+    total, allies, axis = counts
+    if total not in T5_BOT_COUNTS or allies not in T5_TEAM_BOT_COUNTS or axis not in T5_TEAM_BOT_COUNTS:
+        raise ValueError(tr('Nombre de bots Black Ops invalide.'))
+    # The T5 runtime compiles this script for each map on the LAN host.
+    # Reuse its stock routine to select a team and class for each bot.
+    write_bytes(script, (r"""
+init()
+{
+    level thread start_bots();
+}
+
+start_bots()
+{
+    level endon("game_ended");
+    wait 1;
+    if (!isSubStr(getdvar("mapname"), "mp_"))
+        return;
+
+    while (!isdefined(level.teambased) || !isdefined(level.players) || level.players.size == 0)
+        wait 0.25;
+
+    if (level.teambased)
+    {
+        fill_bots("allies", %d);
+        fill_bots("axis", %d);
+    }
+    else
+        fill_bots("free", %d);
+}
+
+fill_bots(team, target)
+{
+    players = level.players;
+    for (i = 0; i < players.size; i++)
+    {
+        player = players[i];
+        if (!player IsTestClient())
+            continue;
+        if (!level.teambased || (isdefined(player.team) && player.team == team))
+            target--;
+    }
+
+    for (i = 0; i < target; i++)
+    {
+        bot = AddTestClient();
+        if (!isdefined(bot))
+        {
+            println("PartyDeck bots: could not add a client to " + team);
+            return;
+        }
+        bot.pers["isBot"] = true;
+        bot.equipment_enabled = false;
+        bot thread maps\mp\gametypes\_bot::bot_spawn_think(team);
+        wait 0.25;
+    }
+    if (target > 0)
+        println("PartyDeck bots: added " + target + " to " + team);
+}
+""" % (allies, axis, total)).encode('ascii'))
+
+
+def prepare_plutonium(player, game, root, source, mode, language='keep', *, bot_counts=()):
     binaries = private_child(source, 'bin')
     games = private_child(source, 'games')
     bootstrapper = private_child(binaries, BOOTSTRAPPER)
@@ -412,6 +480,8 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
     storage = private_child(source, 'storage')
     if storage.is_dir():
         copy_client_files(storage, private_child(runtime, storage.name), sync=False)
+    if t5:
+        configure_t5_bots(runtime, bot_counts if mode == 't5mp' and player.name == 'j1' else ())
     if language != 'keep':
         apply_language(game, mode, language)
 
@@ -594,7 +664,7 @@ def click_menu_button(display_file, outer_display, button):
 class AutoJoin:
     """Track host matches for the lifetime of the split-screen session."""
 
-    def __init__(self, players, token, mode, outer_display, started, *, open_custom_lobby=False, bot_counts=()):
+    def __init__(self, players, token, mode, outer_display, started, *, open_custom_lobby=False):
         self.host, *self.guests = players
         self.token = token
         self.mode = mode
@@ -603,10 +673,6 @@ class AutoJoin:
         self.offsets = {}
         self.host_log = None
         self.host_ready = None
-        self.bot_counts = bot_counts if mode == 't5mp' else ()
-        self.bot_state = None
-        self.bot_deadline = None
-        self.bot_command = None
         self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in PLUTONIUM_MODES else None
         self.lobby_click_at = None
         self.lobby_deadline = None
@@ -695,44 +761,10 @@ class AutoJoin:
 
         if ready and self.host_ready is None:
             self.host_ready = now + 2
-            self.bot_state = None
             self.attempts = dict.fromkeys(self.attempts, 0)
             self.retry_at = dict.fromkeys(self.retry_at, 0)
             print(tr('Black Ops II : partie de J1 détectée.'), flush=True)
         return True
-
-    def observe_bots(self, line, now):
-        if self.bot_state is None and b'CL_InitCGame:' in line:
-            self.bot_state = 'check'
-            self.bot_deadline = now + 30
-        elif self.bot_state == 'waiting' and (private := T5_PRIVATE_MATCH.search(line)):
-            self.bot_state = 'gametype' if private[1] == b'1' else 'done'
-        elif self.bot_state == 'gametype' and (gametype := T5_GAMETYPE.search(line)):
-            total, allies, axis = self.bot_counts
-            self.bot_command = 'set scr_bots_managed_spawn 0'
-            if gametype[1].lower() in T5_TEAM_GAMETYPES:
-                if allies or axis:
-                    self.bot_command = (f'set scr_bots_managed_all 0; set scr_bots_managed_allies {allies}; '
-                                        f'set scr_bots_managed_axis {axis}; set scr_bots_managed_spawn 1')
-            elif total:
-                self.bot_command += f'; spawnbot {total}'
-            self.bot_state = 'spawn'
-
-    def poll_bots(self, now):
-        if self.bot_state in (None, 'done'):
-            return
-        if now >= self.bot_deadline:
-            self.bot_state = 'done'
-            print(tr('Black Ops J1 : ajout automatique des bots interrompu.'), flush=True)
-            return
-        display = automatic_path(self.host, self.token, 'display')
-        if self.bot_state == 'check':
-            if send_console_command(display, self.outer_display, 'xblive_privatematch; g_gametype'):
-                self.bot_state = 'waiting'
-        elif self.bot_state == 'spawn' and send_console_command(
-                display, self.outer_display, self.bot_command):
-            self.bot_state = 'done'
-            print(tr('Black Ops J1 : réglages de bots transmis.'), flush=True)
 
     def observe_lobby(self, line, now):
         if self.match_starting(line):
@@ -784,16 +816,12 @@ class AutoJoin:
         for path, line in self.host_output():
             if self.lobby_button is not None:
                 self.observe_lobby(line, now)
-            if (self.guests or self.bot_counts) and self.observe_host(line, now):
+            if self.guests and self.observe_host(line, now):
                 self.host_log = path
-            if self.bot_counts and self.host_ready is not None:
-                self.observe_bots(line, now)
         if self.lobby_button is not None:
             self.poll_lobby(now)
         if self.host_ready is None or now < self.host_ready:
             return
-        if self.bot_counts and not self.stop.is_set():
-            self.poll_bots(now)
 
         for player in self.guests:
             if self.stop.is_set():
@@ -820,7 +848,7 @@ class AutoJoin:
                          p0=player.name.upper()), flush=True)
 
     def run(self):
-        while not self.stop.is_set() and (self.guests or self.lobby_button is not None or self.bot_counts):
+        while not self.stop.is_set() and (self.guests or self.lobby_button is not None):
             self.poll(time.monotonic())
             self.stop.wait(1)
 
@@ -841,8 +869,11 @@ def install_hook(base, rom, player):
     binary = Path(binary).resolve()
     mode = validate({'mode': os.environ.get(SESSION_MODE, settings['mode'])}, adapter)['mode']
     source = client_path(base, PLUTONIUM_MODES.get(mode)) or base / 'plutonium'
-    hook = [sys.executable, str(base / 'partydeck_bo2.py'), '--language', settings['language'],
-            str(player), str(source)]
+    hook = [sys.executable, str(base / 'partydeck_bo2.py'), '--language', settings['language']]
+    counts = t5_bot_counts(settings | {'mode': mode})
+    if player.name == 'j1' and counts:
+        hook.extend(('--bots', *map(str, counts)))
+    hook.extend((str(player), str(source)))
     replacement = player / 'batocera-wine-bo2'
     log = None
     token = os.environ.get('PARTYDECK_SESSION_TOKEN', '')
@@ -858,13 +889,14 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--language', choices=LANGUAGES, default='keep')
+    parser.add_argument('--bots', type=int, nargs=3, default=())
     for field in ('player', 'source', 'mode', 'directory', 'root'):
         parser.add_argument(field)
     args = parser.parse_args()
     try:
         mode = validate({'mode': args.mode}, BO1 if args.mode in T5_EXECUTABLES else ADAPTER)['mode']
         cwd, command = prepare(Path(args.player), mode, Path(args.directory), Path(args.root), Path(args.source),
-                               args.language)
+                               args.language, bot_counts=args.bots)
         if cwd is not None:
             if '\n' in str(cwd):
                 raise ValueError(tr('Black Ops II : chemin redirigé dans la vue du joueur ({p0}).', p0=cwd))

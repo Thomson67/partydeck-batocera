@@ -86,6 +86,21 @@ with TemporaryDirectory() as folder:
         assert "plutonium-zm" in (player / 'batocera-wine-bo2').read_text()
         assert read_profile(base, rom)['bo2']['mode'] == 'plutonium-mp'
 
+    bo1_rom = base / 'Black Ops.wsquashfs'
+    bo1_profile = defaults(bo1_rom)
+    bo1_profile['bo1'].update(mode='t5sp', private_bots=5, allies_bots=2, axis_bots=4)
+    save_profile(base, bo1_rom, bo1_profile)
+    with patch.object(bo2.shutil, 'which', return_value=str(native)), \
+         patch.object(bo2, 'client_path', return_value=None), patch.object(bo2.subprocess, 'run'):
+        for selected_mode, player_number, expected in (('t5mp', 'j1', True), ('t5mp', 'j2', False),
+                                                       ('t5sp', 'j1', False)):
+            slot = player.parent / player_number
+            slot.mkdir(exist_ok=True)
+            with patch.dict(os.environ, {bo2.SESSION_MODE: selected_mode}):
+                bo2.install_hook(base, bo1_rom, slot)
+            hook = (slot / 'batocera-wine-bo2').read_text()
+            assert ('--bots 5 2 4' in hook) == expected
+
     installed_client = base / 'Plutonium from Windows'
     (installed_client / 'bin').mkdir(parents=True)
     (installed_client / 'games').mkdir()
@@ -146,6 +161,29 @@ with TemporaryDirectory() as folder:
         assert generated.read_bytes() == other
         assert not (cwd / 'partydeck-t5-fov.json').exists()
 
+    for mode, slot, enabled in (('t5mp', 'j1', True), ('t5mp', 'j2', False), ('t5sp', 'j1', False)):
+        player = base / 'bots' / slot
+        prefix = player / 'prefix'
+        game = prefix / 'drive_c' / 'game'
+        game.mkdir(parents=True, exist_ok=True)
+        (game / bo2.T5_EXECUTABLES[mode]).touch()
+        (game / 'binkw32.dll').touch()
+        with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)):
+            cwd, _ = bo2.prepare(player, mode, game, prefix, installed_client, bot_counts=(5, 2, 4))
+            script = cwd / 'storage/t5/scripts/mp/partydeck_bots.gsc'
+            assert script.is_file() == enabled
+            if enabled:
+                code = script.read_text()
+                for line in ('if (level.teambased)', 'fill_bots("allies", 2);',
+                             'fill_bots("axis", 4);', 'fill_bots("free", 5);',
+                             'bot = AddTestClient();', '::bot_spawn_think(team);'):
+                    assert line in code
+                bo2.prepare(player, mode, game, prefix, installed_client)
+                assert not script.exists()
+
+    player = base / 't5mp' / 'j1'
+    prefix = player / 'prefix'
+    game = prefix / 'drive_c' / 'game'
     # A shared BO1 installation may have all MP data beside the campaign
     # executable even when the original BlackOpsMP.exe is absent.
     (game / bo2.T5_EXECUTABLES['t5mp']).unlink()
@@ -334,38 +372,6 @@ with TemporaryDirectory() as folder:
     assert bo2.t5_bot_counts(bo2.validate(
         {'mode': 't5mp', 'private_bots': 5, 'allies_bots': 2, 'axis_bots': 4}, bo2.BO1)) == (5, 2, 4)
     assert bo2.t5_bot_counts({'mode': 't5sp', 'private_bots': 5}) == ()
-    with patch.object(bo2, 'send_console_command', return_value=True) as send:
-        t5 = bo2.AutoJoin([host], token, 't5mp', ':0', 0, bot_counts=(5, 2, 4))
-        host_display = bo2.automatic_path(host, token, 'display')
-        loaded = b'CL_InitCGame:  5.09 seconds\n'
-        game_mode = b'"g_gametype" is: "tdm^7" default: "dm^7"\n'
-        query = call(host_display, ':0', 'xblive_privatematch; g_gametype')
-        log.write_bytes(initialization)
-        t5.poll(1)
-        t5.poll(4)
-        send.assert_not_called()
-        with log.open('ab') as stream:
-            stream.write(loaded)
-        t5.poll(5)
-        send.assert_called_once_with(*query.args)
-        with log.open('ab') as stream:
-            stream.write(b'"xblive_privatematch" is: "0^7" default: "0^7"\n' + game_mode)
-        t5.poll(6)
-        assert send.call_args_list == [query]
-        for now, mode, expected in (
-                (7, game_mode, 'set scr_bots_managed_all 0; set scr_bots_managed_allies 2; '
-                               'set scr_bots_managed_axis 4; set scr_bots_managed_spawn 1'),
-                (12, game_mode.replace(b'tdm', b'dm'), 'set scr_bots_managed_spawn 0; spawnbot 5')):
-            send.reset_mock()
-            with log.open('ab') as stream:
-                stream.write(b'SV_Shutdown: EXE_SERVERQUIT\n' + initialization + loaded)
-            t5.poll(now)
-            t5.poll(now + 2)
-            with log.open('ab') as stream:
-                stream.write(b'"xblive_privatematch" is: "1^7" default: "0^7"\n' + mode)
-            t5.poll(now + 3)
-            t5.poll(now + 4)
-            assert send.call_args_list == [query, call(host_display, ':0', expected)]
     for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'plutonium_ui_mp')):
         log.write_bytes(b"Loading fastfile 'common_mp'\n")
         t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)
