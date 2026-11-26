@@ -35,6 +35,11 @@ SELECTABLE_MODES = {BO1: ('t5mp', 't5sp'), ADAPTER: ('plutonium-mp', 'plutonium-
 T5_EXECUTABLES = {'t5sp': 'BlackOps.exe', 't5mp': 'BlackOpsMP.exe'}
 LANGUAGES = {'keep': 'Conserver', 'french': 'Français', 'english': 'Anglais'}
 HOST_PORT = 1111
+T5_BOT_COUNTS = tuple(range(13))
+T5_TEAM_BOT_COUNTS = tuple(range(7))
+T5_PRIVATE_MATCH = re.compile(rb'"xblive_privatematch" is: "([01])(?:\^7)?"')
+T5_GAMETYPE = re.compile(rb'"g_gametype" is: "([a-z0-9_]+)(?:\^7)?"', re.I)
+T5_TEAM_GAMETYPES = {b'ctf', b'dem', b'dom', b'hq', b'koth', b'sab', b'sd', b'tdm'}
 JOIN_HOST = f'connect 192.168.247.11:{HOST_PORT}'
 PUBLISH_DISPLAY = 'PARTYDECK_BO2_AUTO_JOIN'
 SESSION_MODE = 'PARTYDECK_BO2_MODE'
@@ -129,7 +134,8 @@ def defaults(rom=None, adapter=ADAPTER):
     if adapter == BO1:
         mode = 't5sp' if mode == 'plutonium-zm' else 't5mp'
         return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True,
-                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False}
+                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False,
+                'private_bots': 0, 'allies_bots': 0, 'axis_bots': 0}
     return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False,
             'language': 'keep'}
 
@@ -159,7 +165,20 @@ def validate(data, adapter=ADAPTER):
         if type(vertical_native) is not bool:
             raise ValueError(tr('Format vertical Black Ops invalide.'))
         settings['vertical_native'] = vertical_native
+        for key, choices in (('private_bots', T5_BOT_COUNTS), ('allies_bots', T5_TEAM_BOT_COUNTS),
+                             ('axis_bots', T5_TEAM_BOT_COUNTS)):
+            count = data.get(key, 0)
+            if type(count) is not int or count not in choices:
+                raise ValueError(tr('Nombre de bots Black Ops invalide.'))
+            settings[key] = count
     return settings
+
+
+def t5_bot_counts(settings):
+    if settings['mode'] != 't5mp':
+        return ()
+    counts = tuple(settings.get(key, 0) for key in ('private_bots', 'allies_bots', 'axis_bots'))
+    return counts if any(counts) else ()
 
 
 def private_child(directory, name):
@@ -529,7 +548,7 @@ def click_menu_button(display_file, outer_display, button):
 class AutoJoin:
     """Track host matches for the lifetime of the split-screen session."""
 
-    def __init__(self, players, token, mode, outer_display, started, *, open_custom_lobby=False):
+    def __init__(self, players, token, mode, outer_display, started, *, open_custom_lobby=False, bot_counts=()):
         self.host, *self.guests = players
         self.token = token
         self.mode = mode
@@ -538,6 +557,10 @@ class AutoJoin:
         self.offsets = {}
         self.host_log = None
         self.host_ready = None
+        self.bot_counts = bot_counts if mode == 't5mp' else ()
+        self.bot_state = None
+        self.bot_deadline = None
+        self.bot_command = None
         self.lobby_button = ONLINE_BUTTON if open_custom_lobby and mode in PLUTONIUM_MODES else None
         self.lobby_click_at = None
         self.lobby_deadline = None
@@ -626,10 +649,44 @@ class AutoJoin:
 
         if ready and self.host_ready is None:
             self.host_ready = now + 2
+            self.bot_state = None
             self.attempts = dict.fromkeys(self.attempts, 0)
             self.retry_at = dict.fromkeys(self.retry_at, 0)
             print(tr('Black Ops II : partie de J1 détectée.'), flush=True)
         return True
+
+    def observe_bots(self, line, now):
+        if self.bot_state is None and b'CL_InitCGame:' in line:
+            self.bot_state = 'check'
+            self.bot_deadline = now + 30
+        elif self.bot_state == 'waiting' and (private := T5_PRIVATE_MATCH.search(line)):
+            self.bot_state = 'gametype' if private[1] == b'1' else 'done'
+        elif self.bot_state == 'gametype' and (gametype := T5_GAMETYPE.search(line)):
+            total, allies, axis = self.bot_counts
+            self.bot_command = 'set scr_bots_managed_spawn 0'
+            if gametype[1].lower() in T5_TEAM_GAMETYPES:
+                if allies or axis:
+                    self.bot_command = (f'set scr_bots_managed_all 0; set scr_bots_managed_allies {allies}; '
+                                        f'set scr_bots_managed_axis {axis}; set scr_bots_managed_spawn 1')
+            elif total:
+                self.bot_command += f'; spawnbot {total}'
+            self.bot_state = 'spawn'
+
+    def poll_bots(self, now):
+        if self.bot_state in (None, 'done'):
+            return
+        if now >= self.bot_deadline:
+            self.bot_state = 'done'
+            print(tr('Black Ops J1 : ajout automatique des bots interrompu.'), flush=True)
+            return
+        display = automatic_path(self.host, self.token, 'display')
+        if self.bot_state == 'check':
+            if send_console_command(display, self.outer_display, 'xblive_privatematch; g_gametype'):
+                self.bot_state = 'waiting'
+        elif self.bot_state == 'spawn' and send_console_command(
+                display, self.outer_display, self.bot_command):
+            self.bot_state = 'done'
+            print(tr('Black Ops J1 : réglages de bots transmis.'), flush=True)
 
     def observe_lobby(self, line, now):
         if self.match_starting(line):
@@ -681,12 +738,16 @@ class AutoJoin:
         for path, line in self.host_output():
             if self.lobby_button is not None:
                 self.observe_lobby(line, now)
-            if self.guests and self.observe_host(line, now):
+            if (self.guests or self.bot_counts) and self.observe_host(line, now):
                 self.host_log = path
+            if self.bot_counts and self.host_ready is not None:
+                self.observe_bots(line, now)
         if self.lobby_button is not None:
             self.poll_lobby(now)
         if self.host_ready is None or now < self.host_ready:
             return
+        if self.bot_counts and not self.stop.is_set():
+            self.poll_bots(now)
 
         for player in self.guests:
             if self.stop.is_set():
@@ -713,7 +774,7 @@ class AutoJoin:
                          p0=player.name.upper()), flush=True)
 
     def run(self):
-        while not self.stop.is_set() and (self.guests or self.lobby_button is not None):
+        while not self.stop.is_set() and (self.guests or self.lobby_button is not None or self.bot_counts):
             self.poll(time.monotonic())
             self.stop.wait(1)
 

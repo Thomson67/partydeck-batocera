@@ -278,7 +278,7 @@ for split, second_position, inputs, shared, party, virtual, title in [
                 observer.assert_called_once()
                 assert [player.name for player in observer.call_args.args[0]] == ['j1']
                 assert observer.call_args.args[2] == 'plutonium-zm'
-                assert observer.call_args.kwargs == {'open_custom_lobby': True}
+                assert observer.call_args.kwargs == {'open_custom_lobby': True, 'bot_counts': ()}
                 observer.return_value.start.assert_called_once()
             else:
                 observer.assert_not_called()
@@ -418,3 +418,9 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
         env = popen.call_args.kwargs['env']
         assert env['PARTYDECK_BO2_RESOLUTION'] == resolution and env[SESSION_MODE] == 't5sp'
         assert env[PUBLISH_DISPLAY] == '1'
+    settings.update(mode='t5mp', open_custom_lobby=False, automatic_join=False, allies_bots=2)
+    for player in ('j1', 'j2'):
+        coop.start_player(base, base/player, game, game, [], (0, 0, 1920, 540), f'bo1-{player}',
+                          saves=base/'saves', player_count=2, split='horizontal')
+        env = popen.call_args.kwargs['env']
+        assert (env.get(PUBLISH_DISPLAY) == '1') == (player == 'j1')

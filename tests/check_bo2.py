@@ -306,6 +306,42 @@ with TemporaryDirectory() as folder:
     assert not re.search(bo2.GAME_WINDOW, 'Plutonium T5 Console (r5369)', re.I)
     assert 'onlinegame' not in bo2.T5_LOBBY_COMMANDS['t5sp']
     assert len(bo2.T5_LOBBY_COMMANDS['t5mp']) < 256
+    assert bo2.t5_bot_counts(bo2.validate({'mode': 't5mp'}, bo2.BO1)) == ()
+    assert bo2.t5_bot_counts(bo2.validate(
+        {'mode': 't5mp', 'private_bots': 5, 'allies_bots': 2, 'axis_bots': 4}, bo2.BO1)) == (5, 2, 4)
+    assert bo2.t5_bot_counts({'mode': 't5sp', 'private_bots': 5}) == ()
+    with patch.object(bo2, 'send_console_command', return_value=True) as send:
+        t5 = bo2.AutoJoin([host], token, 't5mp', ':0', 0, bot_counts=(5, 2, 4))
+        host_display = bo2.automatic_path(host, token, 'display')
+        loaded = b'CL_InitCGame:  5.09 seconds\n'
+        game_mode = b'"g_gametype" is: "tdm^7" default: "dm^7"\n'
+        query = call(host_display, ':0', 'xblive_privatematch; g_gametype')
+        log.write_bytes(initialization)
+        t5.poll(1)
+        t5.poll(4)
+        send.assert_not_called()
+        with log.open('ab') as stream:
+            stream.write(loaded)
+        t5.poll(5)
+        send.assert_called_once_with(*query.args)
+        with log.open('ab') as stream:
+            stream.write(b'"xblive_privatematch" is: "0^7" default: "0^7"\n' + game_mode)
+        t5.poll(6)
+        assert send.call_args_list == [query]
+        for now, mode, expected in (
+                (7, game_mode, 'set scr_bots_managed_all 0; set scr_bots_managed_allies 2; '
+                               'set scr_bots_managed_axis 4; set scr_bots_managed_spawn 1'),
+                (12, game_mode.replace(b'tdm', b'dm'), 'set scr_bots_managed_spawn 0; spawnbot 5')):
+            send.reset_mock()
+            with log.open('ab') as stream:
+                stream.write(b'SV_Shutdown: EXE_SERVERQUIT\n' + initialization + loaded)
+            t5.poll(now)
+            t5.poll(now + 2)
+            with log.open('ab') as stream:
+                stream.write(b'"xblive_privatematch" is: "1^7" default: "0^7"\n' + mode)
+            t5.poll(now + 3)
+            t5.poll(now + 4)
+            assert send.call_args_list == [query, call(host_display, ':0', expected)]
     for mode, asset in (('t5sp', 'plutonium_ui'), ('t5mp', 'plutonium_ui_mp')):
         log.write_bytes(b"Loading fastfile 'common_mp'\n")
         t5 = bo2.AutoJoin([host, guest], token, mode, ':0', 0, open_custom_lobby=True)

@@ -65,6 +65,13 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
     assert fields(1, 'black-ops-1')[0] == ('bo1.open_custom_lobby',
         'Ouvrir la partie privée au démarrage' if language == 'fr'
         else 'Open Private Match at startup', [False, True])
+    assert fields(1, 'black-ops-1')[-4] == ('bo1.private_bots',
+        'Bots en chacun-pour-soi' if language == 'fr'
+        else 'Free-for-all bots', list(range(13)))
+    assert fields(1, 'black-ops-1')[-3:-1] == [
+        ('bo1.allies_bots', 'Bots alliés · Modes en équipe' if language == 'fr' else 'Allies bots · Team modes', list(range(7))),
+        ('bo1.axis_bots', 'Bots de l’Axe · Modes en équipe' if language == 'fr' else 'Axis bots · Team modes', list(range(7))),
+    ]
     assert fields(1, 'black-ops-1')[-1] == ('bo1.vertical_native',
         'Résolution native en vertical (test)' if language == 'fr'
         else 'Native vertical resolution (experimental)', [False, True])
