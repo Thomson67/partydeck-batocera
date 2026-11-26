@@ -20,7 +20,7 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                            MODES as BO2_MODES, SELECTABLE_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
-                           T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
+                           T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
                                  TIME_MODES as STORY_TIME_MODES,
@@ -136,6 +136,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 (f'{section}.language', tr('Langue du jeu'), list(BO2_LANGUAGES)),
                 (f'{section}.horizontal_render', tr('Rendu en partage horizontal'), list(HORIZONTAL_RENDER))]
         if adapter == BO1:
+            rows.append(('bo1.vertical_fov', tr('Champ de vision en partage vertical'), list(T5_FOV_CHOICES)))
             rows.append(('bo1.private_bots', tr('Bots en chacun-pour-soi'), list(T5_BOT_COUNTS)))
             rows.extend([('bo1.allies_bots', tr('Bots alliés · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
                          ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS))])
@@ -313,6 +314,8 @@ def label_value(key, value):
         return tr('Activé') if value else tr('Désactivé')
     if key in ('bo1.horizontal_render', 'bo2.horizontal_render'):
         return tr(HORIZONTAL_RENDER[value])
+    if key == 'bo1.vertical_fov':
+        return f'{value}°' if value else tr('Réglage du jeu')
     if key in ('bo1.language', 'bo2.language'):
         return tr(BO2_LANGUAGES[value])
     if key == 'adapter':

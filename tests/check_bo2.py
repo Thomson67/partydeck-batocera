@@ -66,6 +66,7 @@ with TemporaryDirectory() as folder:
         assert recipe_for(rom1).adapter == bo2.BO1
         profile = defaults(rom1)
         assert profile['bo1']['mode'] == 't5mp' and not profile['bo1']['vertical_native']
+        assert profile['bo1']['vertical_fov'] == 0
         assert private_lan_enabled(profile, 2) and not private_lan_enabled(profile, 1)
     assert defaults(base / 'BO1 Zombies.wsquashfs')['bo1']['mode'] == 't5sp'
     assert not bo2.matches_bo1(base / 'Black Ops Cold War.wsquashfs')
@@ -121,6 +122,29 @@ with TemporaryDirectory() as folder:
         assert ('+set developer 1' in private_command) == (mode == 't5sp')
         assert ('+set con_minicon 0' in private_command) == (mode == 't5sp')
         assert (game / 'localization.txt').read_bytes() == b'french\r\n'
+
+        configs = cwd / 'storage/t5/players'
+        configs.mkdir(parents=True)
+        file = configs / ('config_mp.cfg' if mode == 't5mp' else 'conLZM.cfg')
+        old_fov = b'seta cg_fov_default "85"\r\n'
+        new_fov = b'seta cg_fov_default "100"\r\nseta cg_fov "100"\r\n'
+        other = b'seta cg_fovScale "1.25"\r\n'
+        file.write_bytes(old_fov)
+        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), bo2.T5_VERTICAL_FOV: '100'}):
+            _, command = bo2.prepare(player, mode, game, prefix, installed_client)
+        assert '+set cg_fov 100 +set cg_fov_default 100' in command
+        file.write_bytes(new_fov + other)
+        generated = configs / 'config.cfg'
+        generated.write_bytes(new_fov + other)
+        with patch.dict(os.environ, {'PARTYDECK_PRIVATE_PLAYER': str(player), bo2.T5_VERTICAL_FOV: '105'}):
+            _, command = bo2.prepare(player, mode, game, prefix, installed_client)
+        assert '+set cg_fov 105 +set cg_fov_default 105' in command
+        with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player)):
+            _, command = bo2.prepare(player, mode, game, prefix, installed_client)
+        assert 'cg_fov' not in command
+        assert file.read_bytes() == other + old_fov
+        assert generated.read_bytes() == other
+        assert not (cwd / 'partydeck-t5-fov.json').exists()
 
     # A shared BO1 installation may have all MP data beside the campaign
     # executable even when the original BlackOpsMP.exe is absent.

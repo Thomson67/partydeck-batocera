@@ -37,6 +37,10 @@ LANGUAGES = {'keep': 'Conserver', 'french': 'Français', 'english': 'Anglais'}
 HOST_PORT = 1111
 T5_BOT_COUNTS = tuple(range(13))
 T5_TEAM_BOT_COUNTS = tuple(range(7))
+T5_VERTICAL_FOV = 'PARTYDECK_BO1_VERTICAL_FOV'
+T5_FOV_CHOICES = (0, *range(65, 111, 5))
+T5_CONFIG_NAMES = {'config.cfg', 'config_mp.cfg', 'conlzm.cfg'}
+T5_FOV_LINE = re.compile(rb'^[ \t]*seta?[ \t]+"?cg_fov(?:_default)?"?[ \t]+', re.I)
 T5_PRIVATE_MATCH = re.compile(rb'"xblive_privatematch" is: "([01])(?:\^7)?"')
 T5_GAMETYPE = re.compile(rb'"g_gametype" is: "([a-z0-9_]+)(?:\^7)?"', re.I)
 T5_TEAM_GAMETYPES = {b'ctf', b'dem', b'dom', b'hq', b'koth', b'sab', b'sd', b'tdm'}
@@ -134,7 +138,7 @@ def defaults(rom=None, adapter=ADAPTER):
     if adapter == BO1:
         mode = 't5sp' if mode == 'plutonium-zm' else 't5mp'
         return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True,
-                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False,
+                'open_custom_lobby': False, 'language': 'keep', 'vertical_native': False, 'vertical_fov': 0,
                 'private_bots': 0, 'allies_bots': 0, 'axis_bots': 0}
     return {'mode': mode, 'horizontal_render': 'native', 'automatic_join': True, 'open_custom_lobby': False,
             'language': 'keep'}
@@ -165,6 +169,10 @@ def validate(data, adapter=ADAPTER):
         if type(vertical_native) is not bool:
             raise ValueError(tr('Format vertical Black Ops invalide.'))
         settings['vertical_native'] = vertical_native
+        vertical_fov = data.get('vertical_fov', 0)
+        if type(vertical_fov) is not int or vertical_fov not in T5_FOV_CHOICES:
+            raise ValueError(tr('Champ de vision vertical Black Ops invalide.'))
+        settings['vertical_fov'] = vertical_fov
         for key, choices in (('private_bots', T5_BOT_COUNTS), ('allies_bots', T5_TEAM_BOT_COUNTS),
                              ('axis_bots', T5_TEAM_BOT_COUNTS)):
             count = data.get(key, 0)
@@ -346,6 +354,39 @@ def apply_language(game, mode, language):
         write_bytes(path, updated)
 
 
+def preserve_t5_fov(runtime, override):
+    # The game archives cg_fov_default. Save only the affected lines so the
+    # next launch without an override keeps all other changes made in game.
+    snapshot = private_child(runtime, 'partydeck-t5-fov.json')
+    if snapshot.is_file() == override:
+        return
+    configs = runtime
+    for folder in ('storage', 't5', 'players'):
+        configs = private_child(configs, folder)
+    paths = {path.name.casefold(): private_child(configs, path.name)
+             for path in configs.iterdir() if path.name.casefold() in T5_CONFIG_NAMES} if configs.is_dir() else {}
+    saved = {} if override else json.loads(snapshot.read_bytes())
+    for name, path in paths.items():
+        if not path.is_file():
+            continue
+        original = path.read_bytes()
+        lines = original.splitlines(keepends=True)
+        if override:
+            saved[name] = b''.join(line for line in lines if T5_FOV_LINE.match(line)).decode('latin-1')
+        else:
+            other_settings = b''.join(line for line in lines if not T5_FOV_LINE.match(line))
+            fov_settings = saved.get(name, '').encode('latin-1')
+            if fov_settings and other_settings and not other_settings.endswith(b'\n'):
+                other_settings += b'\n'
+            restored = other_settings + fov_settings
+            if restored != original:
+                write_bytes(path, restored)
+    if override:
+        write_bytes(snapshot, json.dumps(saved).encode('ascii'))
+    else:
+        snapshot.unlink()
+
+
 def prepare_plutonium(player, game, root, source, mode, language='keep'):
     binaries = private_child(source, 'bin')
     games = private_child(source, 'games')
@@ -382,6 +423,11 @@ def prepare_plutonium(player, game, root, source, mode, language='keep'):
             '+set', 'net_port', str(port)]
     if t5:
         args += ['+set', 'gpad_enabled', '1']
+        fov = os.environ.get(T5_VERTICAL_FOV, '0')
+        override_fov = fov in {str(value) for value in T5_FOV_CHOICES if value}
+        preserve_t5_fov(runtime, override_fov)
+        if override_fov:
+            args += ['+set', 'cg_fov', fov, '+set', 'cg_fov_default', fov]
         if language != 'keep':
             args += ['+set', 'loc_language', '1' if language == 'french' else '0']
     if mode in ('t6zm', 't5sp') and player.name == 'j1':
