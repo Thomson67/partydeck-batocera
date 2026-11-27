@@ -75,8 +75,11 @@ def download(asset, destination):
 def java_version(executable):
     if not os.access(executable, os.X_OK):
         return None
-    result = subprocess.run([executable, "-version"], stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, timeout=15)
+    try:
+        result = subprocess.run([executable, "-version"], stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
     match = re.search(r'version "(21(?:[.+-][^"]*)?)"', result.stdout)
     return match.group(1) if result.returncode == 0 and match else None
 
@@ -282,8 +285,11 @@ def main():
             if args.action == "verifier":
                 print(f"JavaFX · {runtime / FX}\nSKlauncher · {root / SK}")
                 return 0
-            command = [java, *java_fx_options(runtime), "-Djava.awt.headless=false",
-                       "-jar", root / SK, "--workDir", root / "sklauncher"]
+            # SKlauncher loads JavaFX on the classpath and uses some of its internal APIs.
+            javafx = sorted((runtime / FX / "lib").glob("javafx.*.jar"))
+            classpath = os.pathsep.join(map(str, [root / SK, *javafx]))
+            command = [java, "-Djava.awt.headless=false", "-cp", classpath,
+                       "pl.skmedix.bootstrap.Main", "--workDir", root / "sklauncher"]
             env["JAVA_HOME"] = str(java.parent.parent)
             env["PATH"] = f"{java.parent}:{env.get('PATH', os.defpath)}"
             # Preserve the lock for the launcher's lifetime, including when launched from Ports.
