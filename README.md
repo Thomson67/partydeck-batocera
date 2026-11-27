@@ -92,3 +92,7 @@ profils `.quiver` et l'option `LAUNCHER_QUIVER` permettent d'ouvrir le launcher
 La branche de test Minecraft dispose de son propre installateur et d'une entrée
 dans **Ports**. Voir le [guide Minecraft Java](docs/MINECRAFT_TEST.fr.md) pour
 installer Java, SKlauncher et le profil coop local.
+
+La branche `test/minecraft-couchcraft` propose aussi [Minecraft 26.3 avec
+CLauncher et Couchcraft](docs/MINECRAFT_COUCHCRAFT.fr.md) pour jouer à plusieurs
+dans une seule fenêtre.

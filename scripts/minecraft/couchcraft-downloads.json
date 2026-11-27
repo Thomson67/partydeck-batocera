@@ -1,0 +1,22 @@
+{
+  "java": [
+    "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_linux_hotspot_25.0.5.1_2.tar.gz",
+    "sha256",
+    "2edef9e4f81ec5ee426d023336d4cfbd7b4644e99884e7a73a6a867b70b17acf"
+  ],
+  "launcher": [
+    "https://github.com/chepupel123/CLauncher/releases/download/v1.0.3/CLauncher-Linux.zip",
+    "sha256",
+    "75afed952cac87858fd2dc6ec39a662af27c9bdc6f8fbe4ba458b1d42a21dc99"
+  ],
+  "fabric": [
+    "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.2/fabric-installer-1.1.2.jar",
+    "sha256",
+    "61e035bf7bf70153e127440ce34de47c9036f0a2d0c65d1529454bd35ceefe4f"
+  ],
+  "couchcraft": [
+    "https://github.com/zortos293/Couchcraft/releases/download/v0.2.0/couchcraft-0.2.0.jar",
+    "sha256",
+    "f9f2b221233397351dd877fbcd9b5084f377cb923826ecd1f66389e02adce7ed"
+  ]
+}

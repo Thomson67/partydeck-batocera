@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -gt 1 || ( $# -eq 1 && $1 != minecraft ) ]]; then
-    echo "Usage : bash install.sh [minecraft]" >&2
+if [[ $# -gt 1 || ( $# -eq 1 && $1 != minecraft && $1 != minecraft-couchcraft ) ]]; then
+    echo "Usage : bash install.sh [minecraft|minecraft-couchcraft]" >&2
     exit 2
 fi
 
@@ -16,7 +16,9 @@ curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 \
     --output "$staging/source.tar.gz"
 mkdir "$staging/source"
 tar -xzf "$staging/source.tar.gz" --strip-components=1 -C "$staging/source"
-if [[ ${1:-} == minecraft ]]; then
+if [[ ${1:-} == minecraft-couchcraft ]]; then
+    python3 "$staging/source/scripts/minecraft/partydeck_couchcraft.py" installer
+elif [[ ${1:-} == minecraft ]]; then
     python3 "$staging/source/scripts/minecraft/partydeck_minecraft.py" installer
 else
     bash "$staging/source/scripts/install-partydeck-test.sh" installer
