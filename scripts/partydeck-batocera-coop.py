@@ -1350,6 +1350,9 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     if bo2_mode:
         from partydeck_plutonium import prepare as prepare_plutonium
         prepare_plutonium(base, bo2_mode)
+        if bo2_mode == 't6zm' and len(players) < 4 and bo2_settings.get('zombie_bots', 0):
+            from partydeck_bo2 import prepare_t6_zombie_bots
+            prepare_t6_zombie_bots(base)
     track_runner = party and original.suffix.lower() == '.wsquashfs'
     keep_latest_runner = track_runner and storage_settings(base)['keep_latest_runner']
     from partydeck_celestenet import ADAPTER as CELESTENET

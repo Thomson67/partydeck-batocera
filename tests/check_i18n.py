@@ -58,7 +58,8 @@ for language, multiplayer, original, catalog, horizontal, automatic in (
          else 'Open Custom Games at startup', [False, True]),
         ('bo2.automatic_join', automatic, [True, False]),
         ('bo2.language', 'Langue du jeu' if language == 'fr' else 'Game language', ['keep', 'french', 'english']),
-        ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard'])]
+        ('bo2.horizontal_render', horizontal, ['native', '720p', 'standard']),
+        ('bo2.zombie_bots', 'Bots alliés · Zombies' if language == 'fr' else 'Friendly bots · Zombies', list(range(4)))]
     assert lang.tr(BO2_MODES['original']) == original
     assert label_value('bo2.language', 'french') == ('Français' if language == 'fr' else 'French')
     assert label_value('bo2.language', 'english') == ('Anglais' if language == 'fr' else 'English')

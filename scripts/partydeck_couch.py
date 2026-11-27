@@ -20,7 +20,7 @@ from partydeck_catalog import (CommonGame, COMMON, discover, matches_soh, is_rom
 from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LABELS, matches as matches_bl2
 from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                            MODES as BO2_MODES, SELECTABLE_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
-                           T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, T5_ZOMBIE_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
+                           T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, ZOMBIE_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
 from partydeck_d2rloader import ADAPTER as D2R, LABEL as D2R_LABEL, defaults as d2r_defaults, matches as matches_d2r
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
@@ -142,7 +142,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                     ('bo1.team_total_bots', tr('Total de bots en équipe · Équilibrage auto'), list(T5_BOT_COUNTS)),
                     ('bo1.allies_bots', tr('Bots alliés · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
                     ('bo1.axis_bots', tr('Bots de l’Axe · Modes en équipe'), list(T5_TEAM_BOT_COUNTS)),
-                    ('bo1.zombie_bots', tr('Bots alliés · Zombies'), list(T5_ZOMBIE_BOT_COUNTS))]
+                    ('bo1.zombie_bots', tr('Bots alliés · Zombies'), list(ZOMBIE_BOT_COUNTS))]
         if tab != 1:
             return []
         lobby_label = (tr('Ouvrir le salon privé au démarrage') if adapter == BO1
@@ -151,7 +151,7 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 (f'{section}.automatic_join', tr('Rejoindre automatiquement la partie de J1'), [True, False]),
                 (f'{section}.language', tr('Langue du jeu'), list(BO2_LANGUAGES))]
         if adapter == BO2:
-            rows.append(horizontal)
+            rows.extend((horizontal, ('bo2.zombie_bots', tr('Bots alliés · Zombies'), list(ZOMBIE_BOT_COUNTS))))
         return rows
     if adapter == STORY_COOP:
         if tab == 1:

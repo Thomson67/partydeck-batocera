@@ -1,4 +1,6 @@
 """Exercise the native launcher contract and each supported client layout."""
+import hashlib
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -8,6 +10,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, call, patch
+from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_bo2 as bo2
@@ -44,7 +47,7 @@ with TemporaryDirectory() as folder:
         assert private_lan_enabled(data, 2)
         assert not private_lan_enabled(data, 1)
         assert data['bo2'] == {'mode': 'plutonium-mp', 'horizontal_render': 'native', 'automatic_join': True,
-                               'open_custom_lobby': False, 'language': 'keep'}
+                               'open_custom_lobby': False, 'language': 'keep', 'zombie_bots': 0}
         for old_mode in ('mp', 'zm', 'original'):
             data['bo2'] = {'mode': old_mode}
             path = profile_path(base, rom)
@@ -53,10 +56,11 @@ with TemporaryDirectory() as folder:
             expected_mode = old_mode if old_mode == 'original' else f'plutonium-{old_mode}'
             migrated = read_profile(base, rom)
             assert migrated['bo2'] == {'mode': expected_mode, 'horizontal_render': 'native', 'automatic_join': True,
-                                       'open_custom_lobby': False, 'language': 'keep'}
+                                       'open_custom_lobby': False, 'language': 'keep', 'zombie_bots': 0}
             save_profile(base, rom, migrated)
             assert json.loads(path.read_text())['bo2']['mode'] == expected_mode
-        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False, language='english')
+        migrated['bo2'].update(mode='plutonium-mp', open_custom_lobby=True, automatic_join=False,
+                               language='english', zombie_bots=3)
         save_profile(base, rom, migrated)
         assert read_profile(base, rom)['bo2'] == migrated['bo2']
     assert defaults(base / 'BO2 Zombies.wsquashfs')['bo2']['mode'] == 'plutonium-zm'
@@ -112,6 +116,47 @@ with TemporaryDirectory() as folder:
     (installed_client / 'games/t6zm.exe').write_text('zombies')
     (installed_client / 'storage/t6/players.cfg').write_text('seed')
     (installed_client / 'config.json').write_text('launcher config')
+
+    iwd, release = BytesIO(), BytesIO()
+    with ZipFile(iwd, 'w') as archive:
+        for name in bo2.T6_ZOMBIE_BOT_SCRIPTS:
+            archive.writestr('scripts/zm/' + name, name.encode())
+    with ZipFile(release, 'w') as archive:
+        archive.writestr('zombie_bots/zmbots.iwd', iwd.getvalue())
+    package = release.getvalue()
+    with patch.object(bo2, 'T6_ZOMBIE_BOT_SIZE', len(package)), patch.object(
+            bo2, 'T6_ZOMBIE_BOT_SHA256', hashlib.sha256(package).hexdigest()):
+        with patch.object(bo2, 'urlopen', return_value=BytesIO(package)) as download:
+            bo2.prepare_t6_zombie_bots(base)
+            bo2.prepare_t6_zombie_bots(base)
+            download.assert_called_once_with(bo2.T6_ZOMBIE_BOT_RELEASE, timeout=20)
+        pack = bo2.t6_zombie_bots_archive(base)
+        for humans, slot, mode, requested, expected in (
+                ('1', 'j1', 'zm', 3, 3), ('2', 'j1', 'zm', 3, 2), ('3', 'j1', 'zm', 3, 1),
+                ('4', 'j1', 'zm', 3, 0), ('2', 'j2', 'zm', 3, 0),
+                ('2', 'j1', 'mp', 3, 0), ('2', 'j1', 'zm', 0, 0)):
+            player = base / f't6-bots-{humans}-{mode}-{requested}' / slot
+            prefix = player / 'prefix'
+            game = prefix / 'drive_c' / 'game'
+            game.mkdir(parents=True)
+            (game / f't6{mode}.exe').touch()
+            (game / 'binkw32.dll').write_bytes(b'_BinkWaitStopAsyncThread@4\0')
+            with patch.dict(os.environ, PARTYDECK_PRIVATE_PLAYER=str(player), PARTYDECK_SESSION_PLAYERS=humans):
+                cwd, command = bo2.prepare(player, f'plutonium-{mode}', game, prefix, installed_client,
+                                           zombie_bots=requested, zombie_pack=pack if expected else None)
+                folder = cwd / 'storage/t6/scripts/zm'
+                marker = folder / bo2.T6_ZOMBIE_BOT_MARKER
+                assert marker.exists() == bool(expected)
+                if expected:
+                    assert f'+set zm_bots {expected} +set zm_bots_fill 0' in command
+                    assert f'+set sp_minplayers {humans}' in command
+                    customized = folder / bo2.T6_ZOMBIE_BOT_SCRIPTS[0]
+                    customized.write_text('player customization')
+                    _, command = bo2.prepare(player, f'plutonium-{mode}', game, prefix, installed_client)
+                    assert not marker.exists()
+                    assert list(folder.iterdir()) == [customized]
+                    assert customized.read_text() == 'player customization'
+                assert '+set zm_bots ' not in command
 
     for mode, exe in bo2.T5_EXECUTABLES.items():
         player = base / mode / 'j1'
