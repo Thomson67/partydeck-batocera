@@ -1,5 +1,6 @@
 """Community configuration recipes, independent of the user's game files."""
 from partydeck_bo2 import ADAPTER as BO2, BO1, matches_bo1, matches as matches_bo2
+from partydeck_d2rloader import ADAPTER as D2R, LABEL as D2R_LABEL, matches as matches_d2r
 from partydeck_i18n import tr
 from partydeck_story_coop import ADAPTER as STORY_COOP, LABEL as STORY_LABEL, matches as matches_story_coop
 from dataclasses import dataclass
@@ -32,7 +33,8 @@ COMMON = (CommonGame('soh', 'Ship of Harkinian · profil commun', 'soh-anchor'),
           CommonGame('dst', "Don't Starve Together · LAN", 'dont-starve-together'),
           CommonGame('bo1', 'Black Ops · Plutonium LAN', BO1),
           CommonGame('bo2', 'Black Ops II · LAN expérimental', BO2),
-          CommonGame('ocarina-story-coop', STORY_LABEL, STORY_COOP))
+          CommonGame('ocarina-story-coop', STORY_LABEL, STORY_COOP),
+          CommonGame(D2R, D2R_LABEL, D2R))
 
 
 def is_rom(path):
@@ -62,6 +64,8 @@ def recipe_for(rom, adapter=None):
         adapter = BO1
     if adapter is None and matches_bo2(rom):
         adapter = BO2
+    if adapter is None and matches_d2r(rom):
+        adapter = D2R
     if adapter is None and matches_dst(rom):
         adapter = DST
     if adapter is None and matches_multi(rom):return COMMON[6]

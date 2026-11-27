@@ -21,6 +21,7 @@ from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LAB
 from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                            MODES as BO2_MODES, SELECTABLE_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
                            T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, T5_ZOMBIE_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
+from partydeck_d2rloader import ADAPTER as D2R, LABEL as D2R_LABEL, defaults as d2r_defaults, matches as matches_d2r
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
                                  TIME_MODES as STORY_TIME_MODES,
@@ -117,7 +118,9 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('keyboard_player', tr('Clavier/souris utilisable comme joueur'), [True, False]),
                 ('gpu',tr('GPU de rendu'),['auto','system','nvidia']),
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
-                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO1, BO2, STORY_COOP])]
+                ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO1, BO2, STORY_COOP, D2R])]
+    if adapter == D2R:
+        return [(f'{D2R}.automatic', tr('Hébergement et jonction LAN automatiques'), [True, False])] if tab == 1 else []
     if adapter == DST:
         if tab == 1:
             return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
@@ -329,6 +332,8 @@ def label_value(key, value):
     if key in ('bo1.language', 'bo2.language'):
         return tr(BO2_LANGUAGES[value])
     if key == 'adapter':
+        if value == D2R:
+            return D2R_LABEL
         if value == STORY_COOP:
             return tr(STORY_LABEL)
         if value in BLACK_OPS_TITLES:
@@ -436,7 +441,8 @@ class Model:
         self.detected = {'soh':discover(windows), 'borderlands2':discover(windows,matches_bl2),
                          'sm64coopdx':discover(windows,matches_sm64),'l4d2':discover(windows,matches_l4d2),'nfsmw':discover(windows,matches_mw),'hkmp':discover(windows,lambda rom:matches_hkmp(rom) and not matches_multi(rom)),'hkmultiplayer':discover(windows,matches_multi),
                          'celestenet':discover(windows,matches_celeste), 'dst':discover(windows,matches_dst),
-                         'bo1':discover(windows,matches_bo1), 'bo2':discover(windows,matches_bo2), STORY_COOP:discover(windows,matches_story_coop)}
+                         'bo1':discover(windows,matches_bo1), 'bo2':discover(windows,matches_bo2),
+                         STORY_COOP:discover(windows,matches_story_coop), D2R:discover(windows,matches_d2r)}
         return [CommonGame(recipe.id,recipe.name,recipe.adapter,self.detected[recipe.id])
                 for recipe in COMMON]
 
@@ -472,6 +478,7 @@ class Model:
         self.data.setdefault('dst', dst_defaults())
         self.data.setdefault('bo1', bo2_defaults(rom, BO1))
         self.data.setdefault('bo2', bo2_defaults(rom))
+        self.data.setdefault(D2R, d2r_defaults())
         self.data.setdefault(STORY_COOP, story_defaults())
         self.data['anchor'].setdefault('graphics', graphics_defaults())
         if recipe:
@@ -507,6 +514,7 @@ class Model:
         if stored.get('adapter') != DST:stored.pop('dst', None)
         if stored.get('adapter') != BO1:stored.pop('bo1', None)
         if stored.get('adapter') != BO2:stored.pop('bo2', None)
+        if stored.get('adapter') != D2R:stored.pop(D2R, None)
         if stored.get('adapter') != STORY_COOP:stored.pop(STORY_COOP, None)
         save_profile(self.base, self.rom, stored)
         try:
@@ -982,7 +990,7 @@ class App:
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == BO1:
             return tuple(range(len(BO1_TABS)))
-        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2):return (0,1)
+        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2, D2R):return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
@@ -2010,7 +2018,7 @@ class App:
                     title=tr(('Session','Réseau','Coop','Image & contrôles')[i])
                 elif self.model.data.get('adapter') == 'hollowknight-hkmp':
                     title=tr(('Session','Réseau','Coop')[i])
-                elif self.model.data.get('adapter') == 'nfsmw-lan':
+                elif self.model.data.get('adapter') in ('nfsmw-lan', D2R):
                     title=tr(('Session','Réseau')[i])
                 elif self.model.data.get('adapter') == BO1:
                     title = tr(BO1_TABS[i])

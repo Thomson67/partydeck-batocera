@@ -243,6 +243,7 @@ if [[ ${1:-verifier} == installer ]]; then
     [[ -f $source_dir/partydeck_bo2.py && -f $source_dir/partydeck_plutonium.py ]] || die 'Module Black Ops II absent / Black Ops II module missing.'
     [[ -f $source_dir/partydeck_l4d2.py ]] || die 'Module Left 4 Dead 2 absent du paquet.'
     [[ -f $source_dir/partydeck_celestenet.py ]] || die 'Module CelesteNet absent / CelesteNet module missing.'
+    [[ -f $source_dir/partydeck_d2rloader.py && -f $source_dir/../plugins/d2rl-partydeck-lan.dll ]] || die 'Module D2RLoader absent / D2RLoader module missing.'
     [[ -f $source_dir/partydeck_story_coop.py ]] || die 'Module Story Co-op absent / Story Co-op module missing.'
     [[ -f $source_dir/partydeck_story_lobby.py ]] || die 'Module réseau Story Co-op absent / Story Co-op network module missing.'
     [[ -f $source_dir/partydeck_story_skins.py ]] || die 'Module de skins Story Co-op absent / Story Co-op skin module missing.'
@@ -311,7 +312,7 @@ if [[ ${1:-verifier} == installer ]]; then
     mkdir -p -- "$base/plugins"
     cp -- "$source_dir/../plugins/WindowsParty.HKMP.dll" "$staging/WindowsParty.HKMP.dll"
     mv -fT -- "$staging/WindowsParty.HKMP.dll" "$base/plugins/WindowsParty.HKMP.dll"
-    for module in WindowsParty.HKMultiplayer.dll WindowsParty.NativeWide.dll; do
+    for module in WindowsParty.HKMultiplayer.dll WindowsParty.NativeWide.dll d2rl-partydeck-lan.dll; do
         cp -- "$source_dir/../plugins/$module" "$staging/$module"
         mv -fT -- "$staging/$module" "$base/plugins/$module"
     done
@@ -325,6 +326,8 @@ if [[ ${1:-verifier} == installer ]]; then
     mv -fT -- "$staging/partydeck_l4d2.py" "$base/partydeck_l4d2.py"
     cp -- "$source_dir/partydeck_celestenet.py" "$staging/partydeck_celestenet.py"
     mv -fT -- "$staging/partydeck_celestenet.py" "$base/partydeck_celestenet.py"
+    cp -- "$source_dir/partydeck_d2rloader.py" "$staging/partydeck_d2rloader.py"
+    mv -fT -- "$staging/partydeck_d2rloader.py" "$base/partydeck_d2rloader.py"
     cp -- "$source_dir/partydeck_story_coop.py" "$staging/partydeck_story_coop.py"
     mv -fT -- "$staging/partydeck_story_coop.py" "$base/partydeck_story_coop.py"
     cp -- "$source_dir/partydeck_story_lobby.py" "$staging/partydeck_story_lobby.py"

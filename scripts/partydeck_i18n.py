@@ -144,6 +144,12 @@ EN = {
     'Sélecteur Black Ops II indisponible. Mode du profil utilisé.':
         'Black Ops II mode selector unavailable. Using the profile’s mode.',
     'Rejoindre automatiquement la partie de J1': 'Automatically join P1’s match',
+    'Hébergement et jonction LAN automatiques': 'Automatic LAN hosting and joining',
+    'Réglages D2RLoader invalides.': 'Invalid D2RLoader settings.',
+    'D2RLoader absent du dossier du jeu indiqué par DIR dans autorun.cmd.': 'D2RLoader is missing from the game folder specified by DIR in autorun.cmd.',
+    'D2RLoader : automatisation disponible avec la version 1.3.1-beta. Utilisez le menu LAN.': 'D2RLoader: automatic play requires version 1.3.1-beta. Use the LAN menu.',
+    'D2RLoader : espace privé du joueur requis.': 'D2RLoader: private player view required.',
+    'D2RLoader : lancez Multijoueur après avoir choisi votre personnage hors ligne. Adresse LAN de J1 : {p0}.': 'D2RLoader: open Multiplayer after choosing your offline character. P1 LAN address: {p0}.',
     'Ouvrir Parties personnalisées au démarrage': 'Open Custom Games at startup',
     'Ouvrir le salon privé au démarrage': 'Open Private Match at startup',
     'Total de bots en équipe · Équilibrage auto': 'Total team bots · Auto balance',

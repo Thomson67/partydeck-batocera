@@ -720,6 +720,8 @@ def _run_wine(original, target, player, saves=None):
         hkmultiplayer_result=install_multi(Path(__file__).resolve().parent,original,player)
         from partydeck_bo2 import install_hook as install_bo2
         install_bo2(Path(__file__).resolve().parent, original, player)
+        from partydeck_d2rloader import install_hook as install_d2r
+        install_d2r(Path(__file__).resolve().parent, original, player)
         from partydeck_celestenet import install_hook as install_celestenet
         install_celestenet(Path(__file__).resolve().parent,player)
         if os.environ.get('PARTYDECK_DST') == '1':
@@ -752,6 +754,10 @@ def _run_wine(original, target, player, saves=None):
                 ready = readiness_dir(player, os.environ.get('PARTYDECK_SESSION_TOKEN'))
                 environment['env'] = pressure_vessel_environment(
                     [ready], environment.get('env'), writable=player.name == 'j1')
+            if os.environ.get('PARTYDECK_D2R') == 'automatic' and player.name != 'j1':
+                from partydeck_d2rloader import readiness_dir
+                ready = readiness_dir(player, os.environ['PARTYDECK_SESSION_TOKEN'])
+                environment['env'] = pressure_vessel_environment([ready], environment.get('env'), writable=False)
             status = run_native_wine(original, environment, watch_umu=bool(views) or
                                      os.environ.get('PARTYDECK_TRACK_RUNNER') == '1')
             if goldberg_result is not None:
@@ -906,7 +912,8 @@ def start_compositor(command, environment, output, check_state):
 def start_player(app, player, original, target, devices, rectangle, window_class,
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
-                 track_runner=False, dst=False, split=None, story_coop=None, trace_windows=False, bo2_settings=None):
+                 track_runner=False, dst=False, split=None, story_coop=None, trace_windows=False, bo2_settings=None,
+                 d2r=False, d2r_ready=None):
     _, _, width, height = rectangle
     bo2_resolution = None
     bo2_desktop = None
@@ -969,6 +976,8 @@ def start_player(app, player, original, target, devices, rectangle, window_class
         from partydeck_dst import readiness_dir
         ready = str(readiness_dir(player, session_token))
         sandbox.extend(['--bind' if player.name == 'j1' else '--ro-bind', ready, ready])
+    if d2r_ready is not None and player.name != 'j1':
+        sandbox.extend(['--ro-bind', str(d2r_ready), str(d2r_ready)])
     if network is not None:
         sandbox.extend(['--setenv','PARTYDECK_PRIVATE_LAN_IP',network.address(network_index)])
     outer_display = os.environ.get("DISPLAY", "")
@@ -1010,6 +1019,13 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_DST', None)
     if dst:
         environment['PARTYDECK_DST'] = '1'
+    for key in ('PARTYDECK_D2R', 'PARTYDECK_D2R_HOST', 'PARTYDECK_D2R_READY'):
+        environment.pop(key, None)
+    if d2r:
+        environment.update(PARTYDECK_D2R='manual', PARTYDECK_D2R_HOST=network.address(0))
+        if d2r_ready is not None:
+            environment.update(PARTYDECK_D2R='automatic',
+                               PARTYDECK_D2R_READY='Z:' + str(d2r_ready / 'ready').replace('/', '\\'))
     environment.pop('PARTYDECK_STORY_COOP', None)
     environment.pop('PARTYDECK_STORY_LOCAL_SKIN', None)
     if story_coop:
@@ -1347,6 +1363,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     shared_lan = celestenet or bool(story_coop)
     from partydeck_dst import ADAPTER as DST
     dst = party and len(players) > 1 and (profile or {}).get('adapter') == DST
+    from partydeck_d2rloader import ADAPTER as D2R, readiness_dir as d2r_readiness_dir, sync_readiness
+    d2r = party and len(players) > 1 and (profile or {}).get('adapter') == D2R
     bl2_lan=None
     l4d2_launch=None
     if party and len(players)>1:
@@ -1417,6 +1435,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     handlers = {signum:signal.signal(signum,handle_exit) for signum in SIGNALS}
     hotkey = SessionHotkey()
     dst_ready = None
+    d2r_ready = None
     try:
         if party:
             from partydeck_mono import prepare_mono
@@ -1451,6 +1470,13 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if bo2_mode:
             bo2_automatic = network is not None and bo2_settings['automatic_join']
             bo2_custom_lobby = custom_lobby_enabled(bo2_settings, network is not None)
+        d2r = d2r and network is not None
+        if d2r:
+            print(tr('D2RLoader : lancez Multijoueur après avoir choisi votre personnage hors ligne. Adresse LAN de J1 : {p0}.',
+                     p0=network.address(0)), flush=True)
+            if profile[D2R]['automatic']:
+                d2r_ready = d2r_readiness_dir(base / 'runtime' / game_id / 'j1', session_token)
+                d2r_ready.mkdir(exist_ok=False)
         if celestenet:
             from partydeck_celestenet import start_server, start_join
             celeste_processes.append(start_server(base,base/'runtime'/game_id/'celestenet',network))
@@ -1499,7 +1525,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                              session_token=session_token, player_count=len(players),
                              l4d2_launch=l4d2_launch, celestenet=celestenet,
                              celeste_options=celeste_options, track_runner=track_runner, dst=dst,
-                             split=split, story_coop=story_coop, trace_windows=trace_windows, bo2_settings=bo2_settings)
+                             split=split, story_coop=story_coop, trace_windows=trace_windows, bo2_settings=bo2_settings,
+                             d2r=d2r, d2r_ready=d2r_ready)
             processes.append(launch())
             if bo2_mode:
                 bo2_startup_deadline = time.monotonic() + 10
@@ -1522,6 +1549,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         deadline = time.monotonic() + 120
         while pending and time.monotonic() < deadline:
             if bl2_host is not None:bl2_host.poll()
+            if d2r_ready is not None:
+                sync_readiness(d2r_ready / 'ready', network.holders[0].pid)
             result = session_result(processes,states,wayland)
             if result is not None:
                 return result
@@ -1602,6 +1631,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                     story_startup = None
             if now>=next_output_check:
                 next_output_check=now+2
+                if d2r_ready is not None:
+                    sync_readiness(d2r_ready / 'ready', network.holders[0].pid)
                 try:
                     current=primary_monitor(desktop['output'])
                     if current!=monitor and reposition_windows(window_classes,layout(current,len(players),split)):
@@ -1691,12 +1722,14 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                         automatic_path(path.parent, session_token, kind).unlink(missing_ok=True)
                 if dst:
                     (path.parent/'dst-scripts.zip').unlink(missing_ok=True)
-            if dst_ready is not None:
+            for ready in (dst_ready, d2r_ready):
+                if ready is None:
+                    continue
                 try:
-                    (dst_ready/'ready').unlink(missing_ok=True)
-                    dst_ready.rmdir()
+                    (ready / 'ready').unlink(missing_ok=True)
+                    ready.rmdir()
                 except OSError as error:
-                    print(f'PartyDeck DST: readiness cleanup: {error}', flush=True)
+                    print(f'PartyDeck: readiness cleanup: {error}', flush=True)
             for signum,handler in handlers.items():
                 signal.signal(signum,handler)
 

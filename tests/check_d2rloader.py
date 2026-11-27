@@ -1,0 +1,104 @@
+"""D2RLoader profile, private launch and passive LAN readiness."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
+import tomllib
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import partydeck_d2rloader as d2r
+from partydeck_catalog import recipe_for
+from partydeck_profiles import defaults, private_lan_enabled, validate
+from partydeck_couch import fields
+from partydeck_i18n import set_language
+
+rom = Path('/userdata/roms/windows/Diablo II Resurrected [Reimagined].wsquashfs')
+profile = defaults(rom)
+assert recipe_for(rom).adapter == profile['adapter'] == d2r.ADAPTER
+assert validate(profile, rom)[d2r.ADAPTER] == {'automatic': True}
+assert private_lan_enabled(profile, 2) and private_lan_enabled(profile, 4)
+assert not private_lan_enabled(profile, 1)
+assert not d2r.matches(Path('Diablo II.wine'))
+for lang, label in (('fr', 'Hébergement et jonction LAN automatiques'), ('en', 'Automatic LAN hosting and joining')):
+    set_language(lang)
+    assert fields(1, d2r.ADAPTER) == [('d2rloader.automatic', label, [True, False])]
+
+with TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    player = base / 'j2'
+    prefix = player / 'prefix'
+    pc = base / 'Diablo II Resurrected.pc'
+    plugin = base / d2r.PLUGIN
+    plugin.write_bytes(b'bridge')
+    dll = b'official fixture'
+    for entry, original, game in (
+        ('play_wine', rom.with_suffix('.wine'), prefix / 'drive_c' / 'game'),
+        ('play_pc', pc, pc),
+        ('play_squashfs', rom, prefix / 'drive_c' / 'game'),
+    ):
+        game.mkdir(parents=True, exist_ok=True)
+        (game / 'D2R.exe').touch()
+        (game / 'D2RLoader.exe').touch()
+        (game / 'D2RCore.dll').write_bytes(dll)
+        loader = game / 'd2rloader'
+        config = loader / 'config' / 'd2rloader.toml'
+        state = loader / 'data' / 'state.json'
+        config.parent.mkdir(parents=True, exist_ok=True)
+        state.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text('[d2rloader]\ndefault_mod = "Reimagined"\n[d2rloader.advanced]\ngame_port = 4555\n')
+        state.write_text(json.dumps({'version': 1, 'tutorialSeen': True,
+                                     'multiplayer': {'maxPlayers': 2, 'difficulty': 'nightmare'}}))
+        with patch.object(d2r, 'CORE_131', hashlib.sha256(dll).hexdigest()), patch.dict(
+            os.environ, PARTYDECK_D2R_HOST='192.168.247.11', PARTYDECK_SESSION_PLAYERS='3',
+        ):
+            assert d2r.prepare(game, prefix, player, plugin, True, original) == 'D2RLoader.exe'
+        cfg = tomllib.loads(config.read_text())['d2rloader']
+        assert cfg == {'default_mod': 'Reimagined', 'show_tcpip_button': True, 'check_for_updates': False,
+                       'advanced': {'game_port': 4000, 'automatic_port_mapping': False, 'hosting_check': False}}
+        data = json.loads(state.read_text())
+        assert data['tutorialSeen']
+        assert data['multiplayer'] == {'maxPlayers': 4, 'difficulty': 'nightmare', 'lanOnly': True,
+                                       'unlisted': False, 'password': '', 'directJoinAddress': '192.168.247.11'}
+        assert (loader / 'plugins' / d2r.PLUGIN).read_bytes() == b'bridge'
+        before = state.read_bytes()
+        assert d2r.prepare(game, prefix, player, plugin, True, original) == 'D2RLoader.exe'
+        assert not (loader / 'plugins' / d2r.PLUGIN).exists()
+        assert state.read_bytes() == before
+
+        launcher = base / 'launcher.sh'
+        shell = ''
+        for function in ('play_wine', 'play_pc', 'play_squashfs'):
+            mount = 'GAMENAME' if function == 'play_pc' else 'WINEPOINT'
+            shell += f'{function}() {{\n    if [[ -n "$USE_LANGUAGE" ]]; then\n'
+            shell += f'        (cd "${{{mount}}}/${{WINE_DIR}}" && printf "%s\\n" ${{WINE_CMD}})\n    else\n'
+            shell += f'        (cd "${{{mount}}}/${{WINE_DIR}}" && printf "%s\\n" ${{WINE_CMD}})\n    fi\n}}\n'
+        launcher.write_text(d2r.instrument_native(shell, ['prepare'])
+                            + 'prepare() { printf "%s\\n" D2RLoader.exe; }\n"$1"\n')
+        env = dict(os.environ, WINEPOINT=str(prefix), GAMENAME=str(pc), WINE_DIR='' if entry == 'play_pc' else 'drive_c/game')
+        assert subprocess.check_output(['bash', str(launcher), entry], env=env | {'WINE_CMD': 'D2R.exe'}, text=True).splitlines() == ['D2RLoader.exe']
+        assert subprocess.check_output(['bash', str(launcher), entry], env=env | {
+            'WINE_CMD': 'D2RLoader.exe -mod Reimagined', 'USE_LANGUAGE': '1',
+        }, text=True).splitlines() == ['D2RLoader.exe', '-mod', 'Reimagined']
+
+    ready_dir = d2r.readiness_dir(player, 'f' * 32)
+    ready_dir.mkdir()
+    marker = ready_dir / 'ready'
+    proc = base / 'proc'
+    tables = proc / '508' / 'net'
+    tables.mkdir(parents=True)
+    listening = 'header\n  0: 00000000:0FA0 00000000:0000 0A 00000000:00000000\n'
+    (tables / 'tcp').write_text(listening)
+    d2r.sync_readiness(marker, 508, proc)
+    assert marker.is_file()
+    (tables / 'tcp').write_text(listening.replace(' 0A ', ' 01 '))
+    d2r.sync_readiness(marker, 508, proc)
+    assert not marker.exists()
+    (tables / 'tcp6').write_text(listening)
+    d2r.sync_readiness(marker, 508, proc)
+    assert marker.is_file()
+
+print('D2RLoader: profile, private launcher configuration, and passive readiness verified.')
