@@ -86,3 +86,9 @@ Le fonctionnement avec profils et éditeur facultatif s'inspire de
 [Quiver Batocera](https://github.com/DreamerCG/Quiver-Batocera), dont les
 profils `.quiver` et l'option `LAUNCHER_QUIVER` permettent d'ouvrir le launcher
 à la demande.
+
+## Minecraft Java natif
+
+La branche de test Minecraft dispose de son propre installateur et d'une entrée
+dans **Ports**. Voir le [guide Minecraft Java](docs/MINECRAFT_TEST.fr.md) pour
+installer Java, SKlauncher et le profil coop local.

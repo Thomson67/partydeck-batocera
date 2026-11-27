@@ -1,0 +1,49 @@
+{
+  "java": [
+    "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13.1%2B2/OpenJDK21U-jre_x64_linux_hotspot_21.0.13.1_2.tar.gz",
+    "sha256",
+    "18f44fab9065217f3ba61d0eef8a7b5f3c3713aa7293001b0d4ac10ede3850f0"
+  ],
+  "javafx": [
+    "https://download2.gluonhq.com/openjfx/21.0.13.1/openjfx-21.0.13.1_linux-x64_bin-sdk.zip",
+    "sha256",
+    "226a74adb111d1016663b5694aee2bb4262250f87a0613af1f97aed0d136bdd9"
+  ],
+  "launcher": [
+    "https://skmedix.pl/binaries/skl/3.2.18/SKlauncher-3.2.18.jar",
+    "sha256",
+    "25a73e3770a1d8d14bce53e8920e2e893aacc3c715d0fb22f878ef2090d03863"
+  ],
+  "mods": [
+    [
+      "https://cdn.modrinth.com/data/P7dR8mSH/versions/iFnYBUfS/fabric-api-0.106.0%2B1.21.1.jar",
+      "sha512",
+      "7ae490cf09c4a3158247ae53764972f656f054c885fb46c02b38063fdaad79532d25b8a6db8b6907e3ca13856d29facedccb8a6b1d7b4f0a5afd0f1bdf3784b5"
+    ],
+    [
+      "https://cdn.modrinth.com/data/QyvWSZ5S/versions/Me5V7UJd/concentration-fabric-1.21-2.2.4.jar",
+      "sha512",
+      "4bf33a682af402abceb77458dfe71b5baf26eded80c3654e088828e3c621e30be6c07aa5ba6645b6c9f0c3a50f384ff0ac5fe111edacef4b85ef02e0b81031a5"
+    ],
+    [
+      "https://cdn.modrinth.com/data/VgxwMxKC/versions/n1uA1X0X/hotjoin-0.4.0.jar",
+      "sha512",
+      "2057c77180819b4958579a76612f93b44004a331d3eb0c6bb3ee537d3137b7dfdd74113d99eb12bf7e110b37f4c4cb06f396a616e83268d24740f82f7c349726"
+    ],
+    [
+      "https://cdn.modrinth.com/data/gHvKJofA/versions/u7kno2DB/Legacy4J-1.21-1.7.4-fabric.jar",
+      "sha512",
+      "8470b22c0eda82b0f24f21aabe716b238377d15f56765a4a5dcda98babd6a194a09ad89733e91598910e588bc71bf7534f808ae275a5815c95881d19a96c4f2f"
+    ],
+    [
+      "https://cdn.modrinth.com/data/4DL4BvA5/versions/ObsnJ9jV/twinsession-1.0.3.jar",
+      "sha512",
+      "95a824f7a50e18218fc8be07adaf5008f6682f7f01a0c373599917fcbbfc0e7a9aae709066ad009cfbdd04043dcb5e400abf1adfae692066b7b2241e72a21b6d"
+    ]
+  ],
+  "sdl": [
+    "https://maven.isxander.dev/releases/dev/isxander/libsdl4j-natives/3.693c75e/libsdl4j-natives-3.693c75e-linux64.so",
+    "sha256",
+    "ba398177dd0773a732344130b0443d3e6a8546b7728cd7d235a2209d84571d71"
+  ]
+}
