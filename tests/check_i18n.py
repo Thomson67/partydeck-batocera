@@ -15,13 +15,19 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
 from partydeck_catalog import COMMON
 
-for language, ultrawide in (
-        ('fr', 'Ultrawide en partage horizontal à deux (test)'),
-        ('en', 'Ultrawide for two players in horizontal split (experimental)')):
+for language, titles in (
+        ('fr', ('Ultrawide en partage horizontal à deux (test)', 'Zoom de la caméra · Résolution classique',
+                'Grandes polices', 'Taille de la police du chat', 'Disposition du HUD Ultrawide')),
+        ('en', ('Ultrawide for two players in horizontal split (experimental)', 'Camera zoom · Legacy resolution',
+                'Large Font Mode', 'Chat font size', 'Ultrawide HUD layout'))):
     lang.set_language(language)
     d2r_app = SimpleNamespace(model=SimpleNamespace(data={'adapter': 'd2rloader'}))
     assert App.available_tabs(d2r_app) == (0, 1, 2)
-    assert fields(2, 'd2rloader') == [('d2rloader.horizontal_ultrawide', ultrawide, [False, True])]
+    assert tuple(label for _, label, _ in fields(2, 'd2rloader')) == titles
+    assert label_value('d2rloader.legacy_resolution', '640x480') == '640×480'
+    assert label_value('d2rloader.large_font', 'keep') == ('Réglage du jeu' if language == 'fr' else 'In-game setting')
+    assert label_value('d2rloader.chat_font', 'extra_large') == ('Très grande' if language == 'fr' else 'Extra large')
+    assert label_value('d2rloader.ultrawide_hud', 'full') == ('Pleine largeur' if language == 'fr' else 'Full width')
 
 for language, music, locale in (('fr', 'Musique uniquement pour J1', 'Français'),
                                 ('en', 'Music on player 1 only', 'French')):

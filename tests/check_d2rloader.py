@@ -20,8 +20,9 @@ from partydeck_i18n import set_language
 rom = Path('/userdata/roms/windows/Diablo II Resurrected [Reimagined].wsquashfs')
 profile = defaults(rom)
 assert recipe_for(rom).adapter == profile['adapter'] == d2r.ADAPTER
-assert validate(profile, rom)[d2r.ADAPTER] == {'automatic': True, 'horizontal_ultrawide': False}
-assert d2r.validate({'automatic': False}) == {'automatic': False, 'horizontal_ultrawide': False}
+display_defaults = {'legacy_resolution': 'keep', 'large_font': 'keep', 'chat_font': 'keep', 'ultrawide_hud': 'keep'}
+assert validate(profile, rom)[d2r.ADAPTER] == {'automatic': True, 'horizontal_ultrawide': False, **display_defaults}
+assert d2r.validate({'automatic': False}) == {'automatic': False, 'horizontal_ultrawide': False, **display_defaults}
 assert private_lan_enabled(profile, 2) and private_lan_enabled(profile, 4)
 assert not private_lan_enabled(profile, 1)
 assert not d2r.matches(Path('Diablo II.wine'))
@@ -48,6 +49,27 @@ with TemporaryDirectory() as tmp:
         package.writestr('d2rloader/plugins/Ultrawide.dll', b'wide plugin')
         package.writestr('d2rloader/data/hd/tc22sh/terrain.bin', b'wide shader')
         package.writestr('unexpected.txt', b'other data')
+    exported = base / 'private-saves'
+    player_saves = exported / 'Diablo II Resurrected'
+    mod_saves = player_saves / 'mods' / 'Reimagined'
+    mod_saves.mkdir(parents=True)
+    user = prefix / 'drive_c/users/steamuser'
+    user.mkdir(parents=True)
+    (user / 'Saved Games').symlink_to(exported, target_is_directory=True)
+    native_settings = player_saves / 'Settings.json'
+    mod_settings = mod_saves / 'settings.json'
+    for target in (native_settings, mod_settings):
+        target.write_text(json.dumps({'Resolution Scale': 75, 'Game Resolution': 1, 'Low Vision Mode': 0}))
+    display = {'legacy_resolution': '640x480', 'large_font': 'on', 'chat_font': 'extra_large', 'ultrawide_hud': 'full'}
+    with patch.object(d2r, 'WINDOWS_SAVES', exported):
+        assert d2r.prepare(prefix, prefix, player, plugin, False, rom, display=display, lan=False) is None
+        for target in (native_settings, mod_settings):
+            assert json.loads(target.read_text()) == {
+                'Resolution Scale': 75, 'Game Resolution': 0, 'Low Vision Mode': 1, 'Chat Font Size': 3,
+            }
+        before = native_settings.read_bytes()
+        d2r.prepare(prefix, prefix, player, plugin, False, rom, lan=False)
+        assert native_settings.read_bytes() == before
     for entry, original, game in (
         ('play_wine', rom.with_suffix('.wine'), prefix / 'drive_c' / 'game'),
         ('play_pc', pc, pc),
@@ -107,13 +129,20 @@ with TemporaryDirectory() as tmp:
             assert (game / 'D2RLoader.exe').read_bytes() == host
             wide_dll.write_bytes(b'user ultrawide')
             mount.reset_mock()
-            d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive)
+            wide_config = loader / 'config/ultrawide.toml'
+            wide_config.write_text('[ultrawide]\nhud_mode = "centered"\nenable_corner_minimap = false\n')
+            d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive,
+                        display={'ultrawide_hud': 'full'})
             assert wide_dll.read_bytes() == b'user ultrawide'
+            assert tomllib.loads(wide_config.read_text())['ultrawide'] == {
+                'hud_mode': 'full', 'enable_corner_minimap': False,
+            }
             mount.assert_not_called()
         d2r.prepare(game, prefix, player, plugin, False, original)
         assert wide_dll.read_bytes() == b'user ultrawide' and other_plugin.read_bytes() == b'user plugin'
         wide_dll.unlink()
         other_plugin.unlink()
+        wide_config.unlink()
 
         launcher = base / 'launcher.sh'
         shell = ''
@@ -129,6 +158,10 @@ with TemporaryDirectory() as tmp:
         assert subprocess.check_output(['bash', str(launcher), entry], env=env | {
             'WINE_CMD': 'D2RLoader.exe -mod Reimagined', 'USE_LANGUAGE': '1',
         }, text=True).splitlines() == ['D2RLoader.exe', '-mod', 'Reimagined']
+        launcher.write_text(d2r.instrument_native(shell, ['prepare'], lan=False)
+                            + 'prepare() { [[ "$2" == "$WINEPOINT" ]]; }\n"$1"\n')
+        assert subprocess.check_output(['bash', str(launcher), entry], env=env | {'WINE_CMD': 'D2R.exe -direct'},
+                                       text=True).splitlines() == ['D2R.exe', '-direct']
 
     ready_dir = d2r.readiness_dir(player, 'f' * 32)
     ready_dir.mkdir()

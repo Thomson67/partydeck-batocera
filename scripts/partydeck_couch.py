@@ -21,7 +21,8 @@ from partydeck_borderlands2 import defaults as bl2_defaults, PRESETS, PRESET_LAB
 from partydeck_bo2 import (ADAPTER as BO2, BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                            MODES as BO2_MODES, SELECTABLE_MODES, HORIZONTAL_RENDER, LANGUAGES as BO2_LANGUAGES,
                            T5_BOT_COUNTS, T5_TEAM_BOT_COUNTS, ZOMBIE_BOT_COUNTS, T5_FOV_CHOICES, defaults as bo2_defaults, matches_bo1, matches as matches_bo2)
-from partydeck_d2rloader import ADAPTER as D2R, LABEL as D2R_LABEL, defaults as d2r_defaults, matches as matches_d2r
+from partydeck_d2rloader import (ADAPTER as D2R, LABEL as D2R_LABEL, DISPLAY_CHOICES as D2R_DISPLAY,
+                                defaults as d2r_defaults, matches as matches_d2r)
 from partydeck_story_coop import (ADAPTER as STORY_COOP, CONSUMABLES as STORY_CONSUMABLES,
                                  LABEL as STORY_LABEL, SHARING_CHOICES as STORY_SHARING_CHOICES,
                                  TIME_MODES as STORY_TIME_MODES,
@@ -122,7 +123,11 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
     if adapter == D2R:
         if tab == 1:
             return [(f'{D2R}.automatic', tr('Hébergement et jonction LAN automatiques'), [True, False])]
-        return [(f'{D2R}.horizontal_ultrawide', tr('Ultrawide en partage horizontal à deux (test)'), [False, True])] if tab == 2 else []
+        return [(f'{D2R}.horizontal_ultrawide', tr('Ultrawide en partage horizontal à deux (test)'), [False, True]),
+                (f'{D2R}.legacy_resolution', tr('Zoom de la caméra · Résolution classique'), list(D2R_DISPLAY['legacy_resolution'])),
+                (f'{D2R}.large_font', tr('Grandes polices'), list(D2R_DISPLAY['large_font'])),
+                (f'{D2R}.chat_font', tr('Taille de la police du chat'), list(D2R_DISPLAY['chat_font'])),
+                (f'{D2R}.ultrawide_hud', tr('Disposition du HUD Ultrawide'), list(D2R_DISPLAY['ultrawide_hud']))] if tab == 2 else []
     if adapter == DST:
         if tab == 1:
             return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
@@ -315,6 +320,9 @@ def put(data, key, value):
 
 
 def label_value(key, value):
+    section, _, setting = key.partition('.')
+    if section == D2R and setting in D2R_DISPLAY:
+        return tr(D2R_DISPLAY[setting][value])
     if key=='gpu':
         return {'auto':tr('Automatique'),'system':tr('Configuration système'),'nvidia':'NVIDIA'}[value]
     if key in ('players','input') and value == 'auto':
