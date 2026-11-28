@@ -358,6 +358,24 @@ with patch.object(coop.subprocess, 'Popen') as popen:
                       celeste_options={'language': 'french'})
     assert '-w' not in popen.call_args.args[0]
 
+# Small D2R tiles keep a 720p desktop and fit it to their actual dimensions.
+with (patch.object(coop.subprocess, 'Popen') as popen,
+      patch.object(coop, 'sandbox_arguments', return_value=[]),
+      patch('partydeck_profiles.profile_path', return_value=Path(__file__)),
+      patch('partydeck_profiles.read_profile', return_value={'adapter': 'd2rloader'})):
+    for players, monitor in ((3, (1920, 1080)), (4, (1920, 1080)), (4, (2560, 1080))):
+        for box in coop.layout((0, 0, *monitor), players, 'horizontal'):
+            coop.start_player(base, base/'j2', game, game, [], box, 'd2r-j2',
+                              saves=base/'saves', player_count=players)
+            args = popen.call_args.args[0]
+            for option, value in (('-w', '1280'), ('-h', '720'), ('-S', 'fit'),
+                                  ('-W', str(box[2])), ('-H', str(box[3]))):
+                assert args[args.index(option) + 1] == value
+    for players, box in ((2, (0, 540, 1920, 540)), (4, (0, 0, 1280, 720))):
+        coop.start_player(base, base/'j2', game, game, [], box, 'd2r-j2',
+                          saves=base/'saves', player_count=players)
+        assert all(option not in popen.call_args.args[0] for option in ('-w', '-h', '-S'))
+
 # T6 requires a larger desktop mode even when rendering at the native slot size.
 settings = dict(mode='plutonium-mp', horizontal_render='native', automatic_join=True, open_custom_lobby=False)
 with (patch.object(coop.subprocess, 'Popen') as popen,

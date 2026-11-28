@@ -922,6 +922,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     from partydeck_bo2 import (BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                                PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
                                T5_FOV_OVERRIDE, custom_lobby_enabled, desktop_size, render_size)
+    from partydeck_d2rloader import ADAPTER as D2R
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
     if trace_windows:
@@ -956,6 +957,9 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                 print(tr('Black Ops II {p0} : rendu demandé {p1}, écran virtuel {p2}, fenêtre {p3}.',
                          p0=player.name.upper(), p1=bo2_resolution, p2=bo2_desktop,
                          p3=f'{width}x{height}').replace('Black Ops II', BLACK_OPS_TITLES[adapter]), flush=True)
+            elif adapter == D2R and player_count > 2 and (width < 1280 or height < 720):
+                # Keep the HUD on a 720p virtual display and fit the complete frame into the tile.
+                args.extend(['-w', '1280', '-h', '720', '-S', 'fit'])
             elif adapter in ('borderlands2','l4d2-goldberg','nfsmw-lan','hollowknight-hkmp','hollowknight-hkmultiplayer'):
                 args.extend(['-w',str(width),'-h',str(height)])
     if dst or story_coop:
