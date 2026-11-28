@@ -25,7 +25,7 @@ PORT = 4000
 PLUGIN = 'd2rl-partydeck-lan.dll'
 CORE_131 = '2a868d013d2e0830bd2d9e04b918b19e46a73cf726c833e70d089b948fdeb5a2'
 ULTRAWIDE_PLUGIN = 'Ultrawide.dll'
-ULTRAWIDE_EXE = '93021dad48533bcfca8a95c69a0cc00cdb9008a3ce6ceba1d04c7aca71985a10'
+ULTRAWIDE_LOADER = '93021dad48533bcfca8a95c69a0cc00cdb9008a3ce6ceba1d04c7aca71985a10'
 ULTRAWIDE_RELEASE = ('https://github.com/Pyre-Flies/D2R-Mods/releases/download/'
                      'ultrawide-1.3.5%2Brev.3/Ultrawide-1.3.5%2Brev.3-PyreFly.zip')
 ULTRAWIDE_SIZE = 2273420
@@ -187,10 +187,11 @@ def prepare(directory, prefix, player, plugin_source, automatic, rom, *, ultrawi
         plugin.unlink(missing_ok=True)
     write_bytes(settings, text.encode('utf-8'))
     if ultrawide is not None and not path(plugins, ULTRAWIDE_PLUGIN).is_file():
-        with executable.open('rb') as source:
-            supported_game = hashlib.file_digest(source, 'sha256').hexdigest() == ULTRAWIDE_EXE
-        if not (supported_core and supported_game):
-            print(tr('Diablo II : plugin Ultrawide incompatible avec ce D2R.exe ou D2RCore.dll.'),
+        # The native host fingerprint belongs to the executable shipped by D2RLoader.
+        with loader.open('rb') as source:
+            supported_loader = hashlib.file_digest(source, 'sha256').hexdigest() == ULTRAWIDE_LOADER
+        if not (supported_core and supported_loader):
+            print(tr('Diablo II : plugin Ultrawide incompatible avec ce D2RLoader.exe ou D2RCore.dll.'),
                   file=sys.stderr, flush=True)
         else:
             try:
@@ -198,6 +199,9 @@ def prepare(directory, prefix, player, plugin_source, automatic, rom, *, ultrawi
             except (OSError, subprocess.SubprocessError) as error:
                 print(tr('Diablo II : plugin Ultrawide indisponible ({p0}). Affichage standard.',
                          p0=error), file=sys.stderr, flush=True)
+            else:
+                print(tr('Diablo II {p0} : plugin Ultrawide prêt pour D2RLoader.', p0=player.name.upper()),
+                      file=sys.stderr, flush=True)
     return loader.name
 
 

@@ -41,6 +41,8 @@ with TemporaryDirectory() as tmp:
     plugin = base / d2r.PLUGIN
     plugin.write_bytes(b'bridge')
     dll = b'official fixture'
+    host = b'loader executable fixture'
+    retail = b'retail game executable fixture'
     archive = base / 'ultrawide.zip'
     with ZipFile(archive, 'w') as package:
         package.writestr('d2rloader/plugins/Ultrawide.dll', b'wide plugin')
@@ -52,8 +54,8 @@ with TemporaryDirectory() as tmp:
         ('play_squashfs', rom, prefix / 'drive_c' / 'game'),
     ):
         game.mkdir(parents=True, exist_ok=True)
-        (game / 'D2R.exe').touch()
-        (game / 'D2RLoader.exe').touch()
+        (game / 'D2R.exe').write_bytes(retail)
+        (game / 'D2RLoader.exe').write_bytes(host)
         (game / 'D2RCore.dll').write_bytes(dll)
         loader = game / 'd2rloader'
         config = loader / 'config' / 'd2rloader.toml'
@@ -88,7 +90,7 @@ with TemporaryDirectory() as tmp:
         other_plugin = wide_dll.with_name('Other.dll')
         other_plugin.write_bytes(b'user plugin')
         with (patch.object(d2r, 'CORE_131', hashlib.sha256(dll).hexdigest()),
-              patch.object(d2r, 'ULTRAWIDE_EXE', hashlib.sha256(b'').hexdigest()),
+              patch.object(d2r, 'ULTRAWIDE_LOADER', hashlib.sha256(host).hexdigest()),
               patch.object(d2r, 'mkdtemp', return_value=str(view)),
               patch.object(d2r.subprocess, 'run') as mount):
             assert d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive) == 'D2RLoader.exe'
@@ -101,7 +103,8 @@ with TemporaryDirectory() as tmp:
             assert (loader / 'data/hd/tc22sh/terrain.bin').read_bytes() == b'wide shader'
             wide_cfg = tomllib.loads((loader / 'config/ultrawide.toml').read_text())['ultrawide']
             assert wide_cfg == {'enable_monster_pop_in_fix': False, 'enable_monster_ai_range': False}
-            assert not (game / 'unexpected.txt').exists() and not (game / 'D2R.exe').read_bytes()
+            assert not (game / 'unexpected.txt').exists() and (game / 'D2R.exe').read_bytes() == retail
+            assert (game / 'D2RLoader.exe').read_bytes() == host
             wide_dll.write_bytes(b'user ultrawide')
             mount.reset_mock()
             d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive)
