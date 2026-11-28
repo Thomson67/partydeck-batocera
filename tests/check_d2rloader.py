@@ -8,6 +8,7 @@ import sys
 from tempfile import TemporaryDirectory
 import tomllib
 from unittest.mock import patch
+from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import partydeck_d2rloader as d2r
@@ -19,13 +20,18 @@ from partydeck_i18n import set_language
 rom = Path('/userdata/roms/windows/Diablo II Resurrected [Reimagined].wsquashfs')
 profile = defaults(rom)
 assert recipe_for(rom).adapter == profile['adapter'] == d2r.ADAPTER
-assert validate(profile, rom)[d2r.ADAPTER] == {'automatic': True}
+assert validate(profile, rom)[d2r.ADAPTER] == {'automatic': True, 'horizontal_ultrawide': False}
+assert d2r.validate({'automatic': False}) == {'automatic': False, 'horizontal_ultrawide': False}
 assert private_lan_enabled(profile, 2) and private_lan_enabled(profile, 4)
 assert not private_lan_enabled(profile, 1)
 assert not d2r.matches(Path('Diablo II.wine'))
 for lang, label in (('fr', 'Hébergement et jonction LAN automatiques'), ('en', 'Automatic LAN hosting and joining')):
     set_language(lang)
     assert fields(1, d2r.ADAPTER) == [('d2rloader.automatic', label, [True, False])]
+assert d2r.ultrawide_mode(1920, 540) == (2560, 720)
+assert d2r.ultrawide_mode(2560, 720) == (2560, 720)
+assert d2r.ultrawide_mode(3440, 720) == (2560, 720)
+assert d2r.ultrawide_mode(960, 540) is None
 
 with TemporaryDirectory() as tmp:
     base = Path(tmp)
@@ -35,6 +41,11 @@ with TemporaryDirectory() as tmp:
     plugin = base / d2r.PLUGIN
     plugin.write_bytes(b'bridge')
     dll = b'official fixture'
+    archive = base / 'ultrawide.zip'
+    with ZipFile(archive, 'w') as package:
+        package.writestr('d2rloader/plugins/Ultrawide.dll', b'wide plugin')
+        package.writestr('d2rloader/data/hd/tc22sh/terrain.bin', b'wide shader')
+        package.writestr('unexpected.txt', b'other data')
     for entry, original, game in (
         ('play_wine', rom.with_suffix('.wine'), prefix / 'drive_c' / 'game'),
         ('play_pc', pc, pc),
@@ -68,6 +79,38 @@ with TemporaryDirectory() as tmp:
         assert d2r.prepare(game, prefix, player, plugin, True, original) == 'D2RLoader.exe'
         assert not (loader / 'plugins' / d2r.PLUGIN).exists()
         assert state.read_bytes() == before
+
+        wide_dll = loader / 'plugins' / d2r.ULTRAWIDE_PLUGIN
+        assert d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive) == 'D2RLoader.exe'
+        assert not wide_dll.exists()
+        view = base / f'ultrawide-{entry}'
+        view.mkdir()
+        other_plugin = wide_dll.with_name('Other.dll')
+        other_plugin.write_bytes(b'user plugin')
+        with (patch.object(d2r, 'CORE_131', hashlib.sha256(dll).hexdigest()),
+              patch.object(d2r, 'ULTRAWIDE_EXE', hashlib.sha256(b'').hexdigest()),
+              patch.object(d2r, 'mkdtemp', return_value=str(view)),
+              patch.object(d2r.subprocess, 'run') as mount):
+            assert d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive) == 'D2RLoader.exe'
+            assert not wide_dll.exists()
+            assert (view / d2r.ULTRAWIDE_PLUGIN).read_bytes() == b'wide plugin'
+            assert [call.args[0] for call in mount.call_args_list] == [
+                ['mount', '--bind', str(other_plugin), str(view / other_plugin.name)],
+                ['mount', '--rbind', str(view), str(wide_dll.parent)],
+            ]
+            assert (loader / 'data/hd/tc22sh/terrain.bin').read_bytes() == b'wide shader'
+            wide_cfg = tomllib.loads((loader / 'config/ultrawide.toml').read_text())['ultrawide']
+            assert wide_cfg == {'enable_monster_pop_in_fix': False, 'enable_monster_ai_range': False}
+            assert not (game / 'unexpected.txt').exists() and not (game / 'D2R.exe').read_bytes()
+            wide_dll.write_bytes(b'user ultrawide')
+            mount.reset_mock()
+            d2r.prepare(game, prefix, player, plugin, False, original, ultrawide=archive)
+            assert wide_dll.read_bytes() == b'user ultrawide'
+            mount.assert_not_called()
+        d2r.prepare(game, prefix, player, plugin, False, original)
+        assert wide_dll.read_bytes() == b'user ultrawide' and other_plugin.read_bytes() == b'user plugin'
+        wide_dll.unlink()
+        other_plugin.unlink()
 
         launcher = base / 'launcher.sh'
         shell = ''

@@ -375,6 +375,16 @@ with (patch.object(coop.subprocess, 'Popen') as popen,
         coop.start_player(base, base/'j2', game, game, [], box, 'd2r-j2',
                           saves=base/'saves', player_count=players)
         assert all(option not in popen.call_args.args[0] for option in ('-w', '-h', '-S'))
+    network = Mock()
+    network.child_prefix.return_value = []
+    network.address.return_value = '192.168.247.11'
+    for player, box in zip(('j1', 'j2'), coop.layout((0, 0, 1920, 1080), 2, 'horizontal')):
+        coop.start_player(base, base/player, game, game, [], box, f'd2r-{player}',
+                          saves=base/'saves', player_count=2, network=network, d2r=True, d2r_ultrawide=True)
+        args = popen.call_args.args[0]
+        for option, value in (('-w', '2560'), ('-h', '720'), ('-S', 'fit'), ('-W', '1920'), ('-H', '540')):
+            assert args[args.index(option) + 1] == value
+        assert popen.call_args.kwargs['env']['PARTYDECK_D2R_ULTRAWIDE'] == '1'
 
 # T6 requires a larger desktop mode even when rendering at the native slot size.
 settings = dict(mode='plutonium-mp', horizontal_render='native', automatic_join=True, open_custom_lobby=False)

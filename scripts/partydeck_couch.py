@@ -120,7 +120,9 @@ def fields(tab, adapter='standard', celeste_skins=(), story_skins=()):
                 ('configure_before_launch', tr('Configurer avant chaque lancement'), [False, True]),
                 ('adapter', tr('Profil du jeu'), ['standard', 'soh-anchor', 'borderlands2', 'sm64coopdx', 'l4d2-goldberg', 'nfsmw-lan', 'hollowknight-hkmp', 'hollowknight-hkmultiplayer', 'celestenet', DST, BO1, BO2, STORY_COOP, D2R])]
     if adapter == D2R:
-        return [(f'{D2R}.automatic', tr('Hébergement et jonction LAN automatiques'), [True, False])] if tab == 1 else []
+        if tab == 1:
+            return [(f'{D2R}.automatic', tr('Hébergement et jonction LAN automatiques'), [True, False])]
+        return [(f'{D2R}.horizontal_ultrawide', tr('Ultrawide en partage horizontal à deux (test)'), [False, True])] if tab == 2 else []
     if adapter == DST:
         if tab == 1:
             return [('dst.resume_last_world', tr('Relancer automatiquement le dernier monde'), [False, True])]
@@ -990,7 +992,8 @@ class App:
         if self.model.data and self.model.data.get("adapter") == "hollowknight-hkmp":return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == BO1:
             return tuple(range(len(BO1_TABS)))
-        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2, D2R):return (0,1)
+        if self.model.data and self.model.data.get('adapter') == D2R:return (0,1,2)
+        if self.model.data and self.model.data.get('adapter') in ('nfsmw-lan', BO2):return (0,1)
         if self.model.data and self.model.data.get('adapter') == 'l4d2-goldberg':
             return (0,1,2)
         if self.model.data and self.model.data.get('adapter') == 'sm64coopdx':
@@ -2018,7 +2021,9 @@ class App:
                     title=tr(('Session','Réseau','Coop','Image & contrôles')[i])
                 elif self.model.data.get('adapter') == 'hollowknight-hkmp':
                     title=tr(('Session','Réseau','Coop')[i])
-                elif self.model.data.get('adapter') in ('nfsmw-lan', D2R):
+                elif self.model.data.get('adapter') == D2R:
+                    title=tr(('Session','Réseau','Affichage')[i])
+                elif self.model.data.get('adapter') == 'nfsmw-lan':
                     title=tr(('Session','Réseau')[i])
                 elif self.model.data.get('adapter') == BO1:
                     title = tr(BO1_TABS[i])

@@ -913,7 +913,7 @@ def start_player(app, player, original, target, devices, rectangle, window_class
                  shared_keyboard_mouse=True, saves=None, exit_state=None,network=None,network_index=0,
                  session_token=None,player_count=1,l4d2_launch=None,celestenet=False,celeste_options=None,
                  track_runner=False, dst=False, split=None, story_coop=None, trace_windows=False, bo2_settings=None,
-                 d2r=False, d2r_ready=None):
+                 d2r=False, d2r_ready=None, d2r_ultrawide=False):
     _, _, width, height = rectangle
     bo2_resolution = None
     bo2_desktop = None
@@ -922,9 +922,12 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     from partydeck_bo2 import (BO1, PROFILE_KEYS as BLACK_OPS_PROFILES, TITLES as BLACK_OPS_TITLES,
                                PUBLISH_DISPLAY, DESKTOP_MODE, SESSION_MODE, PLUTONIUM_MODES,
                                T5_FOV_OVERRIDE, custom_lobby_enabled, desktop_size, render_size)
-    from partydeck_d2rloader import ADAPTER as D2R
+    from partydeck_d2rloader import ADAPTER as D2R, ultrawide_mode
     args = [str(app / "AppRun"), "gamescope-kbm", "--backend=sdl", "--borderless",
             "-W", str(width), "-H", str(height)]
+    wide_mode = ultrawide_mode(width, height) if d2r_ultrawide else None
+    if wide_mode:
+        args.extend(['-w', str(wide_mode[0]), '-h', str(wide_mode[1]), '-S', 'fit'])
     if trace_windows:
         args.extend(['--debug-focus', '--debug-events'])
     if saves is not None:
@@ -1023,10 +1026,12 @@ def start_player(app, player, original, target, devices, rectangle, window_class
     environment.pop('PARTYDECK_DST', None)
     if dst:
         environment['PARTYDECK_DST'] = '1'
-    for key in ('PARTYDECK_D2R', 'PARTYDECK_D2R_HOST', 'PARTYDECK_D2R_READY'):
+    for key in ('PARTYDECK_D2R', 'PARTYDECK_D2R_HOST', 'PARTYDECK_D2R_READY', 'PARTYDECK_D2R_ULTRAWIDE'):
         environment.pop(key, None)
     if d2r:
         environment.update(PARTYDECK_D2R='manual', PARTYDECK_D2R_HOST=network.address(0))
+        if wide_mode:
+            environment['PARTYDECK_D2R_ULTRAWIDE'] = '1'
         if d2r_ready is not None:
             environment.update(PARTYDECK_D2R='automatic',
                                PARTYDECK_D2R_READY='Z:' + str(d2r_ready / 'ready').replace('/', '\\'))
@@ -1370,7 +1375,8 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     shared_lan = celestenet or bool(story_coop)
     from partydeck_dst import ADAPTER as DST
     dst = party and len(players) > 1 and (profile or {}).get('adapter') == DST
-    from partydeck_d2rloader import ADAPTER as D2R, readiness_dir as d2r_readiness_dir, sync_readiness
+    from partydeck_d2rloader import (ADAPTER as D2R, prepare_ultrawide, ultrawide_mode,
+                                     readiness_dir as d2r_readiness_dir, sync_readiness)
     d2r = party and len(players) > 1 and (profile or {}).get('adapter') == D2R
     bl2_lan=None
     l4d2_launch=None
@@ -1443,6 +1449,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
     hotkey = SessionHotkey()
     dst_ready = None
     d2r_ready = None
+    d2r_ultrawide = False
     try:
         if party:
             from partydeck_mono import prepare_mono
@@ -1481,6 +1488,14 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
         if d2r:
             print(tr('D2RLoader : lancez Multijoueur après avoir choisi votre personnage hors ligne. Adresse LAN de J1 : {p0}.',
                      p0=network.address(0)), flush=True)
+            if (len(players) == 2 and split == 'horizontal' and profile[D2R]['horizontal_ultrawide']
+                    and all(ultrawide_mode(w, h) for _, _, w, h in boxes)):
+                try:
+                    prepare_ultrawide(base)
+                    d2r_ultrawide = True
+                except (OSError, ValueError) as error:
+                    print(tr('Diablo II : plugin Ultrawide indisponible ({p0}). Affichage standard.',
+                             p0=error), file=sys.stderr, flush=True)
             if profile[D2R]['automatic']:
                 d2r_ready = d2r_readiness_dir(base / 'runtime' / game_id / 'j1', session_token)
                 d2r_ready.mkdir(exist_ok=False)
@@ -1533,7 +1548,7 @@ def _run_session(app, base, original, target, count, split, input_mode, party=Fa
                              l4d2_launch=l4d2_launch, celestenet=celestenet,
                              celeste_options=celeste_options, track_runner=track_runner, dst=dst,
                              split=split, story_coop=story_coop, trace_windows=trace_windows, bo2_settings=bo2_settings,
-                             d2r=d2r, d2r_ready=d2r_ready)
+                             d2r=d2r, d2r_ready=d2r_ready, d2r_ultrawide=d2r_ultrawide)
             processes.append(launch())
             if bo2_mode:
                 bo2_startup_deadline = time.monotonic() + 10

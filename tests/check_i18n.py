@@ -15,6 +15,14 @@ from partydeck_anchor import defaults as anchor_defaults, graphics_defaults
 from partydeck_storage import DEFAULTS,human,preflight
 from partydeck_catalog import COMMON
 
+for language, ultrawide in (
+        ('fr', 'Ultrawide en partage horizontal à deux (test)'),
+        ('en', 'Ultrawide for two players in horizontal split (experimental)')):
+    lang.set_language(language)
+    d2r_app = SimpleNamespace(model=SimpleNamespace(data={'adapter': 'd2rloader'}))
+    assert App.available_tabs(d2r_app) == (0, 1, 2)
+    assert fields(2, 'd2rloader') == [('d2rloader.horizontal_ultrawide', ultrawide, [False, True])]
+
 for language, music, locale in (('fr', 'Musique uniquement pour J1', 'Français'),
                                 ('en', 'Music on player 1 only', 'French')):
     lang.set_language(language)

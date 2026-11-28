@@ -9,6 +9,9 @@ import shlex
 import shutil
 import subprocess
 import sys
+from tempfile import mkdtemp
+from urllib.request import urlopen
+from zipfile import ZipFile
 
 from partydeck_borderlands2 import child, patch_ini, write_bytes
 from partydeck_bottles import private_windows_paths
@@ -21,6 +24,12 @@ LABEL = 'Diablo II: Resurrected · D2RLoader LAN'
 PORT = 4000
 PLUGIN = 'd2rl-partydeck-lan.dll'
 CORE_131 = '2a868d013d2e0830bd2d9e04b918b19e46a73cf726c833e70d089b948fdeb5a2'
+ULTRAWIDE_PLUGIN = 'Ultrawide.dll'
+ULTRAWIDE_EXE = '93021dad48533bcfca8a95c69a0cc00cdb9008a3ce6ceba1d04c7aca71985a10'
+ULTRAWIDE_RELEASE = ('https://github.com/Pyre-Flies/D2R-Mods/releases/download/'
+                     'ultrawide-1.3.5%2Brev.3/Ultrawide-1.3.5%2Brev.3-PyreFly.zip')
+ULTRAWIDE_SIZE = 2273420
+ULTRAWIDE_SHA256 = '7f8d57adca250c3f1badbdc7cc01b439ca86057faa6cf20aab404e3a6214363b'
 
 
 def matches(rom):
@@ -29,15 +38,73 @@ def matches(rom):
 
 
 def defaults():
-    return {'automatic': True}
+    return {'automatic': True, 'horizontal_ultrawide': False}
 
 
 def validate(options):
     if options is None:
         return defaults()
-    if not isinstance(options, dict) or type(options.get('automatic', True)) is not bool:
+    if not isinstance(options, dict):
         raise ValueError(tr('Réglages D2RLoader invalides.'))
-    return defaults() | {'automatic': options.get('automatic', True)}
+    values = {key: options.get(key, default) for key, default in defaults().items()}
+    if any(type(value) is not bool for value in values.values()):
+        raise ValueError(tr('Réglages D2RLoader invalides.'))
+    return values
+
+
+def ultrawide_mode(width, height):
+    if width * 9 <= height * 19:
+        return None
+    render_height = max(height, 720)
+    render_width = min(width * render_height // height, render_height * 32 // 9)
+    return render_width, render_height
+
+
+def ultrawide_archive(base):
+    return base / 'dependencies' / 'd2rloader-ultrawide-1.3.5-rev.3.zip'
+
+
+def prepare_ultrawide(base):
+    archive = ultrawide_archive(base)
+    if archive.is_file() and archive.stat().st_size == ULTRAWIDE_SIZE:
+        with archive.open('rb') as source:
+            if hashlib.file_digest(source, 'sha256').hexdigest() == ULTRAWIDE_SHA256:
+                return
+    print(tr('Diablo II : téléchargement du plugin Ultrawide de PyreFly.'), flush=True)
+    with urlopen(ULTRAWIDE_RELEASE, timeout=20) as source:
+        data = source.read(ULTRAWIDE_SIZE + 1)
+    if len(data) != ULTRAWIDE_SIZE or hashlib.sha256(data).hexdigest() != ULTRAWIDE_SHA256:
+        raise ValueError('Invalid PyreFly Ultrawide archive')
+    write_bytes(archive, data)
+
+
+def install_ultrawide(loader_dir, path, plugins, archive):
+    settings = path(path(loader_dir, 'config'), 'ultrawide.toml')
+    if not settings.exists():
+        write_bytes(settings, b'[ultrawide]\nenable_monster_pop_in_fix = false\nenable_monster_ai_range = false\n')
+    with ZipFile(archive) as release:
+        shaders = path(path(path(loader_dir, 'data'), 'hd'), 'tc22sh')
+        for name in release.namelist():
+            if Path(name).parent.as_posix() == 'd2rloader/data/hd/tc22sh' and name.endswith('.bin'):
+                shader = path(shaders, Path(name).name)
+                if not shader.exists():
+                    write_bytes(shader, release.read(name))
+        binary = release.read(f'd2rloader/plugins/{ULTRAWIDE_PLUGIN}')
+    # /tmp is private to this Wine instance. The mount disappears with the session.
+    view = Path(mkdtemp(prefix='partydeck-ultrawide-', dir='/tmp'))
+    plugins.mkdir(parents=True, exist_ok=True)
+    for installed in plugins.iterdir():
+        entry = view / installed.name
+        if installed.is_symlink():
+            entry.symlink_to(os.readlink(installed))
+        elif installed.is_dir():
+            entry.mkdir()
+            subprocess.run(['mount', '--rbind', str(installed), str(entry)], check=True)
+        elif installed.is_file():
+            entry.touch()
+            subprocess.run(['mount', '--bind', str(installed), str(entry)], check=True)
+    write_bytes(view / ULTRAWIDE_PLUGIN, binary)
+    subprocess.run(['mount', '--rbind', str(view), str(plugins)], check=True)
 
 
 def readiness_dir(player, token):
@@ -65,7 +132,7 @@ def sync_readiness(marker, namespace_pid, proc=Path('/proc')):
     marker.unlink(missing_ok=True)
 
 
-def prepare(directory, prefix, player, plugin_source, automatic, rom):
+def prepare(directory, prefix, player, plugin_source, automatic, rom, *, ultrawide=None):
     mounted_content = (rom,) if rom.suffix.casefold() == '.pc' else ()
     allowed = tuple(root.resolve() for root in (prefix, player, *mounted_content, *private_windows_paths(player)))
     directory = safe_path(directory, allowed)
@@ -75,19 +142,21 @@ def prepare(directory, prefix, player, plugin_source, automatic, rom):
 
     loader = path(directory, 'D2RLoader.exe')
     core = path(directory, 'D2RCore.dll')
-    if not all(file.is_file() for file in (loader, core, path(directory, 'D2R.exe'))):
+    executable = path(directory, 'D2R.exe')
+    if not all(file.is_file() for file in (loader, core, executable)):
         raise ValueError(tr('D2RLoader absent du dossier du jeu indiqué par DIR dans autorun.cmd.'))
 
     loader_dir = path(directory, 'd2rloader')
     settings = path(path(loader_dir, 'config'), 'd2rloader.toml')
-    plugin = path(path(loader_dir, 'plugins'), PLUGIN)
-    use_plugin = False
-    if automatic:
+    plugins = path(loader_dir, 'plugins')
+    plugin = path(plugins, PLUGIN)
+    supported_core = False
+    if automatic or ultrawide is not None:
         with core.open('rb') as source:
-            use_plugin = hashlib.file_digest(source, 'sha256').hexdigest() == CORE_131
-        if not use_plugin:
-            print(tr('D2RLoader : automatisation disponible avec la version 1.3.1-beta. Utilisez le menu LAN.'),
-                  file=sys.stderr, flush=True)
+            supported_core = hashlib.file_digest(source, 'sha256').hexdigest() == CORE_131
+    if automatic and not supported_core:
+        print(tr('D2RLoader : automatisation disponible avec la version 1.3.1-beta. Utilisez le menu LAN.'),
+              file=sys.stderr, flush=True)
 
     text = settings.read_text(encoding='utf-8-sig') if settings.is_file() else ''
     # These options belong to this LAN session. Preserve the mod, language,
@@ -97,7 +166,7 @@ def prepare(directory, prefix, player, plugin_source, automatic, rom):
         'd2rloader.advanced': {'game_port': str(PORT), 'automatic_port_mapping': 'false',
                                'hosting_check': 'false'},
     })
-    if use_plugin:
+    if automatic and supported_core:
         address = str(ipaddress.IPv4Address(os.environ['PARTYDECK_D2R_HOST']))
         count = int(os.environ['PARTYDECK_SESSION_PLAYERS'])
         if not 2 <= count <= 4:
@@ -117,6 +186,18 @@ def prepare(directory, prefix, player, plugin_source, automatic, rom):
     else:
         plugin.unlink(missing_ok=True)
     write_bytes(settings, text.encode('utf-8'))
+    if ultrawide is not None and not path(plugins, ULTRAWIDE_PLUGIN).is_file():
+        with executable.open('rb') as source:
+            supported_game = hashlib.file_digest(source, 'sha256').hexdigest() == ULTRAWIDE_EXE
+        if not (supported_core and supported_game):
+            print(tr('Diablo II : plugin Ultrawide incompatible avec ce D2R.exe ou D2RCore.dll.'),
+                  file=sys.stderr, flush=True)
+        else:
+            try:
+                install_ultrawide(loader_dir, path, plugins, ultrawide)
+            except (OSError, subprocess.SubprocessError) as error:
+                print(tr('Diablo II : plugin Ultrawide indisponible ({p0}). Affichage standard.',
+                         p0=error), file=sys.stderr, flush=True)
     return loader.name
 
 
@@ -157,7 +238,10 @@ if __name__ == '__main__':
         player, plugin, mode, rom, directory, prefix = sys.argv[1:]
         if os.environ.get('PARTYDECK_PRIVATE_PLAYER') != player:
             raise ValueError(tr('D2RLoader : espace privé du joueur requis.'))
-        print(prepare(Path(directory), Path(prefix), Path(player), Path(plugin), mode == 'automatic', Path(rom)))
+        ultrawide = (ultrawide_archive(Path(__file__).resolve().parent)
+                     if os.environ.get('PARTYDECK_D2R_ULTRAWIDE') == '1' else None)
+        print(prepare(Path(directory), Path(prefix), Path(player), Path(plugin), mode == 'automatic',
+                      Path(rom), ultrawide=ultrawide))
     except (OSError, ValueError, KeyError) as error:
         print(f'D2RLoader: {error}', file=sys.stderr, flush=True)
         raise SystemExit(1)
